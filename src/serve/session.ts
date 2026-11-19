@@ -12,7 +12,7 @@
  * now a detached fiber whose failure is logged, and `saveProject` /
  * `createSession` results are decoded with tolerant Schemas instead of
  * four-shape `as` probing. Each session owns an internal Scope holding its
- * WS channel; `dispose()` closes it (used by session/unload).
+ * WS channel; `dispose` closes it (used by session/unload).
  */
 import { Clock, Context, Effect, Exit, Layer, Option, Ref, Schema } from "effect";
 import * as ScopeType from "effect/Scope";
@@ -85,8 +85,14 @@ export interface ServeSession {
     payload: unknown,
     expectedForegroundExecutionId?: string,
   ) => Effect.Effect<unknown, SessionError | RpcError | RpcTimeout | ChannelClosed>;
-  /** Close the channel scope — used by session/unload. */
-  readonly dispose: () => Effect.Effect<void, unknown>;
+  /**
+   * Best-effort teardown of the session's channel scope — used by
+   * session/unload. Effect-valued property (Effect is already lazy; a
+   * zero-arg method adds indirection): every step — listener disposal,
+   * channel close, scope close — swallows its own failure, so dispose never
+   * fails.
+   */
+  readonly dispose: Effect.Effect<void>;
 }
 
 export class ServeSessionFactory extends Context.Service<
@@ -203,8 +209,11 @@ const makeSession = (
       return workspace;
     });
 
-    // listener disposers (from channel.listen) drained by dispose() on session/unload
-    const listenerDisposers: Array<Effect.Effect<void, unknown>> = [];
+    // Listener disposers (from channel.listen), tolerate-wrapped at
+    // registration so dispose's drain can run them bare — failures stay
+    // swallowed at drain time, exactly like the previous per-disposer
+    // orElseSucceed.
+    const listenerDisposers: Array<Effect.Effect<void | undefined>> = [];
 
     const subscribeConversation = (daemonSessionId: string, workspace: WorkspaceInfo): Effect.Effect<void, unknown> =>
       Effect.gen(function* () {
@@ -225,40 +234,46 @@ const makeSession = (
         yield* log.debug(`[session] subscribed conversation ${daemonSessionId}`);
         const topic = `conversation/${daemonSessionId}`;
         listenerDisposers.push(
-          yield* channel.listen(
-            "zcode-agent",
-            "onDynamicConversationFrame",
-            {
-              sessionId: daemonSessionId,
-              workspacePath: workspace.workspacePath,
-              workspaceIdentity: workspace.workspaceIdentity,
-            },
-            (payload) =>
-              Effect.gen(function* () {
-                // The daemon pushes workspace-wide frames — filter to OUR conversation
-                // (client-side filtering, same as the upstream adapter).
-                const p = payload as { topic?: string; frame?: { topic?: string } } | undefined;
-                const frameTopic = p?.frame?.topic ?? p?.topic;
-                if (frameTopic !== undefined && frameTopic !== topic) return;
-                yield* handlers.onConversationFrame(payload);
-              }),
+          yield* Effect.map(
+            channel.listen(
+              "zcode-agent",
+              "onDynamicConversationFrame",
+              {
+                sessionId: daemonSessionId,
+                workspacePath: workspace.workspacePath,
+                workspaceIdentity: workspace.workspaceIdentity,
+              },
+              (payload) =>
+                Effect.gen(function* () {
+                  // The daemon pushes workspace-wide frames — filter to OUR conversation
+                  // (client-side filtering, same as the upstream adapter).
+                  const p = payload as { topic?: string; frame?: { topic?: string } } | undefined;
+                  const frameTopic = p?.frame?.topic ?? p?.topic;
+                  if (frameTopic !== undefined && frameTopic !== topic) return;
+                  yield* handlers.onConversationFrame(payload);
+                }),
+            ),
+            tolerate,
           ),
         );
         listenerDisposers.push(
-          yield* channel.listen(
-            "zcode-agent",
-            "onDynamicSessionLifecycle",
-            {
-              sessionId: daemonSessionId,
-              workspacePath: workspace.workspacePath,
-              workspaceIdentity: workspace.workspaceIdentity,
-            },
-            (payload) =>
-              Effect.gen(function* () {
-                const lifecycleSessionId = (payload as { sessionId?: string } | undefined)?.sessionId;
-                if (lifecycleSessionId !== undefined && lifecycleSessionId !== daemonSessionId) return;
-                yield* handlers.onLifecycle(payload);
-              }),
+          yield* Effect.map(
+            channel.listen(
+              "zcode-agent",
+              "onDynamicSessionLifecycle",
+              {
+                sessionId: daemonSessionId,
+                workspacePath: workspace.workspacePath,
+                workspaceIdentity: workspace.workspaceIdentity,
+              },
+              (payload) =>
+                Effect.gen(function* () {
+                  const lifecycleSessionId = (payload as { sessionId?: string } | undefined)?.sessionId;
+                  if (lifecycleSessionId !== undefined && lifecycleSessionId !== daemonSessionId) return;
+                  yield* handlers.onLifecycle(payload);
+                }),
+            ),
+            tolerate,
           ),
         );
       });
@@ -411,15 +426,19 @@ const makeSession = (
         );
       });
 
-    const disposeEffect = Effect.gen(function* () {
+    // Best-effort teardown, run by the `dispose` property on session/unload.
+    // Every step swallows its own failure — listener disposal and scope close
+    // via orElseSucceed (as before), the channel close via `tolerate` because
+    // its only failure source is the onClose handler, which cannot fail with
+    // the current turn handlers — so dispose's error channel is `never`.
+    const dispose: Effect.Effect<void> = Effect.gen(function* () {
       for (const disposer of listenerDisposers.splice(0)) {
-        yield* Effect.orElseSucceed(disposer, () => undefined);
+        yield* disposer;
       }
       const channel = yield* Ref.get(channelRef);
-      if (Option.isSome(channel)) yield* channel.value.close();
+      if (Option.isSome(channel)) yield* tolerate(channel.value.close());
       yield* ScopeType.close(scope, Exit.succeed(undefined)).pipe(Effect.orElseSucceed(() => undefined));
     });
-    const dispose = () => disposeEffect;
 
     return {
       createSession,

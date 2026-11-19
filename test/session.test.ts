@@ -193,7 +193,7 @@ describe("ServeSession lifecycle and operations", () => {
       expect(cmdRes).toEqual({ commandResult: "done" });
 
       // 7. dispose
-      yield* session.dispose();
+      yield* session.dispose;
     }).pipe(
       Effect.provide(ServeSessionFactory.layerNoDeps),
       Effect.provide(Layer.succeed(Daemon, mockDaemon)),
@@ -306,7 +306,7 @@ describe("ServeSession lifecycle and operations", () => {
       const errSave = yield* Effect.flip(session1.createSession());
       expect(errSave._tag).toBe("SessionError");
       expect(errSave.message).toContain("cannot resolve a zcode server project");
-      yield* session1.dispose();
+      yield* session1.dispose;
 
       // 2. createSession fails to return sessionId
       saveFails = false;
@@ -320,7 +320,7 @@ describe("ServeSession lifecycle and operations", () => {
       const errCreate = yield* Effect.flip(session2.createSession());
       expect(errCreate._tag).toBe("SessionError");
       expect(errCreate.message).toContain("createSession returned no sessionId");
-      yield* session2.dispose();
+      yield* session2.dispose;
 
       // 3. saveProject RPC rejected with error
       saveFails = "reject";
@@ -333,7 +333,7 @@ describe("ServeSession lifecycle and operations", () => {
       });
       const errSaveReject = yield* Effect.flip(session3.createSession());
       expect(errSaveReject._tag).toBe("SessionError");
-      yield* session3.dispose();
+      yield* session3.dispose;
 
       // 4. createSession returning malformed shape (throws in decodeCreateSessionShape)
       saveFails = false;
@@ -346,7 +346,7 @@ describe("ServeSession lifecycle and operations", () => {
       });
       const errCreateThrow = yield* Effect.flip(session4.createSession());
       expect(errCreateThrow._tag).toBe("SessionError");
-      yield* session4.dispose();
+      yield* session4.dispose;
 
       // 5. tolerated failures: initFails, subFails, skillsFails, and bare modelId
       saveFails = false;
@@ -363,7 +363,7 @@ describe("ServeSession lifecycle and operations", () => {
       const successRes = yield* session5.createSession();
       expect(successRes.daemonSessionId).toBe("s1");
       expect(successRes.currentModel).toBe("bare-model-id");
-      yield* session5.dispose();
+      yield* session5.dispose;
     }).pipe(
       Effect.provide(ServeSessionFactory.layerNoDeps),
       Effect.provide(Layer.succeed(Daemon, mockDaemon)),

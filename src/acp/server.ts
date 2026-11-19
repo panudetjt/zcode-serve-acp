@@ -645,7 +645,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
           if (bridge === undefined) return {};
           yield* endTurn(bridge, "cancelled");
           bridgeSessions.delete(sessionId);
-          yield* bridge.serve.dispose();
+          yield* bridge.serve.dispose;
           yield* log.debug(`[session] unloaded ${sessionId}`);
           return {};
         }
