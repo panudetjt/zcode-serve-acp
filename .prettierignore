@@ -1,0 +1,9 @@
+# Vendored Effect monorepo — reference material, never formatted or linted.
+repos/
+dist/
+node_modules/
+# Captured golden frames are byte-exact test data; formatting them would break the replay parity gate.
+test/fixtures/
+# Prose and editor config stay as authored — the formatter owns code only.
+*.md
+.vscode/

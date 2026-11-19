@@ -5,76 +5,139 @@
  * credentials; this process never reads them.
  *
  * Wire: newline-delimited JSON-RPC on stdin/stdout. Logs go to stderr only
- * (ZCODE_SERVE_ACP_DEBUG=1 for verbose).
+ * (ZCODE_SERVE_ACP_DEBUG=1 for verbose; ZCODE_SERVE_ACP_DUMP=1 dumps the
+ * first conversation frame). BunRuntime.runMain installs SIGINT/SIGTERM and
+ * interrupts running fibers — the pre-rewrite bridge had no signal handling.
  */
-import { createAcpServer, stdinLines } from "./acp/server.ts";
+import * as BunFileSystem from "@effect/platform-bun/BunFileSystem";
+import * as BunRuntime from "@effect/platform-bun/BunRuntime";
+import * as BunSocket from "@effect/platform-bun/BunSocket";
+import * as BunStdio from "@effect/platform-bun/BunStdio";
+import { Effect, Layer, Deferred, Result, Stream } from "effect";
+import { FetchHttpClient } from "effect/http";
+import { Stdio } from "effect/Stdio";
+import { FileSystem } from "effect/FileSystem";
+import { AcpServer } from "./acp/server.ts";
+import { ClientRequestError } from "./errors.ts";
+import {
+  errorPayload,
+  encodeLine,
+  errorResponse,
+  clientRequest,
+  notification,
+  parseLine,
+  successResponse,
+} from "./jsonrpc.ts";
+import { Log } from "./log.ts";
+import { fallbackModels } from "./models.ts";
+import { Daemon } from "./serve/daemon.ts";
+import { ServeSessionFactory } from "./serve/session.ts";
 
-const writeLine = (obj: unknown) => {
-  process.stdout.write(`${JSON.stringify(obj)}\n`);
-};
+const CLIENT_REQUEST_TIMEOUT_MS = 600_000;
 
-const server = createAcpServer((method, params) => writeLine({ jsonrpc: "2.0", method, params }));
+const PlatformLayer = Layer.mergeAll(
+  Log.layerFromEnv,
+  FetchHttpClient.layer,
+  BunFileSystem.layer,
+  BunSocket.layerWebSocketConstructor,
+  BunStdio.layer,
+);
 
-// client→server requests WE send (permission asks): id ↔ promise map
-const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: Timer }>();
-let nextRequestId = 900_000;
+const Main = Effect.gen(function* () {
+  const stdio = yield* Stdio;
+  const sessions = yield* ServeSessionFactory;
+  const log = yield* Log;
+  const fs = yield* FileSystem;
 
-server.clientRequest = (method: string, params: unknown) =>
-  new Promise((resolve, reject) => {
-    const id = nextRequestId++;
-    writeLine({ jsonrpc: "2.0", id, method, params });
-    const timer = setTimeout(() => {
-      pending.delete(id);
-      reject(new Error(`client request ${method} timed out (client never answered)`));
-    }, 600_000);
-    pending.set(id, { resolve, reject, timer });
+  const writeLine = (message: unknown) => Stream.fromIterable([encodeLine(message)]).pipe(Stream.run(stdio.stdout()));
+
+  // client→server requests WE send (permission/elicitation asks): id ↔ Deferred map
+  const pending = new Map<number, Deferred.Deferred<unknown, ClientRequestError>>();
+  let nextRequestId = 900_000;
+
+  const acp = AcpServer.make({
+    sessions,
+    log,
+    emitNotification: (method, params) => writeLine(notification(method, params)),
+    clientRequest: (method, params) =>
+      Effect.gen(function* () {
+        const id = nextRequestId++;
+        yield* writeLine(clientRequest(id, method, params));
+        const deferred = Deferred.makeUnsafe<unknown, ClientRequestError>();
+        pending.set(id, deferred);
+        return yield* Deferred.await(deferred).pipe(
+          Effect.timeout(CLIENT_REQUEST_TIMEOUT_MS),
+          Effect.catchTag("TimeoutError", () =>
+            Effect.fail(
+              new ClientRequestError({ message: `client request ${method} timed out (client never answered)` }),
+            ),
+          ),
+          Effect.ensuring(Effect.sync(() => pending.delete(id))),
+        );
+      }),
+    fallbackModels: fallbackModels.pipe(Effect.provideService(FileSystem, fs)),
   });
 
-stdinLines(async (line) => {
-  let msg: {
-    id?: number | string;
-    method?: string;
-    params?: Record<string, unknown>;
-    result?: unknown;
-    error?: { message?: string };
-  };
-  try {
-    msg = JSON.parse(line);
-  } catch {
-    console.error("[bin] non-JSON line on stdin (ignored)");
-    return;
-  }
+  const handleLine = (line: string): Effect.Effect<void, unknown> =>
+    Effect.gen(function* () {
+      const trimmed = line.trim();
+      if (trimmed === "") return;
+      const outcome = yield* parseLine(trimmed).pipe(Effect.orElseSucceed(() => ({ _tag: "Malformed" as const })));
+      if (outcome._tag === "Malformed") {
+        yield* log.warn("[bin] non-JSON line on stdin (ignored)");
+        return;
+      }
+      if (outcome._tag !== "Message") return;
+      const inbound = outcome.inbound;
 
-  // response to one of our client-side requests (permission asks)
-  if (msg.id !== undefined && msg.method === undefined) {
-    const numId = typeof msg.id === "number" ? msg.id : Number(msg.id);
-    const entry = pending.get(numId);
-    if (entry !== undefined) {
-      pending.delete(numId);
-      clearTimeout(entry.timer);
-      if (msg.error !== undefined) entry.reject(new Error(msg.error.message ?? "client returned error"));
-      else entry.resolve(msg.result);
-    }
-    return;
-  }
+      // response to one of our client-side requests (permission asks)
+      if (inbound._tag === "Response") {
+        const numId = typeof inbound.response.id === "number" ? inbound.response.id : Number(inbound.response.id);
+        const entry = pending.get(numId);
+        if (entry !== undefined) {
+          pending.delete(numId);
+          if (inbound.response.error !== undefined) {
+            Deferred.doneUnsafe(
+              entry,
+              Effect.fail(
+                new ClientRequestError({ message: inbound.response.error.message ?? "client returned error" }),
+              ),
+            );
+          } else {
+            Deferred.doneUnsafe(entry, Effect.succeed(inbound.response.result));
+          }
+        }
+        return;
+      }
 
-  if (msg.method === undefined) return;
-  const isNotification = msg.id === undefined;
-  try {
-    const result = await server.handle(msg.method, msg.params ?? {}, async (m, p) => server.clientRequest(m, p));
-    if (!isNotification) writeLine({ jsonrpc: "2.0", id: msg.id, result });
-  } catch (error) {
-    if (error instanceof Error && process.env.ZCODE_SERVE_ACP_DEBUG === "1") {
-      console.error(`[bin] ${msg.method} threw:`, error.stack);
-    }
-    if (isNotification) {
-      console.error(`[bin] notification ${msg.method} failed:`, error instanceof Error ? error.message : String(error));
-      return;
-    }
-    writeLine({
-      jsonrpc: "2.0",
-      id: msg.id,
-      error: { code: -32000, message: error instanceof Error ? error.message : String(error) },
+      const isRequest = inbound._tag === "Request";
+      const method = inbound._tag === "Request" ? inbound.request.method : inbound.notification.method;
+      const params = inbound._tag === "Request" ? inbound.request.params : inbound.notification.params;
+      const id = inbound._tag === "Request" ? inbound.request.id : undefined;
+
+      const outcomeResult = yield* acp.handle(method, params).pipe(Effect.result);
+      if (!Result.isSuccess(outcomeResult)) {
+        const error = outcomeResult.failure;
+        if (isRequest && id !== undefined) {
+          yield* writeLine(errorResponse(id, errorPayload(error.message)));
+        } else {
+          yield* log.warn(`[bin] notification ${method} failed: ${error.message}`);
+        }
+        return;
+      }
+      if (isRequest && id !== undefined) {
+        yield* writeLine(successResponse(id, outcomeResult.success));
+      }
     });
-  }
+
+  yield* Stream.runForEach(Stream.splitLines(Stream.decodeText(stdio.stdin)), handleLine);
 });
+
+const AppLayer = ServeSessionFactory.layerNoDeps.pipe(Layer.provide(Daemon.layer), Layer.provide(PlatformLayer));
+
+const program: Effect.Effect<void, unknown, never> = Effect.provide(
+  Main,
+  Layer.merge(AppLayer, PlatformLayer) as Layer.Layer<Stdio | ServeSessionFactory | Log | FileSystem>,
+);
+
+BunRuntime.runMain(program);

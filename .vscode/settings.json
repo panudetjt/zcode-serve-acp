@@ -1,0 +1,19 @@
+{
+  "search.exclude": {
+    "repos/**": true,
+    "dist/**": true
+  },
+  "files.watcherExclude": {
+    "repos/**": true,
+    "dist/**": true
+  },
+  "explorer.fileWatcherExcludes": {
+    "repos": true,
+    "dist": true
+  },
+  "explorer.excludeGitIgnore": true,
+  "typescript.tsserver.autoImportFileExcludes": [
+    "**/repos/**",
+    "**/dist/**"
+  ]
+}

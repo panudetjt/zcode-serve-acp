@@ -1,6 +1,7 @@
 /**
- * Wire codec for the `zcode serve` channel protocol — ported from the local
- * server-core.js (ZCode Server runtime 3.18.2, read 2026-11-18):
+ * Wire codec for the `zcode serve` channel protocol — ported unchanged from
+ * the pre-rewrite bridge, which read it from the local server-core.js
+ * (ZCode Server runtime 3.18.2, read 2026-11-18):
  *
  *   - SocketProtocol frame: [type u8][id u32BE][ack u32BE][len u32BE][body],
  *     only type 1 (Regular) carries an RPC body.
@@ -14,7 +15,12 @@
  *     PromiseCancel=101, EventListen=102, EventDispose=103,
  *     PromiseSuccess=201, PromiseError=202, PromiseErrorObj=203,
  *     EventFire=204, EventError=205.  The server sends [200] on connect.
+ *
+ * This codec is intentionally hand-rolled (NOT expressed in Schema) — the
+ * varint/tag shapes come from reverse-engineered daemon internals. Every
+ * parse failure raises the typed `DecodeError`.
  */
+import { DecodeError } from "../errors.ts";
 
 // ---------- SocketProtocol frames ----------
 
@@ -113,15 +119,6 @@ function writeVQL(out: number[], value: number): void {
   }
 }
 
-function readVQL(buf: Uint8Array, state: { pos: number }): number {
-  let value = 0;
-  for (let n = 0; ; n += 7) {
-    const next = buf[state.pos++]!;
-    value |= (next & 127) << n;
-    if (!(next & 128)) return value >>> 0;
-  }
-}
-
 function replacer(this: Record<string, unknown>, key: string, value: unknown): unknown {
   const original = this?.[key];
   if (original instanceof Uint8Array) {
@@ -139,7 +136,8 @@ function reviver(_key: string, value: unknown): unknown {
     typeof (value as Record<string, unknown>)[NESTED_U8_B64] === "string" &&
     Object.keys(value).length === 2
   ) {
-    return new Uint8Array(Buffer.from((value as Record<string, string>)[NESTED_U8_B64], "base64"));
+    const b64 = (value as Record<string, unknown>)[NESTED_U8_B64];
+    return new Uint8Array(Buffer.from(typeof b64 === "string" ? b64 : "", "base64"));
   }
   return value;
 }
@@ -185,7 +183,10 @@ export class Deserializer {
 
   private need(n: number): void {
     if (this.pos + n > this.buf.byteLength) {
-      throw new Error(`rpc codec: need ${n} bytes at ${this.pos}, have ${this.buf.byteLength - this.pos}`);
+      throw new DecodeError({
+        location: "wire/value",
+        message: `rpc codec: need ${n} bytes at ${this.pos}, have ${this.buf.byteLength - this.pos}`,
+      });
     }
   }
 
@@ -227,9 +228,14 @@ export class Deserializer {
       case TAG_OBJECT:
         return JSON.parse(Buffer.from(this.readBytes(this.readVQL())).toString("utf8"), reviver);
       default:
-        throw new Error(`rpc codec: unknown value tag ${tag}`);
+        throw new DecodeError({ location: "wire/value", message: `rpc codec: unknown value tag ${tag}` });
     }
   }
+}
+
+/** Decode a single encoded value buffer (exported for tests). */
+export function deserialize(buf: Uint8Array): unknown {
+  return new Deserializer(buf).next();
 }
 
 // ---------- channel RPC messages ----------
@@ -250,14 +256,14 @@ export const MSG = {
 export type RpcHeader = unknown[];
 
 export function encodeRpcMessage(header: RpcHeader, body?: unknown): Uint8Array {
-  const frame = new Uint8Array([
-    ...serializeValue(header),
-    ...serializeValue(body),
-  ]);
+  const frame = new Uint8Array([...serializeValue(header), ...serializeValue(body)]);
   return writeProtocolFrame(FRAME_KIND_REGULAR, 0, 0, frame);
 }
 
-export type DecodedRpc = { header: RpcHeader; body: unknown };
+export interface DecodedRpc {
+  header: RpcHeader;
+  body: unknown;
+}
 
 export function decodeRpcMessage(frame: Uint8Array): DecodedRpc {
   const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
@@ -265,7 +271,7 @@ export function decodeRpcMessage(frame: Uint8Array): DecodedRpc {
   if (kind !== FRAME_KIND_REGULAR) return { header: [kind], body: undefined };
   const body = frame.subarray(FRAME_HEADER_BYTES);
   const reader = new Deserializer(body);
-  const header = reader.next() as RpcHeader;
+  const header = decodeHeader(reader);
   let rest: unknown;
   try {
     rest = reader.next();
@@ -273,4 +279,12 @@ export function decodeRpcMessage(frame: Uint8Array): DecodedRpc {
     rest = undefined;
   }
   return { header, body: rest };
+}
+
+function decodeHeader(reader: Deserializer): RpcHeader {
+  const value = reader.next();
+  if (!Array.isArray(value)) {
+    throw new DecodeError({ location: "wire/header", message: "rpc codec: header is not an array" });
+  }
+  return value;
 }

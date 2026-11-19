@@ -1,0 +1,1591 @@
+{
+  "fixtureVersion": 1,
+  "scenario": "plain-text",
+  "prompt": "Reply with exactly this sentence and nothing else: The capture harness works correctly.",
+  "daemonRuntime": "3.18.2",
+  "frames": [
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-2",
+        "logicalFrameOrdinal": 2,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 0,
+          "toSeq": 2,
+          "sentAt": 1795080674703,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 1,
+                  "meta": {
+                    "title": "Reply with exactly this sentence and nothing else: The ca...",
+                    "titleSource": "generated"
+                  }
+                }
+              },
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 1,
+                  "turnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "entityId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "productTurnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "visibility": "visible",
+                  "createdAt": 1795080674674,
+                  "createdAtSeq": 2,
+                  "kind": "turnHeader",
+                  "origin": "userInput",
+                  "executionKind": "agent",
+                  "sourceCommandId": "INPUT_ID",
+                  "state": "running",
+                  "startedAt": 1795080674674
+                }
+              },
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 2,
+                  "turnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "entityId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "productTurnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "visibility": "visible",
+                  "createdAt": 1795080674674,
+                  "createdAtSeq": 2,
+                  "kind": "userInput",
+                  "text": "Reply with exactly this sentence and nothing else: The capture harness works correctly.",
+                  "origin": "realUser",
+                  "sourceCommandId": "INPUT_ID",
+                  "rootSourceCommandId": "INPUT_ID"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "control": {
+                    "phase": "running",
+                    "sessionEnded": false,
+                    "canStop": true,
+                    "stopState": "stoppable",
+                    "stopTargetKind": "assistant",
+                    "activeWorks": [
+                      {
+                        "kind": "primaryTurn",
+                        "foregroundExecutionId": "runtime_command_63",
+                        "sourceCommandId": "INPUT_ID",
+                        "startedAt": 1795080674674
+                      }
+                    ],
+                    "lastError": null,
+                    "apiRetry": null
+                  },
+                  "inputRouting": {
+                    "mode": "enqueue"
+                  }
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 2,
+                  "turnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "entityId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "productTurnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "visibility": "visible",
+                  "createdAt": 1795080674674,
+                  "createdAtSeq": 2,
+                  "actions": {
+                    "canEdit": true,
+                    "editDisposition": "rewind"
+                  },
+                  "kind": "userInput",
+                  "text": "Reply with exactly this sentence and nothing else: The capture harness works correctly.",
+                  "origin": "realUser",
+                  "sourceCommandId": "INPUT_ID",
+                  "rootSourceCommandId": "INPUT_ID"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 2,
+                  "availability": {
+                    "fork": {
+                      "allowed": true
+                    },
+                    "compact": {
+                      "allowed": true
+                    },
+                    "switchModelConfig": {
+                      "allowed": true
+                    },
+                    "setFollowupMode": {
+                      "allowed": true
+                    },
+                    "queueEdit": {
+                      "allowed": true
+                    },
+                    "sendQueuedNow": {
+                      "allowed": true
+                    },
+                    "pauseGoal": {
+                      "allowed": false,
+                      "reasonCode": "noGoalToPause"
+                    },
+                    "resumeGoal": {
+                      "allowed": false,
+                      "reasonCode": "noGoalToResume"
+                    },
+                    "rewindFiles": {
+                      "allowed": false,
+                      "reasonCode": "fileRewindUnavailable"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-3",
+        "logicalFrameOrdinal": 3,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 2,
+          "toSeq": 4,
+          "sentAt": 1795080676440,
+          "payload": {
+            "kind": "deltas",
+            "deltas": []
+          }
+        }
+      },
+      "oracle": {
+        "updates": [],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-4",
+        "logicalFrameOrdinal": 4,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 4,
+          "toSeq": 27,
+          "sentAt": 1795080683948,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 3,
+                  "turnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "entityId": "msg_mwncoqif_f0f9da67-6b23-4060-8cc6-f464dc2153e3",
+                  "productTurnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "visibility": "visible",
+                  "createdAt": 1795080683919,
+                  "createdAtSeq": 6,
+                  "kind": "reasoning",
+                  "assistantResponseId": "msg_mwncoqif_f0f9da67-6b23-4060-8cc6-f464dc2153e3",
+                  "text": "",
+                  "state": "streaming"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 3
+                }
+              },
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": "The user is asking me to reply with exactly one sentence and nothing else: \"The capture harness works correctly"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": "The user is asking me to reply with exactly one sentence and nothing else: \"The capture harness works correctly"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-5",
+        "logicalFrameOrdinal": 5,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 27,
+          "toSeq": 29,
+          "sentAt": 1795080684030,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": ".\"\n\nThis"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": ".\"\n\nThis"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-6",
+        "logicalFrameOrdinal": 6,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 29,
+          "toSeq": 32,
+          "sentAt": 1795080684146,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " looks like a"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " looks like a"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-7",
+        "logicalFrameOrdinal": 7,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 32,
+          "toSeq": 34,
+          "sentAt": 1795080684248,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " request to"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " request to"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-8",
+        "logicalFrameOrdinal": 8,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 34,
+          "toSeq": 35,
+          "sentAt": 1795080684325,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " just"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " just"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-9",
+        "logicalFrameOrdinal": 9,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 35,
+          "toSeq": 37,
+          "sentAt": 1795080684417,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " echo a"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " echo a"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-10",
+        "logicalFrameOrdinal": 10,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 37,
+          "toSeq": 41,
+          "sentAt": 1795080684476,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " sentence. There's"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " sentence. There's"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-11",
+        "logicalFrameOrdinal": 11,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 41,
+          "toSeq": 42,
+          "sentAt": 1795080684545,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " no"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " no"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-12",
+        "logicalFrameOrdinal": 12,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 42,
+          "toSeq": 44,
+          "sentAt": 1795080684611,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " actual work"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " actual work"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-13",
+        "logicalFrameOrdinal": 13,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 44,
+          "toSeq": 45,
+          "sentAt": 1795080684660,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " being"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " being"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-14",
+        "logicalFrameOrdinal": 14,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 45,
+          "toSeq": 46,
+          "sentAt": 1795080684746,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " requested"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " requested"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-15",
+        "logicalFrameOrdinal": 15,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 46,
+          "toSeq": 52,
+          "sentAt": 1795080684841,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " here — no verification, no"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " here — no verification, no"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-16",
+        "logicalFrameOrdinal": 16,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 52,
+          "toSeq": 55,
+          "sentAt": 1795080684951,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " code execution."
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " code execution."
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-17",
+        "logicalFrameOrdinal": 17,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 55,
+          "toSeq": 57,
+          "sentAt": 1795080684992,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " The user"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " The user"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-18",
+        "logicalFrameOrdinal": 18,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 57,
+          "toSeq": 61,
+          "sentAt": 1795080685035,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " simply wants me to"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " simply wants me to"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-19",
+        "logicalFrameOrdinal": 19,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 61,
+          "toSeq": 63,
+          "sentAt": 1795080685070,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " output that"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " output that"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-20",
+        "logicalFrameOrdinal": 20,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 63,
+          "toSeq": 69,
+          "sentAt": 1795080685148,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " exact sentence.\n\nThis is a"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " exact sentence.\n\nThis is a"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-21",
+        "logicalFrameOrdinal": 21,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 69,
+          "toSeq": 75,
+          "sentAt": 1795080685206,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " straightforward request. I should comply"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " straightforward request. I should comply"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-22",
+        "logicalFrameOrdinal": 22,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 75,
+          "toSeq": 81,
+          "sentAt": 1795080685249,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " and reply with exactly that sentence"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " and reply with exactly that sentence"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-23",
+        "logicalFrameOrdinal": 23,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 81,
+          "toSeq": 84,
+          "sentAt": 1795080685308,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " and nothing else"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " and nothing else"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-24",
+        "logicalFrameOrdinal": 24,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 84,
+          "toSeq": 86,
+          "sentAt": 1795080685339,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " — no"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " — no"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-25",
+        "logicalFrameOrdinal": 25,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 86,
+          "toSeq": 90,
+          "sentAt": 1795080685409,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " tool calls, no"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " tool calls, no"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-26",
+        "logicalFrameOrdinal": 26,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 90,
+          "toSeq": 101,
+          "sentAt": 1795080685489,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 3,
+                  "turnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "entityId": "msg_mwncoqif_f0f9da67-6b23-4060-8cc6-f464dc2153e3",
+                  "productTurnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "visibility": "visible",
+                  "createdAt": 1795080683919,
+                  "createdAtSeq": 6,
+                  "kind": "reasoning",
+                  "assistantResponseId": "msg_mwncoqif_f0f9da67-6b23-4060-8cc6-f464dc2153e3",
+                  "text": "The user is asking me to reply with exactly one sentence and nothing else: \"The capture harness works correctly.\"\n\nThis looks like a request to just echo a sentence. There's no actual work being requested here — no verification, no code execution. The user simply wants me to output that exact sentence.\n\nThis is a straightforward request. I should comply and reply with exactly that sentence and nothing else — no tool calls, no additional commentary.",
+                  "state": "complete"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 4
+                }
+              },
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "entityId": "msg_mwncoqif_f0f9da67-6b23-4060-8cc6-f464dc2153e3",
+                  "productTurnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "visibility": "visible",
+                  "createdAt": 1795080685462,
+                  "createdAtSeq": 96,
+                  "kind": "assistantText",
+                  "assistantResponseId": "msg_mwncoqif_f0f9da67-6b23-4060-8cc6-f464dc2153e3",
+                  "text": "",
+                  "state": "streaming"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 5
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "entityId": "msg_mwncoqif_f0f9da67-6b23-4060-8cc6-f464dc2153e3",
+                  "productTurnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "visibility": "visible",
+                  "createdAt": 1795080685462,
+                  "createdAtSeq": 96,
+                  "kind": "assistantText",
+                  "assistantResponseId": "msg_mwncoqif_f0f9da67-6b23-4060-8cc6-f464dc2153e3",
+                  "text": "The capture harness works correctly.",
+                  "state": "complete"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 6
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " additional commentary."
+            }
+          },
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "The capture harness works correctly."
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": true,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-27",
+        "logicalFrameOrdinal": 27,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 101,
+          "toSeq": 106,
+          "sentAt": 1795080685637,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 1,
+                  "turnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "entityId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "productTurnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "visibility": "visible",
+                  "createdAt": 1795080674674,
+                  "createdAtSeq": 2,
+                  "kind": "turnHeader",
+                  "origin": "userInput",
+                  "executionKind": "agent",
+                  "sourceCommandId": "INPUT_ID",
+                  "state": "running",
+                  "startedAt": 1795080674674,
+                  "outputTokens": 95
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 7,
+                  "usage": {
+                    "contextWindow": {
+                      "usedTokens": 30840,
+                      "maxTokens": 1000000,
+                      "autoCompactThresholdTokens": null,
+                      "cache": {
+                        "inputTokens": 30745,
+                        "cacheReadTokens": 15296,
+                        "cacheWriteTokens": 0,
+                        "latestHitRate": 0.49751179053504635,
+                        "hitRateRequestCount": 1,
+                        "totalInputTokens": 30745,
+                        "totalCacheReadTokens": 15296,
+                        "totalCacheWriteTokens": 0,
+                        "hitRate": 0.49751179053504635
+                      },
+                      "breakdown": [
+                        {
+                          "source": "system_prompt",
+                          "chars": 3010
+                        },
+                        {
+                          "source": "meta_user_context",
+                          "chars": 12983
+                        },
+                        {
+                          "source": "skills",
+                          "chars": 9611
+                        },
+                        {
+                          "source": "system_tool_schemas",
+                          "chars": 141100
+                        },
+                        {
+                          "source": "mcp_tool_schemas",
+                          "chars": 55824
+                        },
+                        {
+                          "source": "messages",
+                          "chars": 115
+                        }
+                      ]
+                    },
+                    "cumulative": {
+                      "inputTokens": 30745,
+                      "outputTokens": 95,
+                      "cacheReadTokens": 15296,
+                      "cacheWriteTokens": 0
+                    }
+                  }
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 1,
+                  "turnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "entityId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "productTurnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "visibility": "visible",
+                  "createdAt": 1795080674674,
+                  "createdAtSeq": 2,
+                  "kind": "turnHeader",
+                  "origin": "userInput",
+                  "executionKind": "agent",
+                  "sourceCommandId": "INPUT_ID",
+                  "historyRoundCount": 1,
+                  "state": "completedSuccess",
+                  "startedAt": 1795080674674,
+                  "endedAt": 1795080685617,
+                  "activeMs": 11023,
+                  "outputTokens": 95
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "entityId": "msg_mwncoqif_f0f9da67-6b23-4060-8cc6-f464dc2153e3",
+                  "productTurnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "visibility": "visible",
+                  "createdAt": 1795080685462,
+                  "createdAtSeq": 96,
+                  "actions": {
+                    "canFork": true
+                  },
+                  "kind": "assistantText",
+                  "assistantResponseId": "msg_mwncoqif_f0f9da67-6b23-4060-8cc6-f464dc2153e3",
+                  "text": "The capture harness works correctly.",
+                  "state": "complete"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "control": {
+                    "phase": "completedSuccess",
+                    "sessionEnded": true,
+                    "canStop": false,
+                    "stopState": "idle",
+                    "stopTargetKind": "unknown",
+                    "activeWorks": [],
+                    "lastError": null,
+                    "apiRetry": null
+                  },
+                  "inputRouting": {
+                    "mode": "startNow"
+                  }
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "entityId": "msg_mwncoqif_f0f9da67-6b23-4060-8cc6-f464dc2153e3",
+                  "productTurnId": "msg_mwncop6a_4e7595c1-4c88-42f2-a487-b0f0d957894b",
+                  "visibility": "visible",
+                  "createdAt": 1795080685462,
+                  "createdAtSeq": 96,
+                  "actions": {
+                    "canFork": true,
+                    "canRetry": true
+                  },
+                  "kind": "assistantText",
+                  "assistantResponseId": "msg_mwncoqif_f0f9da67-6b23-4060-8cc6-f464dc2153e3",
+                  "text": "The capture harness works correctly.",
+                  "state": "complete"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 8,
+                  "availability": {
+                    "fork": {
+                      "allowed": true
+                    },
+                    "compact": {
+                      "allowed": true
+                    },
+                    "switchModelConfig": {
+                      "allowed": true
+                    },
+                    "setFollowupMode": {
+                      "allowed": true
+                    },
+                    "queueEdit": {
+                      "allowed": true
+                    },
+                    "sendQueuedNow": {
+                      "allowed": false,
+                      "reasonCode": "sendQueuedNowRequiresRunning"
+                    },
+                    "pauseGoal": {
+                      "allowed": false,
+                      "reasonCode": "noGoalToPause"
+                    },
+                    "resumeGoal": {
+                      "allowed": false,
+                      "reasonCode": "noGoalToResume"
+                    },
+                    "rewindFiles": {
+                      "allowed": true
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "usage_update",
+            "used": 30840,
+            "size": 1000000
+          }
+        ],
+        "turnComplete": true,
+        "assistantSettled": true,
+        "hasActiveWork": false,
+        "turnFailed": false,
+        "turnCancelled": false,
+        "usage": {
+          "totalTokens": 30840,
+          "inputTokens": 30745,
+          "outputTokens": 95,
+          "cachedReadTokens": 15296,
+          "cachedWriteTokens": 0
+        }
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncop15-xgfpct98-1-lf-28",
+        "logicalFrameOrdinal": 28,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncop15-xgfpct98-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncop15-xgfpct98-1",
+          "fromSeq": 106,
+          "toSeq": 107,
+          "sentAt": 1795080685675,
+          "payload": {
+            "kind": "deltas",
+            "deltas": []
+          }
+        }
+      },
+      "oracle": {
+        "updates": [],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": false,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    }
+  ],
+  "lifecycle": [],
+  "terminalReason": "complete",
+  "stopReason": "end_turn"
+}

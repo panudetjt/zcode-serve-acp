@@ -1,7 +1,11 @@
 import { connectDaemon } from "../src/serve/daemon.ts";
 import { ServeSession } from "../src/serve/session.ts";
 const daemon = await connectDaemon(process.env, () => {});
-const s = new ServeSession(daemon, process.cwd(), { onConversationFrame: () => {}, onLifecycle: () => {}, onRequest: async () => ({}) });
+const s = new ServeSession(daemon, process.cwd(), {
+  onConversationFrame: () => {},
+  onLifecycle: () => {},
+  onRequest: async () => ({}),
+});
 const created = await s.createSession();
 const raw = created.raw;
 console.log("session keys:", Object.keys(raw?.session ?? {}));
