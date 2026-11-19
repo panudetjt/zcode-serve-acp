@@ -120,12 +120,12 @@ describe("ServeSession lifecycle and operations", () => {
     });
 
     const mockDaemon: Daemon["Service"] = {
-      connect: () =>
-        Effect.succeed({
-          status: { host: "localhost", port: server.port ?? 12345, state: "ready", version: "3.18.2", pid: 123 },
-          token: "daemon-token",
-          wsPath: "/ws/host",
-        }),
+      // connect is an Effect-valued property (lazy-effect fix), not a method.
+      connect: Effect.succeed({
+        status: { host: "localhost", port: server.port ?? 12345, state: "ready", version: "3.18.2", pid: 123 },
+        token: "daemon-token",
+        wsPath: "/ws/host",
+      }),
       getCapability: () => Effect.succeed("mock-cap-token"),
     };
 
@@ -283,12 +283,12 @@ describe("ServeSession lifecycle and operations", () => {
     });
 
     const mockDaemon: Daemon["Service"] = {
-      connect: () =>
-        Effect.succeed({
-          status: { host: "localhost", port: server.port ?? 12345, state: "ready", version: "3.18.2", pid: 123 },
-          token: "tok",
-          wsPath: "/ws/host",
-        }),
+      // connect is an Effect-valued property (lazy-effect fix), not a method.
+      connect: Effect.succeed({
+        status: { host: "localhost", port: server.port ?? 12345, state: "ready", version: "3.18.2", pid: 123 },
+        token: "tok",
+        wsPath: "/ws/host",
+      }),
       getCapability: () => Effect.succeed("cap"),
     };
 

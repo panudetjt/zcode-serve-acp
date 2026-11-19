@@ -109,7 +109,7 @@ export class Daemon extends Context.Service<
   Daemon,
   {
     /** Attach to a ready daemon, spawning one if none is up. */
-    connect(): Effect.Effect<DaemonConnection, DiscoveryError | SpawnError>;
+    readonly connect: Effect.Effect<DaemonConnection, DiscoveryError | SpawnError>;
     /** Fresh single-use host capability token (30s TTL) — call right before each WS dial. */
     getCapability(connection: DaemonConnection): Effect.Effect<string, CapabilityError>;
   }
@@ -181,27 +181,28 @@ export class Daemon extends Context.Service<
         }
       });
 
-      const connect = Effect.fn("Daemon.connect")(function* (): Effect.fn.Return<
-        DaemonConnection,
-        DiscoveryError | SpawnError
-      > {
-        const rootDir = serverRoot();
-        if (rootDir === undefined) {
-          return yield* new DiscoveryError({ message: "cannot resolve zcode server root (no HOME?)" });
-        }
-        let status = yield* readStatus(rootDir);
-        const token = yield* readToken(rootDir);
-        const ready = status !== undefined && (yield* probeServerInfo(status.host, status.port, token));
+      // Effect-valued property (not a zero-arg method): see the `Effect.fn`
+      // note on `spawnServe` — each run gets a fresh span + generator body.
+      const connect: Effect.Effect<DaemonConnection, DiscoveryError | SpawnError> = Effect.suspend(
+        Effect.fn("Daemon.connect")(function* (): Effect.fn.Return<DaemonConnection, DiscoveryError | SpawnError> {
+          const rootDir = serverRoot();
+          if (rootDir === undefined) {
+            return yield* new DiscoveryError({ message: "cannot resolve zcode server root (no HOME?)" });
+          }
+          let status = yield* readStatus(rootDir);
+          const token = yield* readToken(rootDir);
+          const ready = status !== undefined && (yield* probeServerInfo(status.host, status.port, token));
 
-        if (!ready) {
-          yield* deps.spawnServe;
-          const found = yield* waitForReadyDaemon();
-          return { status: found.status, token: found.token, wsPath: "/ws/host" } satisfies DaemonConnection;
-        }
+          if (!ready) {
+            yield* deps.spawnServe;
+            const found = yield* waitForReadyDaemon();
+            return { status: found.status, token: found.token, wsPath: "/ws/host" } satisfies DaemonConnection;
+          }
 
-        yield* log.debug(`[daemon] attaching to ready daemon ${status!.host}:${status!.port}`);
-        return { status: status!, token, wsPath: "/ws/host" } satisfies DaemonConnection;
-      });
+          yield* log.debug(`[daemon] attaching to ready daemon ${status!.host}:${status!.port}`);
+          return { status: status!, token, wsPath: "/ws/host" } satisfies DaemonConnection;
+        }),
+      );
 
       const getCapability = Effect.fn("Daemon.getCapability")(function* (
         connection: DaemonConnection,
