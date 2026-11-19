@@ -24,7 +24,7 @@ import path from "node:path";
 import { Context, Effect, Layer, Result, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { HttpClient, HttpClientRequest } from "effect/http";
-import { CapabilityError, DiscoveryError, SpawnError, renderError, tolerate } from "../errors.ts";
+import { CapabilityError, DiscoveryError, SpawnError, renderError } from "../errors.ts";
 import { Log } from "../log.ts";
 
 export interface ServerStatus {
@@ -50,15 +50,18 @@ export interface DaemonConnection {
   readonly wsPath: string;
 }
 
-class DaemonDeps extends Context.Service<DaemonDeps, {
-  readonly client: HttpClient.HttpClient;
-  readonly fs: FileSystem;
-  readonly serveBin: string;
-  /** spawn `serve` detached; resolves immediately, daemon keeps running */
-  readonly spawnServe: () => Effect.Effect<void, SpawnError>;
-  /** first async spawn error, if the detached spawn already failed */
-  readonly spawnFailure: Effect.Effect<string | undefined>;
-}>()("zcode-serve-acp/internal/DaemonDeps") {
+class DaemonDeps extends Context.Service<
+  DaemonDeps,
+  {
+    readonly client: HttpClient.HttpClient;
+    readonly fs: FileSystem;
+    readonly serveBin: string;
+    /** spawn `serve` detached; resolves immediately, daemon keeps running */
+    readonly spawnServe: () => Effect.Effect<void, SpawnError>;
+    /** first async spawn error, if the detached spawn already failed */
+    readonly spawnFailure: Effect.Effect<string | undefined>;
+  }
+>()("zcode-serve-acp/internal/DaemonDeps") {
   static readonly layer: Layer.Layer<DaemonDeps, never, HttpClient.HttpClient | FileSystem> = Layer.effect(
     DaemonDeps,
     Effect.gen(function* () {
@@ -83,8 +86,7 @@ class DaemonDeps extends Context.Service<DaemonDeps, {
             // The daemon must outlive the bridge — fully detach.
             child.unref();
           },
-          catch: (cause) =>
-            new SpawnError({ bin: serveBin, message: renderError(cause) }),
+          catch: (cause) => new SpawnError({ bin: serveBin, message: renderError(cause) }),
         });
       });
 
@@ -99,20 +101,22 @@ class DaemonDeps extends Context.Service<DaemonDeps, {
   );
 }
 
-export class Daemon extends Context.Service<Daemon, {
-  /** Attach to a ready daemon, spawning one if none is up. */
-  connect(): Effect.Effect<DaemonConnection, DiscoveryError | SpawnError>
-  /** Fresh single-use host capability token (30s TTL) — call right before each WS dial. */
-  getCapability(connection: DaemonConnection): Effect.Effect<string, CapabilityError>
-}>()("zcode-serve-acp/Daemon") {
+export class Daemon extends Context.Service<
+  Daemon,
+  {
+    /** Attach to a ready daemon, spawning one if none is up. */
+    connect(): Effect.Effect<DaemonConnection, DiscoveryError | SpawnError>;
+    /** Fresh single-use host capability token (30s TTL) — call right before each WS dial. */
+    getCapability(connection: DaemonConnection): Effect.Effect<string, CapabilityError>;
+  }
+>()("zcode-serve-acp/Daemon") {
   static readonly layer: Layer.Layer<Daemon, never, HttpClient.HttpClient | FileSystem | Log> = Layer.effect(
     Daemon,
     Effect.gen(function* () {
       const deps = yield* DaemonDeps;
       const log = yield* Log;
 
-      const readFile = (file: string) =>
-        deps.fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined));
+      const readFile = (file: string) => deps.fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined));
 
       // Malformed/unready status → undefined (tolerated, keeps polling).
       const readStatus = Effect.fn("Daemon.readStatus")(function* (rootDir: string) {
@@ -134,15 +138,17 @@ export class Daemon extends Context.Service<Daemon, {
       });
 
       const probeServerInfo = (host: string, port: number, token: string) =>
-        deps.client.execute(
-          HttpClientRequest.get(`http://${host}:${port}/api/server-info`).pipe(
-            token ? HttpClientRequest.setHeaders({ authorization: `Bearer ${token}` }) : (request) => request,
-          ),
-        ).pipe(
-          Effect.map((response) => response.status >= 200 && response.status < 300),
-          Effect.timeout("2 seconds"),
-          Effect.orElseSucceed(() => false),
-        );
+        deps.client
+          .execute(
+            HttpClientRequest.get(`http://${host}:${port}/api/server-info`).pipe(
+              token ? HttpClientRequest.setHeaders({ authorization: `Bearer ${token}` }) : (request) => request,
+            ),
+          )
+          .pipe(
+            Effect.map((response) => response.status >= 200 && response.status < 300),
+            Effect.timeout("2 seconds"),
+            Effect.orElseSucceed(() => false),
+          );
 
       const waitForReadyDaemon = Effect.fn("Daemon.waitForReady")(function* (): Effect.fn.Return<
         { status: ServerStatus; token: string },
@@ -198,15 +204,17 @@ export class Daemon extends Context.Service<Daemon, {
       const getCapability = Effect.fn("Daemon.getCapability")(function* (
         connection: DaemonConnection,
       ): Effect.fn.Return<string, CapabilityError> {
-        const response = yield* deps.client.execute(
-          HttpClientRequest.post(
-            `http://${connection.status.host}:${connection.status.port}/api/rpc-host-capability`,
-          ).pipe(HttpClientRequest.bearerToken(connection.token)),
-        ).pipe(
-          Effect.mapError(
-            (cause) => new CapabilityError({ message: `capability request failed: ${formatCause(cause)}` }),
-          ),
-        );
+        const response = yield* deps.client
+          .execute(
+            HttpClientRequest.post(
+              `http://${connection.status.host}:${connection.status.port}/api/rpc-host-capability`,
+            ).pipe(HttpClientRequest.bearerToken(connection.token)),
+          )
+          .pipe(
+            Effect.mapError(
+              (cause) => new CapabilityError({ message: `capability request failed: ${formatCause(cause)}` }),
+            ),
+          );
         if (response.status < 200 || response.status >= 300) {
           return yield* new CapabilityError({
             status: response.status,
@@ -231,11 +239,9 @@ export class Daemon extends Context.Service<Daemon, {
 }
 
 const rec = (value: unknown): Record<string, unknown> | undefined =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 
-const formatCause = (cause: unknown): string => (renderError(cause));
+const formatCause = (cause: unknown): string => renderError(cause);
 
 export function dataRoot(): string {
   if (process.env.ZCODE_DATA_BASE_DIR) return process.env.ZCODE_DATA_BASE_DIR;
@@ -250,10 +256,7 @@ export function serverRoot(): string | undefined {
 
 export function resolveServeBinary(): string {
   if (process.env.ZCODE_SERVE_BIN) return process.env.ZCODE_SERVE_BIN;
-  const candidates = [
-    path.join(os.homedir(), ".zcode", "server", "bin", "zcode"),
-    "/usr/local/bin/zcode",
-  ];
+  const candidates = [path.join(os.homedir(), ".zcode", "server", "bin", "zcode"), "/usr/local/bin/zcode"];
   for (const p of candidates) if (existsSync(p)) return p;
   return "zcode"; // last resort: hope PATH has it
 }

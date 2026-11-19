@@ -88,5 +88,4 @@ export class AcpMethodError extends Schema.TaggedError<AcpMethodError>()("AcpMet
 }) {}
 
 /** Human-readable rendering used for JSON-RPC error messages and logs. */
-export const renderError = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
+export const renderError = (error: unknown): string => (error instanceof Error ? error.message : String(error));

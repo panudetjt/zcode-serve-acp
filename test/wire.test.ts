@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { decodeRpcMessage, deserialize, Deserializer, encodeRpcMessage, FrameSplitter, serializeValue, writeProtocolFrame } from "../src/serve/wire.ts";
+import {
+  decodeRpcMessage,
+  Deserializer,
+  encodeRpcMessage,
+  FrameSplitter,
+  serializeValue,
+  writeProtocolFrame,
+} from "../src/serve/wire.ts";
 
 describe("value codec", () => {
   test("undefined", () => {

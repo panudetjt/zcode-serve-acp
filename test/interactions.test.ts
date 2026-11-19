@@ -54,7 +54,11 @@ describe("elicitation/create translation", () => {
               value: "เปิด MCP browser-use ให้ผม (Recommended)",
               description: "เช็ค MCP server ของ ZCode",
             },
-            { label: "อนุญาต shell ให้ใช้ browser client", value: "อนุญาต shell ให้ใช้ browser client", description: "ผมจะใช้ shell" },
+            {
+              label: "อนุญาต shell ให้ใช้ browser client",
+              value: "อนุญาต shell ให้ใช้ browser client",
+              description: "ผมจะใช้ shell",
+            },
           ],
         },
       ],
@@ -133,12 +137,10 @@ describe("request_permission mapping", () => {
       { optionId: "deny", kind: "deny" },
     ];
     const mapped = mapPermissionOptions(rawOptions);
-    expect(
-      extractPermissionOptionId({ outcome: { outcome: "selected", optionId: "deny" } }, rawOptions, mapped),
-    ).toBe("deny");
-    expect(
-      extractPermissionOptionId({ outcome: { outcome: "cancelled" } }, rawOptions, mapped),
-    ).toBe("deny");
+    expect(extractPermissionOptionId({ outcome: { outcome: "selected", optionId: "deny" } }, rawOptions, mapped)).toBe(
+      "deny",
+    );
+    expect(extractPermissionOptionId({ outcome: { outcome: "cancelled" } }, rawOptions, mapped)).toBe("deny");
     expect(extractPermissionOptionId({ optionId: "allow" }, rawOptions, mapped)).toBe("allow");
   });
 

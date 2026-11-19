@@ -151,7 +151,9 @@ describe("FrameTranslator", () => {
     expect(res1.updates).toHaveLength(1);
     expect(res1.updates[0]!.sessionUpdate).toBe("tool_call");
     expect(res1.updates[0]!.title).toBe("Subagent: general-purpose");
-    expect(res1.updates[0]!.content).toEqual([{ type: "content", content: { type: "text", text: "Investigating repo dependencies" } }]);
+    expect(res1.updates[0]!.content).toEqual([
+      { type: "content", content: { type: "text", text: "Investigating repo dependencies" } },
+    ]);
     expect(res1.hasActiveWork).toBe(true);
 
     // Subagent progress update
@@ -175,7 +177,9 @@ describe("FrameTranslator", () => {
     expect(res2.updates).toHaveLength(1);
     expect(res2.updates[0]!.sessionUpdate).toBe("tool_call_update");
     expect(res2.updates[0]!.status).toBe("in_progress");
-    expect(res2.updates[0]!.content).toEqual([{ type: "content", content: { type: "text", text: "Found node_modules in main checkout" } }]);
+    expect(res2.updates[0]!.content).toEqual([
+      { type: "content", content: { type: "text", text: "Found node_modules in main checkout" } },
+    ]);
     expect(res2.hasActiveWork).toBe(true);
 
     // Subagent completed

@@ -11,7 +11,11 @@
  */
 import { randomUUID } from "node:crypto";
 import { classifyToolKind } from "../translate/toolKind.ts";
-import type { PendingInteraction, PendingInteractionOption, PendingInteractionQuestion } from "../translate/translator.ts";
+import type {
+  PendingInteraction,
+  PendingInteractionOption,
+  PendingInteractionQuestion,
+} from "../translate/translator.ts";
 
 const rec = (value: unknown): Record<string, unknown> | undefined =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
@@ -64,7 +68,13 @@ export function extractPermissionOptionId(
       chosenOptionId = outcomeObj.optionId;
     } else if (outcomeObj.outcome === "denied" || outcomeObj.outcome === "cancelled") {
       const denyOpt = rawOptions.find(
-        (o) => String(o.kind ?? "").toLowerCase().includes("deny") || String(o.optionId ?? "").toLowerCase().includes("deny"),
+        (o) =>
+          String(o.kind ?? "")
+            .toLowerCase()
+            .includes("deny") ||
+          String(o.optionId ?? "")
+            .toLowerCase()
+            .includes("deny"),
       );
       chosenOptionId = (denyOpt?.optionId as string) ?? "deny";
     }
@@ -112,24 +122,21 @@ export function extractElicitationQuestions(interaction: PendingInteraction): Ex
     Array.isArray(rawPayload.questions) && rawPayload.questions.length > 0
       ? rawPayload.questions
       : Array.isArray(input.questions) && input.questions.length > 0
-      ? input.questions
-      : undefined;
+        ? input.questions
+        : undefined;
 
   if (sourceQuestions) {
     return sourceQuestions.map((q, idx) => {
       const qRec = q === null || typeof q !== "object" ? {} : (q as Record<string, unknown>);
       const header = String(qRec.header ?? qRec.title ?? `Question ${idx + 1}`);
-      const questionText = String(
-        qRec.question ?? qRec.prompt ?? rawPayload.prompt ?? "Please choose an option:",
-      );
+      const questionText = String(qRec.question ?? qRec.prompt ?? rawPayload.prompt ?? "Please choose an option:");
       const rawOpts = Array.isArray(qRec.options) ? qRec.options : [];
       const options = rawOpts.map((opt, oIdx) => {
         const oRec = opt === null || typeof opt !== "object" ? {} : (opt as Record<string, unknown>);
         const label = String(oRec.label ?? oRec.name ?? oRec.value ?? `Option ${oIdx + 1}`);
         const value = String(oRec.value ?? oRec.optionId ?? label);
-        const description = oRec.description !== undefined && oRec.description !== null
-          ? String(oRec.description)
-          : undefined;
+        const description =
+          oRec.description !== undefined && oRec.description !== null ? String(oRec.description) : undefined;
         return { value, label, ...(description !== undefined ? { description } : {}) };
       });
       return {
@@ -165,9 +172,8 @@ export function extractElicitationQuestions(interaction: PendingInteraction): Ex
       options: (rawPayload.options as Array<Record<string, unknown>>).map((opt, oIdx) => {
         const label = String(opt.label ?? opt.name ?? opt.optionId ?? `Option ${oIdx + 1}`);
         const value = String(opt.optionId ?? opt.value ?? label);
-        const description = opt.description !== undefined && opt.description !== null
-          ? String(opt.description)
-          : undefined;
+        const description =
+          opt.description !== undefined && opt.description !== null ? String(opt.description) : undefined;
         return { value, label, ...(description !== undefined ? { description } : {}) };
       }),
       multiSelect: false,

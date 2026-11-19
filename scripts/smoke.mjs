@@ -82,7 +82,9 @@ const fail = (msg) => {
 };
 
 const init = await request("initialize", { protocolVersion: 1, clientCapabilities: {} });
-console.error(`[smoke] initialize → agentInfo=${JSON.stringify(init.agentInfo)} models-cap=${JSON.stringify(init.agentCapabilities)}`);
+console.error(
+  `[smoke] initialize → agentInfo=${JSON.stringify(init.agentInfo)} models-cap=${JSON.stringify(init.agentCapabilities)}`,
+);
 if (Number(init.protocolVersion) !== 1) fail(`protocolVersion ${init.protocolVersion}`);
 
 const session = await request("session/new", { cwd, mcpServers: [] });
@@ -91,10 +93,22 @@ console.error(`[smoke] session/new → sessionId=${session.sessionId}`);
 console.error(`[smoke] models (${models.length}): ${models.map((m) => m.modelId).join(" | ")}`);
 if (models.length === 0) fail("daemon advertised no models (and fallback produced none)");
 const configOptions = session.configOptions ?? [];
-console.error(`[smoke] configOptions: ${configOptions.map((o) => `${o.id}=${o.currentValue ?? "?"} (${o.options?.length ?? 0} opts)`).join(" · ")}`);
+console.error(
+  `[smoke] configOptions: ${configOptions.map((o) => `${o.id}=${o.currentValue ?? "?"} (${o.options?.length ?? 0} opts)`).join(" · ")}`,
+);
 const thoughtOpt = configOptions.find((o) => o.id === "reasoning" || o.id === "thought");
-if (!thoughtOpt || (thoughtOpt.options?.length ?? 0) === 0) fail("no thought configOption — Effort panel will be empty");
-console.error(`[smoke] set_config_option thought=high →`, JSON.stringify(await request("session/set_config_option", { sessionId: session.sessionId, configOptionId: "thought", currentValue: "high" })));
+if (!thoughtOpt || (thoughtOpt.options?.length ?? 0) === 0)
+  fail("no thought configOption — Effort panel will be empty");
+console.error(
+  `[smoke] set_config_option thought=high →`,
+  JSON.stringify(
+    await request("session/set_config_option", {
+      sessionId: session.sessionId,
+      configOptionId: "thought",
+      currentValue: "high",
+    }),
+  ),
+);
 
 const result = await request(
   "session/prompt",
@@ -111,6 +125,8 @@ console.error(`[smoke] updates: ${updates.length} total, ${textUpdates.length} t
 console.log(text || "(no text)");
 
 const ok = /BRIDGE_OK/.test(text) || textUpdates.length > 0;
-console.error(`[smoke] ${ok ? "PASS" : "FAIL"} — models advertised: ${models.length}, text chunks: ${textUpdates.length}`);
+console.error(
+  `[smoke] ${ok ? "PASS" : "FAIL"} — models advertised: ${models.length}, text chunks: ${textUpdates.length}`,
+);
 child.kill();
 process.exit(ok ? 0 : 1);

@@ -15,11 +15,18 @@ import * as BunSocket from "@effect/platform-bun/BunSocket";
 import * as BunStdio from "@effect/platform-bun/BunStdio";
 import { Effect, Layer, Deferred, Result, Stream } from "effect";
 import { FetchHttpClient } from "effect/http";
-import { Socket } from "effect/socket/Socket";
 import { Stdio } from "effect/Stdio";
 import { FileSystem } from "effect/FileSystem";
 import { AcpServer } from "./acp/server.ts";
-import { errorPayload, encodeLine, errorResponse, clientRequest, notification, parseLine, successResponse } from "./jsonrpc.ts";
+import {
+  errorPayload,
+  encodeLine,
+  errorResponse,
+  clientRequest,
+  notification,
+  parseLine,
+  successResponse,
+} from "./jsonrpc.ts";
 import { Log } from "./log.ts";
 import { fallbackModels } from "./models.ts";
 import { Daemon } from "./serve/daemon.ts";
@@ -60,7 +67,8 @@ const Main = Effect.gen(function* () {
         return yield* Deferred.await(deferred).pipe(
           Effect.timeout(CLIENT_REQUEST_TIMEOUT_MS),
           Effect.catchTag("TimeoutError", () =>
-            Effect.fail(new Error(`client request ${method} timed out (client never answered)`))),
+            Effect.fail(new Error(`client request ${method} timed out (client never answered)`)),
+          ),
           Effect.ensuring(Effect.sync(() => pending.delete(id))),
         );
       }),
@@ -86,7 +94,10 @@ const Main = Effect.gen(function* () {
         if (entry !== undefined) {
           pending.delete(numId);
           if (inbound.response.error !== undefined) {
-            Deferred.doneUnsafe(entry, Effect.fail(new Error(inbound.response.error.message ?? "client returned error")));
+            Deferred.doneUnsafe(
+              entry,
+              Effect.fail(new Error(inbound.response.error.message ?? "client returned error")),
+            );
           } else {
             Deferred.doneUnsafe(entry, Effect.succeed(inbound.response.result));
           }
@@ -117,10 +128,7 @@ const Main = Effect.gen(function* () {
   yield* Stream.runForEach(Stream.splitLines(Stream.decodeText(stdio.stdin)), handleLine);
 });
 
-const AppLayer = ServeSessionFactory.layerNoDeps.pipe(
-  Layer.provide(Daemon.layer),
-  Layer.provide(PlatformLayer),
-);
+const AppLayer = ServeSessionFactory.layerNoDeps.pipe(Layer.provide(Daemon.layer), Layer.provide(PlatformLayer));
 
 const program: Effect.Effect<void, unknown, never> = Effect.provide(
   Main,

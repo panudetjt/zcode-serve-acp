@@ -126,7 +126,11 @@ export const fallbackModels: Effect.Effect<AvailableModel[], never, FileSystem> 
       Effect.orElseSucceed(() => undefined),
     );
 
-  const [settingRaw, credsRaw, tableRaw] = yield* Effect.all([readJson(settingPath), readJson(credsPath), readJson(tablePath)]);
+  const [settingRaw, credsRaw, tableRaw] = yield* Effect.all([
+    readJson(settingPath),
+    readJson(credsPath),
+    readJson(tablePath),
+  ]);
   if (settingRaw === undefined || credsRaw === undefined || tableRaw === undefined) return [];
 
   const setting = decodeSetting(settingRaw);

@@ -26,16 +26,15 @@ import * as BunFileSystem from "@effect/platform-bun/BunFileSystem";
 import * as BunSocket from "@effect/platform-bun/BunSocket";
 import { Effect, Layer, type Fiber } from "effect";
 import { FetchHttpClient } from "effect/http";
-import { FileSystem } from "effect/FileSystem";
-import { Socket } from "effect/socket/Socket";
 import { Daemon } from "../src/serve/daemon.ts";
 import { ServeSessionFactory, type CreateSessionResult, type ServeSession } from "../src/serve/session.ts";
 import { Log } from "../src/log.ts";
-import { FrameTranslator, type AcpUpdate, type FoldResult, type PendingInteraction } from "../src/translate/translator.ts";
+import { FrameTranslator, type FoldResult, type PendingInteraction } from "../src/translate/translator.ts";
 
 const args = process.argv.slice(2);
 const outIdx = args.indexOf("--out");
-const OUT_DIR = outIdx >= 0 ? path.resolve(args[outIdx + 1]!) : path.resolve(import.meta.dir, "../test/fixtures/golden-frames");
+const OUT_DIR =
+  outIdx >= 0 ? path.resolve(args[outIdx + 1]!) : path.resolve(import.meta.dir, "../test/fixtures/golden-frames");
 const DEBUG = process.env.ZCODE_SERVE_ACP_DEBUG === "1";
 
 interface Scenario {
@@ -56,7 +55,7 @@ const SCENARIOS: Scenario[] = [
   {
     name: "question",
     prompt:
-      "Use the AskUserQuestion tool to ask me which capture scenario I like most, with exactly two options: \"plain\" and \"tool\". Do not do anything else.",
+      'Use the AskUserQuestion tool to ask me which capture scenario I like most, with exactly two options: "plain" and "tool". Do not do anything else.',
   },
 ];
 
@@ -131,8 +130,9 @@ const runScenario = (
           payload.toolName === "AskUserQuestion" ||
           payload.toolName === "ExitPlanMode";
         if (isElicitation) {
-          const questions = (payload.questions ?? (payload.input as { questions?: unknown[] } | undefined)?.questions ?? []) as
-            Array<Record<string, unknown>>;
+          const questions = (payload.questions ??
+            (payload.input as { questions?: unknown[] } | undefined)?.questions ??
+            []) as Array<Record<string, unknown>>;
           const firstOptions = (questions[0]?.options ?? payload.options) as
             | Array<{ value?: string; optionId?: string }>
             | undefined;
@@ -251,7 +251,9 @@ const program = Effect.gen(function* () {
 }).pipe(
   Effect.provide(ServeSessionFactory.layerNoDeps),
   Effect.provide(Daemon.layer),
-  Effect.provide(Layer.mergeAll(Log.layerFromEnv, FetchHttpClient.layer, BunFileSystem.layer, BunSocket.layerWebSocketConstructor)),
+  Effect.provide(
+    Layer.mergeAll(Log.layerFromEnv, FetchHttpClient.layer, BunFileSystem.layer, BunSocket.layerWebSocketConstructor),
+  ),
 );
 
 // Capture keeps WS channels open per scenario; runMain would wait on fibers —

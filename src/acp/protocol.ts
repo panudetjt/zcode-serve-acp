@@ -87,12 +87,10 @@ export interface AvailableModelLike {
 export function buildConfigOptions(input: ConfigOptionsInput): ConfigOption[] {
   const models = input.models;
   const sel = input.modelSelection;
-  const currentModel =
-    models.find((m) => m.providerId === sel?.providerId && m.modelId === sel?.modelId) ?? models[0];
+  const currentModel = models.find((m) => m.providerId === sel?.providerId && m.modelId === sel?.modelId) ?? models[0];
   const currentValue = currentModel ? `${currentModel.providerId}/${currentModel.modelId}` : undefined;
   const thoughtLevels = currentModel?.reasoningLevels ?? [];
-  const thoughtCurrent =
-    input.thoughtLevel ?? currentModel?.reasoningDefaultLevel ?? thoughtLevels[0]?.value ?? "max";
+  const thoughtCurrent = input.thoughtLevel ?? currentModel?.reasoningDefaultLevel ?? thoughtLevels[0]?.value ?? "max";
   const modelOption: ConfigOption = {
     id: "model",
     name: "Model",
@@ -160,7 +158,7 @@ export const decodePrompt = (prompt: unknown): Effect.Effect<DecodedPrompt, Erro
     const blocks = yield* decodePromptBlocks(prompt ?? []).pipe(
       Effect.mapError((issue) => new Error(`invalid prompt blocks: ${issue.message}`)),
     );
-    const text = blocks.map((b) => (typeof b === "string" ? b : (b.type === "text" ? (b.text ?? "") : ""))).join("\n");
+    const text = blocks.map((b) => (typeof b === "string" ? b : b.type === "text" ? (b.text ?? "") : "")).join("\n");
     const images = blocks.flatMap((b) => (typeof b !== "string" && b.type === "image" ? [b] : []));
     return { text, images };
   });

@@ -89,27 +89,27 @@ export interface ServeSession {
   readonly dispose: () => Effect.Effect<void, unknown>;
 }
 
-export class ServeSessionFactory extends Context.Service<ServeSessionFactory, {
-  /** Create one daemon-backed session. Services are captured at layer build
-   *  time; the WS channel lives in the session's internal Scope. */
-  create(cwd: string, handlers: SessionHandlers): Effect.Effect<ServeSession>
-}>()("zcode-serve-acp/ServeSessionFactory") {
+export class ServeSessionFactory extends Context.Service<
+  ServeSessionFactory,
+  {
+    /** Create one daemon-backed session. Services are captured at layer build
+     *  time; the WS channel lives in the session's internal Scope. */
+    create(cwd: string, handlers: SessionHandlers): Effect.Effect<ServeSession>;
+  }
+>()("zcode-serve-acp/ServeSessionFactory") {
   /** Compose with a WebSocketConstructor layer in bin.ts; tests provide fakes. */
-  static readonly layerNoDeps: Layer.Layer<
-    ServeSessionFactory,
-    never,
-    Daemon | Log | Socket.WebSocketConstructor
-  > = Layer.effect(
-    ServeSessionFactory,
-    Effect.gen(function* () {
-      const daemon = yield* Daemon;
-      const log = yield* Log;
-      const wsConstructor = yield* Socket.WebSocketConstructor;
-      return ServeSessionFactory.of({
-        create: (cwd, handlers) => makeSession(daemon, log, wsConstructor, cwd, handlers),
-      });
-    }),
-  );
+  static readonly layerNoDeps: Layer.Layer<ServeSessionFactory, never, Daemon | Log | Socket.WebSocketConstructor> =
+    Layer.effect(
+      ServeSessionFactory,
+      Effect.gen(function* () {
+        const daemon = yield* Daemon;
+        const log = yield* Log;
+        const wsConstructor = yield* Socket.WebSocketConstructor;
+        return ServeSessionFactory.of({
+          create: (cwd, handlers) => makeSession(daemon, log, wsConstructor, cwd, handlers),
+        });
+      }),
+    );
 }
 
 type ServeError = SessionError | RpcError | RpcTimeout | ChannelClosed;
@@ -127,7 +127,7 @@ const makeSession = (
   cwd: string,
   handlers: SessionHandlers,
 ): Effect.Effect<ServeSession> =>
-  Effect.gen(function* () {
+  Effect.sync(() => {
     const scope: ScopeType.Closeable = ScopeType.makeUnsafe();
     const connectionRef = Ref.makeUnsafe<Option.Option<DaemonConnection>>(Option.none());
     const channelRef = Ref.makeUnsafe<Option.Option<ChannelClient>>(Option.none());
@@ -138,9 +138,9 @@ const makeSession = (
     const ensureConnection: Effect.Effect<DaemonConnection, SessionError> = Effect.gen(function* () {
       const existing = yield* Ref.get(connectionRef);
       if (Option.isSome(existing)) return existing.value;
-      const connection = yield* daemon.connect().pipe(
-        Effect.mapError((cause) => new SessionError({ message: cause.message })),
-      );
+      const connection = yield* daemon
+        .connect()
+        .pipe(Effect.mapError((cause) => new SessionError({ message: cause.message })));
       yield* Ref.set(connectionRef, Option.some(connection));
       return connection;
     });
@@ -149,10 +149,11 @@ const makeSession = (
       const existing = yield* Ref.get(channelRef);
       if (Option.isSome(existing)) return existing.value;
       const connection = yield* ensureConnection;
-      const capability = yield* daemon.getCapability(connection).pipe(
-        Effect.mapError((cause) => new SessionError({ message: cause.message })),
-      );
-      const wsUrl = `ws://${connection.status.host}:${connection.status.port}${connection.wsPath}` +
+      const capability = yield* daemon
+        .getCapability(connection)
+        .pipe(Effect.mapError((cause) => new SessionError({ message: cause.message })));
+      const wsUrl =
+        `ws://${connection.status.host}:${connection.status.port}${connection.wsPath}` +
         (connection.token ? `?token=${encodeURIComponent(connection.token)}` : "");
       const channel = yield* ChannelClient.connect(
         wsUrl,
@@ -165,9 +166,7 @@ const makeSession = (
       ).pipe(
         ScopeType.provide(scope),
         Effect.provideService(Socket.WebSocketConstructor, wsConstructor),
-        Effect.mapError(
-          (cause) => new SessionError({ message: renderError(cause) }),
-        ),
+        Effect.mapError((cause) => new SessionError({ message: renderError(cause) })),
       );
       yield* Ref.set(channelRef, Option.some(channel));
       yield* log.debug(`[session] channel ready ${wsUrl.replace(/token=[^&]*/, "token=…")}`);
@@ -185,9 +184,8 @@ const makeSession = (
       if (Option.isSome(existing)) return existing.value;
       const channel = yield* getChannel;
       // Repeated attaches do not mint duplicate projects — the daemon dedupes by rootPath.
-      const saved = yield* tolerate(
-        channel.call("project", "saveProject", { roots: [cwd] }, 30_000),
-        (cause) => log.debug(`[session] saveProject failed (${renderError(cause)})`),
+      const saved = yield* tolerate(channel.call("project", "saveProject", { roots: [cwd] }, 30_000), (cause) =>
+        log.debug(`[session] saveProject failed (${renderError(cause)})`),
       );
       const projectId = saved === undefined ? undefined : decodeSaveProjectId(saved);
       if (saved !== undefined) {
@@ -199,12 +197,8 @@ const makeSession = (
       const workspace: WorkspaceInfo = { workspacePath: cwd, workspaceIdentity: cwd, projectId };
       yield* Ref.set(workspaceRef, Option.some(workspace));
       // Workspace initialize — the adapter ignores failures with a warning.
-      yield* tolerate(
-        channel.call("zcode-agent", "initialize", workspace, 30_000),
-        (cause) =>
-          log.debug(
-            `[session] zcode-agent.initialize failed (continuing): ${renderError(cause)}`,
-          ),
+      yield* tolerate(channel.call("zcode-agent", "initialize", workspace, 30_000), (cause) =>
+        log.debug(`[session] zcode-agent.initialize failed (continuing): ${renderError(cause)}`),
       );
       return workspace;
     });
@@ -214,12 +208,17 @@ const makeSession = (
         if ((yield* Ref.get(subscribedRef)) === true) return;
         yield* Ref.set(subscribedRef, true);
         const channel = yield* getChannel;
-        yield* channel.call("zcode-agent", "subscribeConversationV4", {
-          sessionId: daemonSessionId,
-          workspacePath: workspace.workspacePath,
-          workspaceIdentity: workspace.workspaceIdentity,
-          visibility: "foreground",
-        }, 30_000);
+        yield* channel.call(
+          "zcode-agent",
+          "subscribeConversationV4",
+          {
+            sessionId: daemonSessionId,
+            workspacePath: workspace.workspacePath,
+            workspaceIdentity: workspace.workspaceIdentity,
+            visibility: "foreground",
+          },
+          30_000,
+        );
         yield* log.debug(`[session] subscribed conversation ${daemonSessionId}`);
         const topic = `conversation/${daemonSessionId}`;
         yield* channel.listen(
@@ -290,22 +289,27 @@ const makeSession = (
         }
         yield* Ref.set(daemonSessionRef, Option.some(decoded.daemonSessionId));
         yield* Effect.forkDetach(
-          tolerate(
-            subscribeConversation(decoded.daemonSessionId, workspace),
-            (cause) => log.debug(`[session] subscribeConversationV4 failed: ${renderError(cause)}`),
+          tolerate(subscribeConversation(decoded.daemonSessionId, workspace), (cause) =>
+            log.debug(`[session] subscribeConversationV4 failed: ${renderError(cause)}`),
           ),
         );
         const skills = yield* Effect.flatMap(getChannel, (channel) =>
           tolerate(
-            channel.call("skills", "list", {
-              workspacePath: workspace.workspacePath,
-              workspaceIdentity: workspace.workspaceIdentity,
-            }, 5_000),
+            channel.call(
+              "skills",
+              "list",
+              {
+                workspacePath: workspace.workspacePath,
+                workspaceIdentity: workspace.workspaceIdentity,
+              },
+              5_000,
+            ),
             (cause) => log.debug(`[session] skills.list failed: ${renderError(cause)}`),
           ).pipe(
             Effect.map((raw) => decodeSkills(raw)),
             Effect.map((skills) => skills ?? ([] as DiscoveredSkill[])),
-          ));
+          ),
+        );
         yield* log.debug(`[session] discovered ${skills.length} skills from daemon`);
         return {
           daemonSessionId: decoded.daemonSessionId,
@@ -323,15 +327,19 @@ const makeSession = (
         const daemonSessionId = yield* requireDaemonSession;
         const ws = yield* workspaceIdentifiers;
         const inputId = crypto.randomUUID();
-        yield* call("sendPrompt", {
-          sessionId: daemonSessionId,
-          inputId,
-          content: text,
-          workspacePath: ws.workspacePath,
-          workspaceIdentity: ws.workspaceIdentity,
-          ...(attachments !== undefined && attachments.length > 0 ? { attachments } : {}),
-          ...(modelSelection !== undefined && modelSelection.modelId !== "" ? { modelSelection } : {}),
-        }, 60_000);
+        yield* call(
+          "sendPrompt",
+          {
+            sessionId: daemonSessionId,
+            inputId,
+            content: text,
+            workspacePath: ws.workspacePath,
+            workspaceIdentity: ws.workspaceIdentity,
+            ...(attachments !== undefined && attachments.length > 0 ? { attachments } : {}),
+            ...(modelSelection !== undefined && modelSelection.modelId !== "" ? { modelSelection } : {}),
+          },
+          60_000,
+        );
         return { inputId };
       });
 
@@ -339,49 +347,61 @@ const makeSession = (
       Effect.gen(function* () {
         const daemonSessionId = yield* requireDaemonSession;
         const ws = yield* workspaceIdentifiers;
-        return yield* call("sendConversationCommandV4", {
-          workspacePath: ws.workspacePath,
-          workspaceIdentity: ws.workspaceIdentity,
-          envelope: {
-            commandId: crypto.randomUUID(),
-            clientId: CLIENT_ID,
-            sessionId: daemonSessionId,
-            type: "resolveInteraction",
-            payload: { interactionId, answer },
-            issuedAt: Date.now(),
+        return yield* call(
+          "sendConversationCommandV4",
+          {
+            workspacePath: ws.workspacePath,
+            workspaceIdentity: ws.workspaceIdentity,
+            envelope: {
+              commandId: crypto.randomUUID(),
+              clientId: CLIENT_ID,
+              sessionId: daemonSessionId,
+              type: "resolveInteraction",
+              payload: { interactionId, answer },
+              issuedAt: Date.now(),
+            },
           },
-        }, 30_000);
+          30_000,
+        );
       });
 
     const setMode: ServeSession["setMode"] = (mode) =>
       Effect.gen(function* () {
         const daemonSessionId = yield* requireDaemonSession;
         const ws = yield* workspaceIdentifiers;
-        yield* call("setMode", {
-          sessionId: daemonSessionId,
-          mode,
-          workspacePath: ws.workspacePath,
-          workspaceIdentity: ws.workspaceIdentity,
-        }, 30_000);
+        yield* call(
+          "setMode",
+          {
+            sessionId: daemonSessionId,
+            mode,
+            workspacePath: ws.workspacePath,
+            workspaceIdentity: ws.workspaceIdentity,
+          },
+          30_000,
+        );
       });
 
     const sendCommand: ServeSession["sendCommand"] = (type, payload, expectedForegroundExecutionId) =>
       Effect.gen(function* () {
         const daemonSessionId = yield* requireDaemonSession;
         const ws = yield* workspaceIdentifiers;
-        return yield* call("sendConversationCommandV4", {
-          workspacePath: ws.workspacePath,
-          workspaceIdentity: ws.workspaceIdentity,
-          envelope: {
-            commandId: crypto.randomUUID(),
-            clientId: CLIENT_ID,
-            sessionId: daemonSessionId,
-            type,
-            payload,
-            ...(expectedForegroundExecutionId !== undefined ? { expectedForegroundExecutionId } : {}),
-            issuedAt: Date.now(),
+        return yield* call(
+          "sendConversationCommandV4",
+          {
+            workspacePath: ws.workspacePath,
+            workspaceIdentity: ws.workspaceIdentity,
+            envelope: {
+              commandId: crypto.randomUUID(),
+              clientId: CLIENT_ID,
+              sessionId: daemonSessionId,
+              type,
+              payload,
+              ...(expectedForegroundExecutionId !== undefined ? { expectedForegroundExecutionId } : {}),
+              issuedAt: Date.now(),
+            },
           },
-        }, 30_000);
+          30_000,
+        );
       });
 
     const disposeEffect = Effect.gen(function* () {
@@ -448,7 +468,10 @@ const CreateSessionShape = Schema.Struct({
             Schema.Array(
               Schema.Struct({
                 ref: Schema.optional(
-                  Schema.Struct({ providerId: Schema.optional(Schema.String), modelId: Schema.optional(Schema.String) }),
+                  Schema.Struct({
+                    providerId: Schema.optional(Schema.String),
+                    modelId: Schema.optional(Schema.String),
+                  }),
                 ),
                 label: Schema.optional(Schema.String),
                 providerLabel: Schema.optional(Schema.String),
@@ -534,9 +557,13 @@ const decodeSkills = (result: unknown): DiscoveredSkill[] => {
   const r = rec(result);
   const rawSkills = Array.isArray(r?.["skills"]) ? (r!["skills"] as Array<Record<string, unknown>>) : [];
   return rawSkills
-    .filter((s) =>
-      s !== null && typeof s === "object" && s["enabled"] !== false && typeof s["name"] === "string" &&
-      (s["name"] as string).trim() !== ""
+    .filter(
+      (s) =>
+        s !== null &&
+        typeof s === "object" &&
+        s["enabled"] !== false &&
+        typeof s["name"] === "string" &&
+        (s["name"] as string).trim() !== "",
     )
     .map((s) => {
       const name = (s["name"] as string).trim();

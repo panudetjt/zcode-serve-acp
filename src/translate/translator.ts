@@ -187,7 +187,8 @@ function unwrapEnvelope(payload: unknown): DeltaEnvelope | undefined {
     envelope["error"] ??
     envelope["failure"];
 
-  const inner: Rec | undefined = framePayload ?? payloadPayload ?? (bareDeltas !== undefined ? { deltas: bareDeltas } : undefined);
+  const inner: Rec | undefined =
+    framePayload ?? payloadPayload ?? (bareDeltas !== undefined ? { deltas: bareDeltas } : undefined);
   if (inner === undefined) return { deltas: [], snapshot: undefined, rawError };
 
   const innerSnapshot = recAt(inner, "snapshot");
@@ -385,9 +386,10 @@ export class FrameTranslator {
         if (patch === undefined) continue;
         const control = patch.control;
 
-        const lastError = control !== undefined && control["lastError"] !== undefined && control["lastError"] !== null
-          ? rec(control["lastError"])
-          : undefined;
+        const lastError =
+          control !== undefined && control["lastError"] !== undefined && control["lastError"] !== null
+            ? rec(control["lastError"])
+            : undefined;
         if (lastError !== undefined) {
           turnComplete = true;
           turnFailed = true;
@@ -434,7 +436,9 @@ export class FrameTranslator {
             this.turnHeaderState = undefined;
             this.activeWorksCount = 0;
             this.pendingInteractionsCount = 0;
-            errorMessage = (control !== undefined ? str(recAt(control, "lastError"), "message") : undefined) ?? "Turn execution failed in daemon";
+            errorMessage =
+              (control !== undefined ? str(recAt(control, "lastError"), "message") : undefined) ??
+              "Turn execution failed in daemon";
           } else if (phase === "running" || phase === "prewarming") {
             this.turnPhase = "running";
           }
@@ -618,9 +622,10 @@ export class FrameTranslator {
           ? [{ type: "content", content: { type: "text", text: summary } }]
           : undefined;
         const workId = str(row.raw, "workId");
-        const meta = bool(row.raw, "backgrounded") === true
-          ? { backgrounded: true, ...(workId !== undefined ? { workId } : {}) }
-          : undefined;
+        const meta =
+          bool(row.raw, "backgrounded") === true
+            ? { backgrounded: true, ...(workId !== undefined ? { workId } : {}) }
+            : undefined;
 
         if (existing === undefined) {
           const parentToolCallId = str(row.raw, "parentToolCallId");
@@ -714,19 +719,21 @@ export class FrameTranslator {
         }
 
         const inputRecord = rec(rawInput);
-        const commandVal = typeof inputRecord?.["command"] === "string"
-          ? (inputRecord["command"] as string)
-          : typeof inputRecord?.["cmd"] === "string"
-          ? (inputRecord["cmd"] as string)
-          : undefined;
+        const commandVal =
+          typeof inputRecord?.["command"] === "string"
+            ? (inputRecord["command"] as string)
+            : typeof inputRecord?.["cmd"] === "string"
+              ? (inputRecord["cmd"] as string)
+              : undefined;
 
-        const pathVal = typeof inputRecord?.["path"] === "string"
-          ? (inputRecord["path"] as string)
-          : typeof inputRecord?.["filePath"] === "string"
-          ? (inputRecord["filePath"] as string)
-          : typeof inputRecord?.["file"] === "string"
-          ? (inputRecord["file"] as string)
-          : undefined;
+        const pathVal =
+          typeof inputRecord?.["path"] === "string"
+            ? (inputRecord["path"] as string)
+            : typeof inputRecord?.["filePath"] === "string"
+              ? (inputRecord["filePath"] as string)
+              : typeof inputRecord?.["file"] === "string"
+                ? (inputRecord["file"] as string)
+                : undefined;
 
         let title: string;
         if (commandVal !== undefined) {
@@ -760,9 +767,10 @@ export class FrameTranslator {
             ? [{ type: "content", content: { type: "text", text: outputText } }]
             : undefined;
         const locations = pathVal !== undefined ? [{ path: pathVal }] : undefined;
-        const meta = tool.backgrounded === true
-          ? { backgrounded: true, ...(tool.workId !== undefined ? { workId: tool.workId } : {}) }
-          : undefined;
+        const meta =
+          tool.backgrounded === true
+            ? { backgrounded: true, ...(tool.workId !== undefined ? { workId: tool.workId } : {}) }
+            : undefined;
 
         let toolInfo = this.rowTool.get(rowId);
         if (toolInfo === undefined) {

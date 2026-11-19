@@ -15,7 +15,12 @@
 import { Context, Deferred, Effect, Fiber, Layer, Option, Ref } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import type { DiscoveredSkill } from "../serve/session.ts";
-import { ServeSessionFactory, type AvailableModel, type PromptAttachment, type ServeSession } from "../serve/session.ts";
+import {
+  ServeSessionFactory,
+  type AvailableModel,
+  type PromptAttachment,
+  type ServeSession,
+} from "../serve/session.ts";
 import { AcpMethodError, renderError, tolerate } from "../errors.ts";
 import { Log } from "../log.ts";
 import { fallbackModels, modelsToAcp } from "../models.ts";
@@ -73,28 +78,30 @@ export interface AcpServerDeps {
   readonly fallbackModels: Effect.Effect<AvailableModel[]>;
 }
 
-export class AcpServer extends Context.Service<AcpServer, {
-  handle(method: string, params: Record<string, unknown>): Effect.Effect<unknown, AcpMethodError>;
-}>()("zcode-serve-acp/AcpServer") {
+export class AcpServer extends Context.Service<
+  AcpServer,
+  {
+    handle(method: string, params: Record<string, unknown>): Effect.Effect<unknown, AcpMethodError>;
+  }
+>()("zcode-serve-acp/AcpServer") {
   /** Direct construction for tests — same wiring bin.ts gets from the layer. */
   static readonly make = (deps: AcpServerDeps): AcpServer["Service"] => makeServer(deps);
 
-  static readonly layerNoDeps: Layer.Layer<AcpServer, never, ServeSessionFactory | Log | FileSystem> =
-    Layer.effect(
-      AcpServer,
-      Effect.gen(function* () {
-        const sessions = yield* ServeSessionFactory;
-        const log = yield* Log;
-        const fs = yield* FileSystem;
-        return AcpServer.make({
-          sessions,
-          log,
-          emitNotification: () => Effect.void, // replaced by the host at runtime
-          clientRequest: () => Effect.fail(new Error("client request channel not wired")),
-          fallbackModels: fallbackModels.pipe(Effect.provideService(FileSystem, fs)),
-        });
-      }),
-    );
+  static readonly layerNoDeps: Layer.Layer<AcpServer, never, ServeSessionFactory | Log | FileSystem> = Layer.effect(
+    AcpServer,
+    Effect.gen(function* () {
+      const sessions = yield* ServeSessionFactory;
+      const log = yield* Log;
+      const fs = yield* FileSystem;
+      return AcpServer.make({
+        sessions,
+        log,
+        emitNotification: () => Effect.void, // replaced by the host at runtime
+        clientRequest: () => Effect.fail(new Error("client request channel not wired")),
+        fallbackModels: fallbackModels.pipe(Effect.provideService(FileSystem, fs)),
+      });
+    }),
+  );
 }
 
 const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
@@ -158,130 +165,140 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
     Effect.gen(function* () {
       yield* clearQuiet(bridge);
       const quiet = yield* Effect.forkDetach(
-        Effect.sleep("5 seconds").pipe(
-          Effect.flatMap(() => endTurn(bridge, "assistant settled + quiet")),
-        ),
+        Effect.sleep("5 seconds").pipe(Effect.flatMap(() => endTurn(bridge, "assistant settled + quiet"))),
       );
       yield* Ref.set(bridge.quietFiber, Option.some(quiet));
     });
 
   // ---- frame / lifecycle / channel handlers ----
 
-  const onConversationFrame = (bridge: BridgeSession) => (payload: unknown): Effect.Effect<void, unknown> =>
-    Effect.gen(function* () {
-      yield* log.debug(`[frame] in: ${JSON.stringify(payload).slice(0, 160)}`);
-      if (DUMP_FRAMES) {
-        const dumped = yield* Ref.get(bridge.dumpRef);
-        if (!dumped) {
-          yield* Ref.set(bridge.dumpRef, true);
-          yield* Effect.sync(() => console.error(`[dump] first frame: ${JSON.stringify(payload)}`));
+  const onConversationFrame =
+    (bridge: BridgeSession) =>
+    (payload: unknown): Effect.Effect<void, unknown> =>
+      Effect.gen(function* () {
+        yield* log.debug(`[frame] in: ${JSON.stringify(payload).slice(0, 160)}`);
+        if (DUMP_FRAMES) {
+          const dumped = yield* Ref.get(bridge.dumpRef);
+          if (!dumped) {
+            yield* Ref.set(bridge.dumpRef, true);
+            yield* Effect.sync(() => console.error(`[dump] first frame: ${JSON.stringify(payload)}`));
+          }
         }
-      }
-      const result = bridge.translator.fold(payload);
-      if (result.usage !== undefined) {
-        bridge.lastUsage = result.usage;
-      }
-      const turnNow = yield* Ref.get(bridge.turn);
-      if (Option.isSome(turnNow)) {
-        turnNow.value.sawUpdate = true;
-      }
-      for (const update of result.updates) {
-        yield* log.debug(`[frame] emit ${update.sessionUpdate}`);
-        yield* emitNotification("session/update", { sessionId: bridge.id, update });
-      }
-      for (const interaction of result.pendingInteractions ?? []) {
-        yield* Effect.forkDetach(tolerate(
-          handlePendingInteraction(bridge, interaction),
-          (cause) => log.warn(`[interaction] failed: ${renderError(cause)}`),
-        ));
-      }
-      if (result.turnFailed) {
-        yield* failTurn(bridge, result.errorMessage ?? "Turn execution failed in daemon");
-        return;
-      }
-      if (result.turnCancelled === true) {
-        yield* endTurn(bridge, "cancelled");
-        return;
-      }
-      if (result.turnComplete) {
-        yield* endTurn(bridge, "end_turn");
-        return;
-      }
-      if (result.hasActiveWork) {
-        yield* clearQuiet(bridge);
-        return;
-      }
-      if (result.assistantSettled) {
-        yield* armQuietWindow(bridge);
-        return;
-      }
-      if (result.updates.length > 0) {
-        yield* clearQuiet(bridge);
-      }
-    });
-
-  const onLifecycle = (bridge: BridgeSession) => (payload: unknown): Effect.Effect<void, unknown> =>
-    Effect.gen(function* () {
-      const raw = JSON.stringify(payload);
-      yield* log.debug(`[lifecycle] ${raw.slice(0, 300)}`);
-      const p = payload as { state?: string; lastError?: { message?: string; code?: string } | null; error?: string };
-      if (p.state === "faulted" || p.lastError) {
-        const msg = p.lastError?.message || p.error || "daemon session faulted";
-        yield* failTurn(bridge, `Daemon error: ${msg}`);
-        return;
-      }
-      if (p.state === "stopping" || p.state === "unloaded") {
-        yield* endTurn(bridge, "end_turn");
-      }
-    });
-
-  const onClosed = (bridge: BridgeSession) => (reason: string): Effect.Effect<void, unknown> =>
-    Effect.gen(function* () {
-      const turnNow = yield* Ref.get(bridge.turn);
-      if (Option.isSome(turnNow) && !turnNow.value.sawUpdate) {
-        yield* failTurn(bridge, `Connection closed before response: ${reason}`);
-      } else {
-        yield* endTurn(bridge, "end_turn");
-      }
-    });
-
-  const onRequest = (bridge: BridgeSession) => (channelName: string, name: string, arg: unknown): Effect.Effect<unknown, unknown> =>
-    Effect.gen(function* () {
-      yield* log.debug(`[server-request] ${channelName}.${name}: ${JSON.stringify(arg)?.slice(0, 500)}`);
-      if (name.toLowerCase().includes("permission")) {
-        const rawArg = readPermissionServerRequest(arg);
-        const rawOptions = rawArg.options ?? [];
-        const mapped = mapPermissionOptions(rawOptions);
-        const params = buildPermissionParams(
-          bridge.id,
-          { toolName: rawArg.toolName, options: rawOptions } as Record<string, unknown>,
-          bridge.translator.getLatestActiveToolCallId(),
-        );
-        try {
-          const answer = (yield* clientRequest("session/request_permission", params)) as {
-            outcome?: { outcome?: string; optionId?: string };
-            optionId?: string;
-          };
-          const chosen = extractPermissionOptionId(answer, rawOptions, mapped);
-          const daemonOption = rawOptions.find((o) => String(o.optionId ?? o.id) === chosen);
-          return rawArg.interactionId !== undefined
-            ? { interactionId: rawArg.interactionId, answer: daemonOption ?? { optionId: chosen } }
-            : { answer: daemonOption ?? { optionId: chosen } };
-        } catch (cause) {
-          yield* log.debug(`[server-request] request_permission threw: ${renderError(cause)}`);
-          const allowOpt = rawOptions[0];
-          return rawArg.interactionId !== undefined
-            ? { interactionId: rawArg.interactionId, answer: allowOpt ?? { optionId: "allow" } }
-            : { answer: allowOpt ?? { optionId: "allow" } };
+        const result = bridge.translator.fold(payload);
+        if (result.usage !== undefined) {
+          bridge.lastUsage = result.usage;
         }
-      }
-      // Unknown server request — acknowledge with empty object (logged above).
-      return {};
-    });
+        const turnNow = yield* Ref.get(bridge.turn);
+        if (Option.isSome(turnNow)) {
+          turnNow.value.sawUpdate = true;
+        }
+        for (const update of result.updates) {
+          yield* log.debug(`[frame] emit ${update.sessionUpdate}`);
+          yield* emitNotification("session/update", { sessionId: bridge.id, update });
+        }
+        for (const interaction of result.pendingInteractions ?? []) {
+          yield* Effect.forkDetach(
+            tolerate(handlePendingInteraction(bridge, interaction), (cause) =>
+              log.warn(`[interaction] failed: ${renderError(cause)}`),
+            ),
+          );
+        }
+        if (result.turnFailed) {
+          yield* failTurn(bridge, result.errorMessage ?? "Turn execution failed in daemon");
+          return;
+        }
+        if (result.turnCancelled === true) {
+          yield* endTurn(bridge, "cancelled");
+          return;
+        }
+        if (result.turnComplete) {
+          yield* endTurn(bridge, "end_turn");
+          return;
+        }
+        if (result.hasActiveWork) {
+          yield* clearQuiet(bridge);
+          return;
+        }
+        if (result.assistantSettled) {
+          yield* armQuietWindow(bridge);
+          return;
+        }
+        if (result.updates.length > 0) {
+          yield* clearQuiet(bridge);
+        }
+      });
+
+  const onLifecycle =
+    (bridge: BridgeSession) =>
+    (payload: unknown): Effect.Effect<void, unknown> =>
+      Effect.gen(function* () {
+        const raw = JSON.stringify(payload);
+        yield* log.debug(`[lifecycle] ${raw.slice(0, 300)}`);
+        const p = payload as { state?: string; lastError?: { message?: string; code?: string } | null; error?: string };
+        if (p.state === "faulted" || p.lastError) {
+          const msg = p.lastError?.message || p.error || "daemon session faulted";
+          yield* failTurn(bridge, `Daemon error: ${msg}`);
+          return;
+        }
+        if (p.state === "stopping" || p.state === "unloaded") {
+          yield* endTurn(bridge, "end_turn");
+        }
+      });
+
+  const onClosed =
+    (bridge: BridgeSession) =>
+    (reason: string): Effect.Effect<void, unknown> =>
+      Effect.gen(function* () {
+        const turnNow = yield* Ref.get(bridge.turn);
+        if (Option.isSome(turnNow) && !turnNow.value.sawUpdate) {
+          yield* failTurn(bridge, `Connection closed before response: ${reason}`);
+        } else {
+          yield* endTurn(bridge, "end_turn");
+        }
+      });
+
+  const onRequest =
+    (bridge: BridgeSession) =>
+    (channelName: string, name: string, arg: unknown): Effect.Effect<unknown, unknown> =>
+      Effect.gen(function* () {
+        yield* log.debug(`[server-request] ${channelName}.${name}: ${JSON.stringify(arg)?.slice(0, 500)}`);
+        if (name.toLowerCase().includes("permission")) {
+          const rawArg = readPermissionServerRequest(arg);
+          const rawOptions = rawArg.options ?? [];
+          const mapped = mapPermissionOptions(rawOptions);
+          const params = buildPermissionParams(
+            bridge.id,
+            { toolName: rawArg.toolName, options: rawOptions } as Record<string, unknown>,
+            bridge.translator.getLatestActiveToolCallId(),
+          );
+          try {
+            const answer = (yield* clientRequest("session/request_permission", params)) as {
+              outcome?: { outcome?: string; optionId?: string };
+              optionId?: string;
+            };
+            const chosen = extractPermissionOptionId(answer, rawOptions, mapped);
+            const daemonOption = rawOptions.find((o) => String(o.optionId ?? o.id) === chosen);
+            return rawArg.interactionId !== undefined
+              ? { interactionId: rawArg.interactionId, answer: daemonOption ?? { optionId: chosen } }
+              : { answer: daemonOption ?? { optionId: chosen } };
+          } catch (cause) {
+            yield* log.debug(`[server-request] request_permission threw: ${renderError(cause)}`);
+            const allowOpt = rawOptions[0];
+            return rawArg.interactionId !== undefined
+              ? { interactionId: rawArg.interactionId, answer: allowOpt ?? { optionId: "allow" } }
+              : { answer: allowOpt ?? { optionId: "allow" } };
+          }
+        }
+        // Unknown server request — acknowledge with empty object (logged above).
+        return {};
+      });
 
   // ---- interactions ----
 
-  const handlePendingInteraction = (bridge: BridgeSession, interaction: PendingInteraction): Effect.Effect<void, unknown> =>
+  const handlePendingInteraction = (
+    bridge: BridgeSession,
+    interaction: PendingInteraction,
+  ): Effect.Effect<void, unknown> =>
     Effect.gen(function* () {
       if (bridge.handledInteractions.has(interaction.interactionId)) return;
       bridge.handledInteractions.add(interaction.interactionId);
@@ -294,49 +311,52 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       }
     });
 
-  const runElicitation = (bridge: BridgeSession, interactionId: string, rawPayload: Record<string, unknown>): Effect.Effect<void, unknown> =>
+  const runElicitation = (
+    bridge: BridgeSession,
+    interactionId: string,
+    rawPayload: Record<string, unknown>,
+  ): Effect.Effect<void, unknown> =>
     Effect.gen(function* () {
       yield* log.debug(`[interaction] routing to elicitation/create for ${interactionId}`);
       const questions = extractElicitationQuestions({ interactionId, kind: "userInput", payload: rawPayload });
       const params = buildElicitationParams(bridge.id, questions, rawPayload);
-      const answer = yield* tolerate(
-        clientRequest("elicitation/create", params),
-        (cause) =>
-          Effect.gen(function* () {
-            yield* log.debug(`[interaction] elicitation/create threw: ${renderError(cause)}`);
-            yield* tolerate(
-              bridge.serve.resolveInteraction(interactionId, { action: "cancel", optionId: "deny" }),
-              (fallback) =>
-                log.debug(`[interaction] fallback cancel resolution failed: ${renderError(fallback)}`),
-            );
-          }),
+      const answer = yield* tolerate(clientRequest("elicitation/create", params), (cause) =>
+        Effect.gen(function* () {
+          yield* log.debug(`[interaction] elicitation/create threw: ${renderError(cause)}`);
+          yield* tolerate(
+            bridge.serve.resolveInteraction(interactionId, { action: "cancel", optionId: "deny" }),
+            (fallback) => log.debug(`[interaction] fallback cancel resolution failed: ${renderError(fallback)}`),
+          );
+        }),
       );
       if (answer === undefined) return; // fallback resolution already ran
-      const resolve = buildElicitationResolve(answer as { action?: string; content?: Record<string, unknown> } | null, questions);
+      const resolve = buildElicitationResolve(
+        answer as { action?: string; content?: Record<string, unknown> } | null,
+        questions,
+      );
       yield* log.debug(`[interaction] resolving elicitation ${interactionId} with ${JSON.stringify(resolve)}`);
-      yield* tolerate(
-        bridge.serve.resolveInteraction(interactionId, resolve),
-        (cause) => log.debug(`[interaction] resolveInteraction failed: ${renderError(cause)}`),
+      yield* tolerate(bridge.serve.resolveInteraction(interactionId, resolve), (cause) =>
+        log.debug(`[interaction] resolveInteraction failed: ${renderError(cause)}`),
       );
     });
 
-  const runPermission = (bridge: BridgeSession, interactionId: string, rawPayload: Record<string, unknown>): Effect.Effect<void, unknown> =>
+  const runPermission = (
+    bridge: BridgeSession,
+    interactionId: string,
+    rawPayload: Record<string, unknown>,
+  ): Effect.Effect<void, unknown> =>
     Effect.gen(function* () {
       const rawOptions = (rawPayload.options as Array<Record<string, unknown>> | undefined) ?? [];
       const params = buildPermissionParams(bridge.id, rawPayload, bridge.translator.getLatestActiveToolCallId());
       yield* log.debug(`[interaction] requesting permission from client for ${params.toolCall.toolCallId}`);
-      const answer = yield* tolerate(
-        clientRequest("session/request_permission", params),
-        (cause) =>
-          Effect.gen(function* () {
-            yield* log.debug(`[interaction] request_permission threw: ${renderError(cause)}`);
-            const fallbackOpt = rawOptions[0]?.optionId ?? "allow";
-            yield* tolerate(
-              bridge.serve.resolveInteraction(interactionId, { optionId: fallbackOpt }),
-              (fallback) =>
-                log.debug(`[interaction] fallback resolution failed: ${renderError(fallback)}`),
-            );
-          }),
+      const answer = yield* tolerate(clientRequest("session/request_permission", params), (cause) =>
+        Effect.gen(function* () {
+          yield* log.debug(`[interaction] request_permission threw: ${renderError(cause)}`);
+          const fallbackOpt = rawOptions[0]?.optionId ?? "allow";
+          yield* tolerate(bridge.serve.resolveInteraction(interactionId, { optionId: fallbackOpt }), (fallback) =>
+            log.debug(`[interaction] fallback resolution failed: ${renderError(fallback)}`),
+          );
+        }),
       );
       if (answer === undefined) return; // fallback resolution already ran
       const chosen = extractPermissionOptionId(
@@ -345,9 +365,8 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
         params.options,
       );
       yield* log.debug(`[interaction] resolving ${interactionId} with optionId=${chosen}`);
-      yield* tolerate(
-        bridge.serve.resolveInteraction(interactionId, { optionId: chosen }),
-        (cause) => log.debug(`[interaction] resolveInteraction failed: ${renderError(cause)}`),
+      yield* tolerate(bridge.serve.resolveInteraction(interactionId, { optionId: chosen }), (cause) =>
+        log.debug(`[interaction] resolveInteraction failed: ${renderError(cause)}`),
       );
     });
 
@@ -380,13 +399,15 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
 
   const initializeNewSession = (method: string, bridge: BridgeSession): Effect.Effect<unknown, unknown> =>
     Effect.gen(function* () {
-      const created = yield* bridge.serve.createSession().pipe(
-        Effect.mapError((cause) => new AcpMethodError({ method, message: cause.message })),
-      );
+      const created = yield* bridge.serve
+        .createSession()
+        .pipe(Effect.mapError((cause) => new AcpMethodError({ method, message: cause.message })));
       let models = created.models;
       let current = created.currentModel;
       if (models.length === 0) {
-        yield* log.debug(`[${method}] daemon advertised no models — falling back to catalog+presence (#33684 extraction)`);
+        yield* log.debug(
+          `[${method}] daemon advertised no models — falling back to catalog+presence (#33684 extraction)`,
+        );
         models = yield* deps.fallbackModels;
       }
       bridge.models = models;
@@ -409,9 +430,13 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       );
       yield* emitNotification("session/update", {
         sessionId: bridge.id,
-        update: { sessionUpdate: "available_commands_update", availableCommands: buildAvailableCommands(created.slashCommands ?? [], bridge.skills) },
+        update: {
+          sessionUpdate: "available_commands_update",
+          availableCommands: buildAvailableCommands(created.slashCommands ?? [], bridge.skills),
+        },
       });
-      const rawProj = (created.raw as { projection?: { contextUsed?: number; contextWindow?: number } } | undefined)?.projection;
+      const rawProj = (created.raw as { projection?: { contextUsed?: number; contextWindow?: number } } | undefined)
+        ?.projection;
       const initialUsed = rawProj?.contextUsed ?? 0;
       const initialSize = currentModel?.contextWindow ?? rawProj?.contextWindow ?? 200_000;
       yield* emitNotification("session/update", {
@@ -471,14 +496,17 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
         case "session/resume":
         case "session/new": {
           const cwd = typeof params.cwd === "string" && params.cwd !== "" ? params.cwd : process.cwd();
-          const existingId = typeof params.sessionId === "string" && params.sessionId !== "" ? params.sessionId : undefined;
+          const existingId =
+            typeof params.sessionId === "string" && params.sessionId !== "" ? params.sessionId : undefined;
           const bridge = existingId !== undefined ? bridgeSessions.get(existingId) : undefined;
           if (bridge !== undefined) {
             return {
               sessionId: bridge.id,
               models: modelsToAcp(
                 bridge.models,
-                bridge.modelSelection ? `${bridge.modelSelection.providerId}/${bridge.modelSelection.modelId}` : undefined,
+                bridge.modelSelection
+                  ? `${bridge.modelSelection.providerId}/${bridge.modelSelection.modelId}`
+                  : undefined,
               ),
               configOptions: buildConfigOptions(bridge),
               _meta: { t3SessionLoadReady: "replay_idle" },
@@ -517,9 +545,9 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
               : undefined;
           bridge.handledInteractions.clear();
           bridge.translator.startTurn();
-          const sendResult = yield* bridge.serve.sendPrompt(promptPayload, modelSelection, attachments.length > 0 ? attachments : undefined).pipe(
-            Effect.mapError((cause) => new AcpMethodError({ method, message: cause.message })),
-          );
+          const sendResult = yield* bridge.serve
+            .sendPrompt(promptPayload, modelSelection, attachments.length > 0 ? attachments : undefined)
+            .pipe(Effect.mapError((cause) => new AcpMethodError({ method, message: cause.message })));
           // Turn lifecycle: the Deferred is completed from frame handlers.
           const state: TurnState = {
             deferred: Deferred.makeUnsafe<string, AcpMethodError>(),
@@ -560,7 +588,12 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
             yield* selectModel(bridge, value);
             return { configOptions: buildConfigOptions(bridge) };
           }
-          if (optionId === "thought" || optionId === "reasoning" || optionId === "thinking_level" || optionId === "thinking") {
+          if (
+            optionId === "thought" ||
+            optionId === "reasoning" ||
+            optionId === "thinking_level" ||
+            optionId === "thinking"
+          ) {
             bridge.thoughtLevel = value;
             const options = buildConfigOptions(bridge);
             yield* emitNotification("session/update", {
@@ -570,9 +603,8 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
             return { configOptions: options };
           }
           if (optionId === "mode") {
-            yield* tolerate(
-              bridge.serve.setMode(value),
-              (cause) => log.debug(`[config] setMode failed: ${renderError(cause)}`),
+            yield* tolerate(bridge.serve.setMode(value), (cause) =>
+              log.debug(`[config] setMode failed: ${renderError(cause)}`),
             );
             bridge.currentMode = value;
             const options = buildConfigOptions(bridge);
@@ -588,9 +620,8 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
           const sessionId = String(params.sessionId ?? "");
           const bridge = yield* getSession(sessionId);
           const modeId = String(params.modeId ?? "");
-          yield* tolerate(
-            bridge.serve.setMode(modeId),
-            (cause) => log.debug(`[session/set_mode] failed: ${renderError(cause)}`),
+          yield* tolerate(bridge.serve.setMode(modeId), (cause) =>
+            log.debug(`[session/set_mode] failed: ${renderError(cause)}`),
           );
           bridge.currentMode = modeId;
           return {};
@@ -599,9 +630,8 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
           const sessionId = String(params.sessionId ?? "");
           const bridge = bridgeSessions.get(sessionId);
           if (bridge === undefined) return {};
-          yield* tolerate(
-            bridge.serve.sendCommand("stop", {}),
-            (cause) => log.debug(`[cancel] stop rejected: ${renderError(cause)}`),
+          yield* tolerate(bridge.serve.sendCommand("stop", {}), (cause) =>
+            log.debug(`[cancel] stop rejected: ${renderError(cause)}`),
           );
           yield* endTurn(bridge, "cancelled");
           return {};

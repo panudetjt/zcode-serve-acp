@@ -119,15 +119,6 @@ function writeVQL(out: number[], value: number): void {
   }
 }
 
-function readVQL(buf: Uint8Array, state: { pos: number }): number {
-  let value = 0;
-  for (let n = 0; ; n += 7) {
-    const next = buf[state.pos++]!;
-    value |= (next & 127) << n;
-    if (!(next & 128)) return value >>> 0;
-  }
-}
-
 function replacer(this: Record<string, unknown>, key: string, value: unknown): unknown {
   const original = this?.[key];
   if (original instanceof Uint8Array) {
