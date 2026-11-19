@@ -9,7 +9,9 @@ sits between an ACP-speaking client over stdio (T3 Code's "Local ACP command")
 and the `zcode serve` daemon, so the daemon alone owns credentials. It is
 written in TypeScript, runs on **Bun only**, and compiles to a single binary
 with `bun build --compile`. It is being rewritten on the `rewrite/effect4`
-branch to use **Effect v4** (`effect` package, full idiomatic services).
+branch to use **Effect v4** (`effect` + `@effect/platform-bun`, full
+idiomatic services — the platform abstractions keep runtime-portable behavior
+if the runtime ever changes).
 
 Domain vocabulary lives in [GLOSSARY.md](./GLOSSARY.md) — use those terms
 (Bridge, Daemon, Channel, Conversation frame, Turn, Pending interaction, …)
@@ -73,6 +75,10 @@ Bun version is pinned via `mise.toml` (1.4.4).
   header, VQL varints) — do not try to express it in `Schema`. JSON boundaries
   (daemon frames, RPC results, ACP messages, config files) all go through
   `Schema`.
+- Bun builtins are reached only through platform services (`FileSystem`,
+  `HttpClient`, `ChildProcessSpawner`, `Stdio`, `Socket`/`WebSocketConstructor`),
+  never imported directly in domain code — see
+  [agent-patterns/effect.md](./agent-patterns/effect.md).
 
 ## Tests
 

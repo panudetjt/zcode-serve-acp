@@ -119,15 +119,26 @@ export class DecodeError extends Schema.TaggedError<DecodeError>()("DecodeError"
 - Golden replay: feed `test/fixtures/golden-frames/*.json` frames through the
   current translator and compare with the recorded pre-rewrite output.
 
-## Bun-specific wrapping
+## Platform services (Bun runtime, portable abstractions)
 
-Bun builtins are used directly (no platform package — project decision):
+Runtime deps are `effect` + `@effect/platform-bun`. Bun builtins are reached
+**through platform services only**, never imported directly in domain code —
+that is the whole point: swapping runtime later means swapping layers.
 
-- `new WebSocket(url, { headers })` → `Effect.acquireRelease` + `Effect.async`
-  for open/close/error events.
-- `node:child_process` spawn → `Effect.acquireRelease` **with an `error`
-  listener on the child** (pre-rewrite bug: spawn failures surfaced only as a
-  30 s readiness timeout).
-- `node:readline` over stdin → `Stream.fromAsyncIterable`.
-- `node:fs` sync reads on the discovery path → `Effect.try` mapped to
-  `ConfigError`, async where cheap.
+- **WebSocket**: `Socket.makeWebSocket(url, { headers, openTimeout })` from
+  `effect/socket/Socket` (headers are a first-class option here — no more
+  `as never` casts), provided by
+  `BunSocket.layerWebSocketConstructor` from `@effect/platform-bun/BunSocket`.
+- **HTTP**: `HttpClient.HttpClient` service from `effect/http`
+  (`HttpClient.mapRequest` + `HttpClientRequest`, `HttpClient.filterStatusOk`)
+  provided by `BunHttpClient.layer`.
+- **Child processes**: `ChildProcessSpawner` from `effect/process` provided by
+  `BunChildProcessSpawner.layer` (it already handles spawn `error` events —
+  the pre-rewrite 30 s-late-failure bug is gone by construction).
+- **Files**: `FileSystem.FileSystem` service provided by `BunFileSystem.layer`.
+- **stdin/stdout**: `Stdio` service provided by `BunStdio.layer`.
+- **Entry point**: `BunRuntime.runMain(program)` — installs SIGINT/SIGTERM and
+  interrupts fibers for graceful shutdown (the old bridge had no signal
+  handling at all).
+- In tests, all of the above are fake-able: tests provide in-memory
+  `Layer` implementations of the same service interfaces.
