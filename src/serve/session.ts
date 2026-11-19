@@ -223,7 +223,10 @@ const makeSession = <E>(
     // orElseSucceed.
     const listenerDisposers: Array<Effect.Effect<void | undefined>> = [];
 
-    const subscribeConversation = (daemonSessionId: string, workspace: WorkspaceInfo): Effect.Effect<void, unknown> =>
+    const subscribeConversation = (
+      daemonSessionId: string,
+      workspace: WorkspaceInfo,
+    ): Effect.Effect<void, ServeError> =>
       Effect.gen(function* () {
         if ((yield* Ref.get(subscribedRef)) === true) return;
         yield* Ref.set(subscribedRef, true);
