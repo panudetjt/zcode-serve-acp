@@ -59,11 +59,19 @@ export interface CreateSessionResult {
   raw: unknown;
 }
 
-export interface SessionHandlers {
-  onConversationFrame: (payload: unknown) => Effect.Effect<void, unknown>;
-  onLifecycle: (payload: unknown) => Effect.Effect<void, unknown>;
+/**
+ * Handler callbacks the host app wires into a session. `E` is the app's own
+ * handler failure channel — the session layer only passes the callbacks down
+ * to the channel (where event dispatch tolerates and logs failures), so it
+ * stays generic in `E`. (The ACP server instantiates `E = unknown` while its
+ * handler factories carry broad channels; once those become precise, `E`
+ * infers them with no change here.)
+ */
+export interface SessionHandlers<E = unknown> {
+  onConversationFrame: (payload: unknown) => Effect.Effect<void, E>;
+  onLifecycle: (payload: unknown) => Effect.Effect<void, E>;
   onRequest: ServerRequestHandler;
-  onClosed: (reason: string) => Effect.Effect<void, unknown>;
+  onClosed: (reason: string) => Effect.Effect<void, E>;
 }
 
 export interface ServeSession {
@@ -100,7 +108,7 @@ export class ServeSessionFactory extends Context.Service<
   {
     /** Create one daemon-backed session. Services are captured at layer build
      *  time; the WS channel lives in the session's internal Scope. */
-    create(cwd: string, handlers: SessionHandlers): Effect.Effect<ServeSession>;
+    create<E>(cwd: string, handlers: SessionHandlers<E>): Effect.Effect<ServeSession>;
   }
 >()("zcode-serve-acp/ServeSessionFactory") {
   /** Compose with a WebSocketConstructor layer in bin.ts; tests provide fakes. */
@@ -126,12 +134,12 @@ interface WorkspaceInfo {
   projectId: string;
 }
 
-const makeSession = (
+const makeSession = <E>(
   daemon: Daemon["Service"],
   log: Log["Service"],
   wsConstructor: Socket.WebSocketConstructor["Service"],
   cwd: string,
-  handlers: SessionHandlers,
+  handlers: SessionHandlers<E>,
 ): Effect.Effect<ServeSession> =>
   Effect.sync(() => {
     const scope: ScopeType.Closeable = ScopeType.makeUnsafe();
