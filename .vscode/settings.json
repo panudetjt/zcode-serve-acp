@@ -1,14 +1,14 @@
 {
   "search.exclude": {
-    "repos/**": true,
+    ".repos/**": true,
     "dist/**": true
   },
   "files.watcherExclude": {
-    "repos/**": true,
+    ".repos/**": true,
     "dist/**": true
   },
   "explorer.fileWatcherExcludes": {
-    "repos": true,
+    ".repos": true,
     "dist": true
   },
   "explorer.excludeGitIgnore": true,

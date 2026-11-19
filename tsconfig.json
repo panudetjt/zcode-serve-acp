@@ -11,5 +11,5 @@
     "noEmit": true,
     "verbatimModuleSyntax": false
   },
-  "exclude": ["repos", "dist", "node_modules"]
+  "exclude": [".repos", "dist", "node_modules"]
 }

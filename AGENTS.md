@@ -8,43 +8,44 @@ Instructions for coding agents working in this repository.
 sits between an ACP-speaking client over stdio (T3 Code's "Local ACP command")
 and the `zcode serve` daemon, so the daemon alone owns credentials. It is
 written in TypeScript, runs on **Bun only**, and compiles to a single binary
-with `bun build --compile`. It is being rewritten on the `rewrite/effect4`
-branch to use **Effect v4** (`effect` + `@effect/platform-bun`, full
-idiomatic services — the platform abstractions keep runtime-portable behavior
-if the runtime ever changes).
+with `bun build --compile`. It runs on **Effect v4** (`effect` +
+`@effect/platform-bun`, full idiomatic services — the platform abstractions
+keep runtime-portable behavior if the runtime ever changes; merged from
+`rewrite/effect4` in PR #1).
 
 Domain vocabulary lives in [GLOSSARY.md](./GLOSSARY.md) — use those terms
 (Bridge, Daemon, Channel, Conversation frame, Turn, Pending interaction, …)
 consistently in code, comments, and commit messages.
 
-## Vendored Effect source — read-only reference
+## Effect reference clone — read-only, gitignored
 
-`repos/effect/` is the Effect-TS/effect monorepo vendored via
-`git subtree add --prefix=repos/effect --squash`. It exists so you can read
-real source instead of guessing from docs or web search.
+`.repos/effect/` is a gitignored local clone of the Effect-TS/effect monorepo
+(reference material only — never committed, never built). It exists so you can
+read real source instead of guessing from docs or web search. If it is missing,
+create it on demand:
+
+```sh
+mkdir -p .repos && git clone --depth 1 https://github.com/Effect-TS/effect.git .repos/effect
+```
 
 **Rules:**
 
-1. **Never edit anything under `repos/`** — it is vendored reference material.
-2. **Never import from `repos/`** in project code. Dependencies come from the
+1. **Never edit anything under `.repos/`** — it is read-only reference material.
+2. **Never import from `.repos/`** in project code. Dependencies come from the
    npm registry (`bun add`).
 3. **Before writing or reviewing Effect code, read
-   [`repos/effect/LLMS.md`](./repos/effect/LLMS.md)**, then inspect the
-   referenced sources under `repos/effect/ai-docs/src/` and
-   `repos/effect/packages/effect/src/` for the exact v4 API shapes. Prefer
+   [`.repos/effect/LLMS.md`](./.repos/effect/LLMS.md)**, then inspect the
+   referenced sources under `.repos/effect/ai-docs/src/` and
+   `.repos/effect/packages/effect/src/` for the exact v4 API shapes. Prefer
    these over your memory of Effect v3 or any web search result.
 4. **Prefer the distilled patterns** in
    [`agent-patterns/effect.md`](./agent-patterns/effect.md) — they are
    extracted from this vendored source and match the idioms this project uses.
 
-**Updating the vendored copy** (rare, do only when asked):
-
-```sh
-git subtree pull --prefix=repos/effect --squash https://github.com/Effect-TS/effect.git main
-```
-
-Each update lands as exactly one reviewable commit. Keep everything under
-`repos/` and always pass `--squash`.
+**Updating the clone** (rare, do only when asked): `git -C .repos/effect pull`.
+The clone tracks upstream `main`, which can run ahead of the npm release —
+when the two disagree, the installed npm package (`effect` 4.1.4) is ground
+truth for what compiles (see docs/adr/0001).
 
 ## Commands
 
@@ -98,6 +99,6 @@ Bun version is pinned via `mise.toml` (1.4.4).
 
 ## Repo hygiene
 
-- `dist/` and `node_modules/` are gitignored; never commit binaries.
+- `dist/`, `node_modules/`, and `.repos/` are gitignored; never commit binaries or reference clones.
 - The prebuilt binary at `dist/zcode-serve-acp` is only produced by
   `mise run compile`, never checked in.

@@ -20,14 +20,14 @@ run = "bun scripts/smoke.mjs"
 
 [tasks.fmt]
 description = "Format with oxfmt (writes in place)"
-run = "bun x oxfmt"
+run = "bun x oxfmt -c .oxfmtrc.ts"
 
 [tasks.fmt-check]
 description = "Check formatting without writing"
-run = "bun x oxfmt --check"
+run = "bun x oxfmt -c .oxfmtrc.ts --check"
 
 [tasks.lint]
-description = "Lint with oxlint (scoped: vendored repos/ carries its own oxlint config)"
+description = "Lint with oxlint (scoped: reference clone .repos/ carries its own config; excluded from lint)"
 run = "bun x oxlint src test scripts"
 
 [tasks.ci]

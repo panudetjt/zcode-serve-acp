@@ -1,0 +1,8 @@
+# bun runner config (mise.toml = task SSOT — thamrules mise-single-source)
+# coverageThreshold red-proofed 19 พ.ย. 2026 (guard ต้องแดงได้กับ regression จริง):
+# 1.0 / 0.95 / 0.90 / 0.85 / 0.80 / 0.78 / 0.76 ล้วน exit 1, 0.75 ผ่าน — bun วัด aggregate
+# ที่เข้มกว่าคอลัมน์ Lines ในตาราง (src-only หลัง skipTestFiles ≈ 75-76%) — target 98%
+# ต้องเขียน test เพิ่มก่อน (channel 79.41% / daemon 77.78% คือสองไฟล์ที่ดึงลง)
+[test]
+coverageSkipTestFiles = true
+coverageThreshold = 0.75
