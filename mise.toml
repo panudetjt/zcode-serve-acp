@@ -1,0 +1,19 @@
+# zcode-serve-acp — task SSOT (thamrules mise-single-source)
+[tools]
+bun = "1.4.4"
+
+[tasks.test]
+description = "Unit tests (codec, models)"
+run = "bun test"
+
+[tasks.compile]
+description = "Single-binary build → dist/zcode-serve-acp"
+run = "bun build --compile --target=bun-linux-x64 --outfile dist/zcode-serve-acp src/bin.ts"
+
+[tasks.smoke]
+description = "ACP handshake + session/new (models) + short prompt against the real daemon"
+run = "bun scripts/smoke.mjs"
+
+[tasks.ci]
+description = "test + compile + smoke"
+depends = ["test", "compile", "smoke"]
