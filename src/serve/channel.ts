@@ -28,6 +28,14 @@ import {
 import type { Log } from "../log.ts";
 import { decodeRpcMessage, encodeRpcMessage, FrameSplitter, MSG } from "./wire.ts";
 
+/**
+ * Handler failure channels stay `unknown` on purpose for now: these callbacks
+ * are supplied from the session layer (SessionHandlers) and implemented in the
+ * ACP server, so narrowing them here breaks that chain — their true error
+ * unions land when session.ts/server.ts get their typed-error pass (the
+ * implementations' bodies already tolerate everything internally, so the
+ * channel itself never propagates handler failures beyond `failAll`/`close`).
+ */
 export type ChannelEventListener = (data: unknown) => Effect.Effect<void, unknown>;
 export type ServerRequestHandler = (channelName: string, name: string, arg: unknown) => Effect.Effect<unknown, unknown>;
 
@@ -200,12 +208,7 @@ export class ChannelClient {
    * write failure is swallowed — a dead channel is already reported by the
    * pump through `failAll`.
    */
-  private handleServerRequest(
-    id: number,
-    channelName: string,
-    name: string,
-    arg: unknown,
-  ): Effect.Effect<void> {
+  private handleServerRequest(id: number, channelName: string, name: string, arg: unknown): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       const outcome = yield* Effect.result(this.handlers.onRequest(channelName, name, arg));
       if (Result.isFailure(outcome)) {
