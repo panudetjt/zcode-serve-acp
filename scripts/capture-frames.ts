@@ -24,7 +24,7 @@ import os from "node:os";
 import path from "node:path";
 import * as BunFileSystem from "@effect/platform-bun/BunFileSystem";
 import * as BunSocket from "@effect/platform-bun/BunSocket";
-import { Effect, Layer, type Fiber } from "effect";
+import { Clock, Effect, Layer, type Fiber } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { Daemon } from "../src/serve/daemon.ts";
 import { ServeSessionFactory, type CreateSessionResult, type ServeSession } from "../src/serve/session.ts";
@@ -212,8 +212,8 @@ const runScenario = (
     const { inputId } = yield* session.sendPrompt(scenario.prompt);
     secrets.push([inputId, "INPUT_ID"]);
 
-    const deadline = Date.now() + TURN_TIMEOUT_MS;
-    while (!outcome.done && Date.now() < deadline) {
+    const deadline = (yield* Clock.currentTimeMillis) + TURN_TIMEOUT_MS;
+    while (!outcome.done && (yield* Clock.currentTimeMillis) < deadline) {
       yield* Effect.sleep(250);
     }
     if (!outcome.done) settle("timeout", "error", "capture turn exceeded 180s");
