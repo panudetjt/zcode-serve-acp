@@ -32,7 +32,7 @@ const mockSessionInstance = {
   sendPrompt: () => Effect.succeed({ inputId: "mock-inp" }),
   setMode: () => Effect.void,
   sendCommand: () => Effect.void,
-  dispose: () => Effect.void,
+  dispose: Effect.void,
 } as unknown as ServeSession;
 
 let createCalls = 0;
@@ -184,7 +184,7 @@ describe("AcpServer Effect handler", () => {
       setMode: () => Effect.void,
       sendCommand: () => Effect.void,
       resolveInteraction: () => Effect.succeed({ resolved: true }),
-      dispose: () => Effect.void,
+      dispose: Effect.void,
     } as unknown as ServeSession;
 
     const testServer = AcpServer.make({
@@ -401,7 +401,7 @@ describe("AcpServer Effect handler", () => {
         }),
       setMode: () => Effect.void,
       sendCommand: () => Effect.void,
-      dispose: () => Effect.void,
+      dispose: Effect.void,
     } as unknown as ServeSession;
 
     const fallbackServer = AcpServer.make({
@@ -449,7 +449,7 @@ describe("AcpServer Effect handler", () => {
         }),
       setMode: () => Effect.fail(new Error("setMode rejected")),
       sendCommand: () => Effect.fail(new Error("stop rejected")),
-      dispose: () => Effect.void,
+      dispose: Effect.void,
     } as unknown as ServeSession;
 
     const s = AcpServer.make({
@@ -511,7 +511,7 @@ describe("AcpServer Effect handler", () => {
         Effect.sync(() => {
           resolvedInteractions.push({ id, resolve });
         }),
-      dispose: () => Effect.void,
+      dispose: Effect.void,
     } as unknown as ServeSession;
 
     const testServer = AcpServer.make({
