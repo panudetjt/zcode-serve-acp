@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Fiber } from "effect";
+import { FileSystem } from "effect/FileSystem";
 import { AcpServer } from "../src/acp/server.ts";
-import type { Log } from "../src/log.ts";
-import type { AvailableModel, ServeSession, ServeSessionFactory } from "../src/serve/session.ts";
+import { Log } from "../src/log.ts";
+import { ServeSessionFactory, type AvailableModel, type ServeSession } from "../src/serve/session.ts";
 
 const mockLog: Log["Service"] = {
   debug: () => Effect.void,
@@ -28,6 +29,7 @@ const mockSessionInstance = {
       skills: [],
       currentMode: "default",
     }),
+  sendPrompt: () => Effect.succeed({ inputId: "mock-inp" }),
   setMode: () => Effect.void,
   sendCommand: () => Effect.void,
   dispose: () => Effect.void,
@@ -416,5 +418,281 @@ describe("AcpServer Effect handler", () => {
       models: { availableModels: unknown[] };
     };
     expect(res.models.availableModels.length).toBe(1);
+  });
+
+  test("layerNoDeps constructs an AcpServer using environment services", async () => {
+    const layer = AcpServer.layerNoDeps;
+    const testEffect = Effect.gen(function* () {
+      const s = yield* AcpServer;
+      const res = yield* s.handle("initialize", {});
+      return res;
+    }).pipe(
+      Effect.provide(layer),
+      Effect.provideService(ServeSessionFactory, mockSessions),
+      Effect.provideService(Log, mockLog),
+      Effect.provideService(FileSystem, {
+        readFileString: () => Effect.fail(new Error("ENOENT")),
+      } as unknown as FileSystem),
+    );
+    const result = await Effect.runPromise(testEffect);
+    expect(result).toBeDefined();
+  });
+
+  test("tolerates failures in session/set_mode, set_config_option mode, and session/cancel", async () => {
+    const failingSession = {
+      createSession: () =>
+        Effect.succeed({
+          models: sampleModels,
+          currentModel: "zai-provider/GLM-5.3",
+          skills: [],
+          currentMode: "default",
+        }),
+      setMode: () => Effect.fail(new Error("setMode rejected")),
+      sendCommand: () => Effect.fail(new Error("stop rejected")),
+      dispose: () => Effect.void,
+    } as unknown as ServeSession;
+
+    const s = AcpServer.make({
+      sessions: {
+        create: () => Effect.succeed(failingSession),
+      } as unknown as ServeSessionFactory["Service"],
+      log: mockLog,
+      emitNotification: () => Effect.void,
+      clientRequest: () => Effect.die("unused"),
+      fallbackModels: Effect.succeed(sampleModels),
+    });
+
+    await Effect.runPromise(s.handle("session/new", { sessionId: "fail-sess" }));
+
+    // 1. session/set_mode failure tolerated
+    const modeRes = await Effect.runPromise(s.handle("session/set_mode", { sessionId: "fail-sess", modeId: "fast" }));
+    expect(modeRes).toEqual({});
+
+    // 2. session/set_config_option mode failure tolerated
+    const cfgModeRes = await Effect.runPromise(
+      s.handle("session/set_config_option", { sessionId: "fail-sess", configId: "mode", value: "fast" }),
+    );
+    expect(cfgModeRes).toBeDefined();
+
+    // 3. session/cancel stop failure tolerated
+    const cancelRes = await Effect.runPromise(s.handle("session/cancel", { sessionId: "fail-sess" }));
+    expect(cancelRes).toEqual({});
+
+    // 4. session/set_model with modelId without slash
+    const modelRes = await Effect.runPromise(
+      s.handle("session/set_model", { sessionId: "fail-sess", modelId: "GLM-5.3" }),
+    );
+    expect(modelRes).toBeDefined();
+
+    // 5. unknown session id in getSession fails with AcpMethodError
+    const unknownErr = await Effect.runPromise(
+      Effect.flip(s.handle("session/set_mode", { sessionId: "nonexistent", modeId: "fast" })),
+    );
+    expect(unknownErr._tag).toBe("AcpMethodError");
+    expect(unknownErr.message).toContain("unknown session nonexistent");
+  });
+
+  test("handles interaction clientRequest rejections with fallbacks", async () => {
+    let capturedHandlers: any;
+    const resolvedInteractions: Array<{ id: string; resolve: any }> = [];
+
+    const mockSession = {
+      createSession: () =>
+        Effect.succeed({
+          models: sampleModels,
+          currentModel: "zai-provider/GLM-5.3",
+          skills: [],
+          currentMode: "default",
+        }),
+      sendPrompt: () => Effect.succeed({ inputId: "inp-2" }),
+      setMode: () => Effect.void,
+      sendCommand: () => Effect.void,
+      resolveInteraction: (id: string, resolve: any) =>
+        Effect.sync(() => {
+          resolvedInteractions.push({ id, resolve });
+        }),
+      dispose: () => Effect.void,
+    } as unknown as ServeSession;
+
+    const testServer = AcpServer.make({
+      sessions: {
+        create: (_cwd: string, handlers: any) => {
+          capturedHandlers = handlers;
+          return Effect.succeed(mockSession);
+        },
+      } as unknown as ServeSessionFactory["Service"],
+      log: mockLog,
+      emitNotification: () => Effect.void,
+      clientRequest: () => Effect.fail(new Error("Client rejected request")),
+      fallbackModels: Effect.succeed(sampleModels),
+    });
+
+    await Effect.runPromise(testServer.handle("session/new", { sessionId: "reject-sess" }));
+
+    // Start turn
+    const turnFiber = await Effect.runPromise(
+      Effect.forkDetach(testServer.handle("session/prompt", { sessionId: "reject-sess", prompt: "Hello" })),
+    );
+    await new Promise((r) => setTimeout(r, 20));
+
+    // 1. Elicitation interaction fails -> resolves with cancel
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "state.updated",
+              patch: {
+                pendingInteractions: [
+                  {
+                    interactionId: "el-fail-1",
+                    kind: "userInput",
+                    payload: { prompt: "Confirm?", toolName: "AskUserQuestion" },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 40));
+
+    // 2. Permission interaction fails -> resolves with fallback allow
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "state.updated",
+              patch: {
+                pendingInteractions: [
+                  {
+                    interactionId: "perm-fail-1",
+                    kind: "permission",
+                    payload: { toolName: "run_command", options: [{ optionId: "allow_opt", label: "Allow" }] },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 40));
+
+    // 3. Server request permission fails -> returns allow option
+    const srvReqRes = await Effect.runPromise(
+      capturedHandlers.onRequest("zcode", "requestPermission", {
+        interactionId: "req-fail-1",
+        toolName: "run_command",
+        options: [{ optionId: "allow_opt", label: "Allow" }],
+      }),
+    );
+    expect(srvReqRes).toEqual({ interactionId: "req-fail-1", answer: { optionId: "allow_opt", label: "Allow" } });
+
+    // 4. Lifecycle stopping ends turn
+    await Effect.runPromise(capturedHandlers.onLifecycle({ state: "stopping" }));
+    const result = (await Effect.runPromise(Fiber.join(turnFiber))) as { stopReason: string };
+    expect(result.stopReason).toBe("end_turn");
+
+    expect(resolvedInteractions.some((r) => r.id === "el-fail-1" && r.resolve.action === "cancel")).toBe(true);
+    expect(resolvedInteractions.some((r) => r.id === "perm-fail-1" && r.resolve.optionId === "allow_opt")).toBe(true);
+  });
+
+  test("handles turn cancellation and assistant settled quiet window in frames", async () => {
+    let capturedHandlers: any;
+    const testServer = AcpServer.make({
+      sessions: {
+        create: (_cwd: string, handlers: any) => {
+          capturedHandlers = handlers;
+          return Effect.succeed(mockSessionInstance);
+        },
+      } as unknown as ServeSessionFactory["Service"],
+      log: mockLog,
+      emitNotification: () => Effect.void,
+      clientRequest: () => Effect.die("unused"),
+      fallbackModels: Effect.succeed(sampleModels),
+    });
+
+    await Effect.runPromise(testServer.handle("session/new", { sessionId: "quiet-sess" }));
+
+    // 1. Turn cancelled via frame
+    const cancelFiber = await Effect.runPromise(
+      Effect.forkDetach(testServer.handle("session/prompt", { sessionId: "quiet-sess", prompt: "Cancel me" })),
+    );
+    await new Promise((r) => setTimeout(r, 20));
+
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.appended",
+              row: { rowId: 10, kind: "turnHeader", state: "cancelled" },
+            },
+          ],
+        },
+      }),
+    );
+
+    const cancelResult = (await Effect.runPromise(Fiber.join(cancelFiber))) as { stopReason: string };
+    expect(cancelResult.stopReason).toBe("cancelled");
+
+    // 2. Assistant settled arms quiet window, subsequent update clears quiet
+    const quietFiber = await Effect.runPromise(
+      Effect.forkDetach(testServer.handle("session/prompt", { sessionId: "quiet-sess", prompt: "Quiet test" })),
+    );
+    await new Promise((r) => setTimeout(r, 20));
+
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.upserted",
+              row: { rowId: 1, kind: "assistantText", text: "Hello", state: "complete" },
+            },
+          ],
+        },
+      }),
+    );
+
+    // Another update clears quiet
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.upserted",
+              row: { rowId: 2, kind: "assistantText", text: "More text" },
+            },
+          ],
+        },
+      }),
+    );
+
+    // Complete turn
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.upserted",
+              row: { rowId: 0, kind: "turnHeader", state: "completedSuccess" },
+            },
+          ],
+        },
+      }),
+    );
+
+    const quietResult = (await Effect.runPromise(Fiber.join(quietFiber))) as { stopReason: string };
+    expect(quietResult.stopReason).toBe("end_turn");
   });
 });

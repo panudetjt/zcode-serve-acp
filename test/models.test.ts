@@ -4,6 +4,7 @@ import { FileSystem } from "effect/FileSystem";
 import { fallbackModels, modelsToAcp } from "../src/models.ts";
 import {
   buildAvailableCommands,
+  buildConfigOptions,
   buildInitializeResult,
   decodePrompt,
   rewriteSkillMention,
@@ -133,6 +134,17 @@ describe("fallbackModels", () => {
     expect(res).toEqual([]);
   });
 
+  it("handles corrupt JSON in files gracefully", async () => {
+    const fakeFs = {
+      readFileString: (path: string) => {
+        if (path.includes("setting.json")) return Effect.succeed("{not valid json");
+        return Effect.succeed("{}");
+      },
+    } as unknown as FileSystem;
+    const res = await Effect.runPromise(fallbackModels.pipe(Effect.provideService(FileSystem, fakeFs)));
+    expect(res).toEqual([]);
+  });
+
   it("decodes fallback models when files are present and match individual-coding-plan", async () => {
     const settingJson = JSON.stringify({
       providerFamilyConnectionSelections: {
@@ -200,5 +212,47 @@ describe("decodePrompt", () => {
       expect(result.failure._tag).toBe("DecodeError");
       expect(result.failure.location).toBe("acp/prompt");
     }
+  });
+});
+
+describe("buildConfigOptions", () => {
+  it("omits thought option when reasoningLevels is empty or undefined", () => {
+    const options = buildConfigOptions({
+      models: [
+        {
+          providerId: "prov",
+          modelId: "m1",
+          reasoningLevels: [],
+        },
+      ],
+      currentMode: "code",
+    });
+    expect(options.some((o) => o.id === "reasoning")).toBe(false);
+  });
+
+  it("handles reasoning level without label and falls back to value", () => {
+    const options = buildConfigOptions({
+      models: [
+        {
+          providerId: "prov",
+          modelId: "m1",
+          reasoningLevels: [{ value: "high", label: "" }],
+        },
+      ],
+      thoughtLevel: "high",
+    });
+    const reasoning = options.find((o) => o.id === "reasoning");
+    expect(reasoning).toBeDefined();
+    expect(reasoning?.options?.[0]?.name).toBe("high");
+  });
+
+  it("handles empty models list gracefully", () => {
+    const options = buildConfigOptions({
+      models: [],
+    });
+    expect(options.length).toBe(2);
+    expect(options[0]?.id).toBe("model");
+    expect(options[0]?.currentValue).toBeUndefined();
+    expect(options[1]?.id).toBe("mode");
   });
 });

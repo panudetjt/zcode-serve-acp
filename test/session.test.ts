@@ -210,8 +210,11 @@ describe("ServeSession lifecycle and operations", () => {
   });
 
   test("createSession error cases: saveProject failure and invalid createSession payload", async () => {
-    let saveFails = false;
-    let createFails = false;
+    let saveFails: boolean | string = false;
+    let initFails = false;
+    let createFails: boolean | string = false;
+    let subFails = false;
+    let skillsFails = false;
 
     const server = Bun.serve({
       port: 0,
@@ -233,18 +236,43 @@ describe("ServeSession lifecycle and operations", () => {
 
           if (type === MSG.Promise) {
             if (channel === "project" && method === "saveProject") {
-              if (saveFails) {
+              if (saveFails === "reject") {
+                ws.send(encodeRpcMessage([MSG.PromiseError, id, "save rejected"]));
+              } else if (saveFails === true) {
                 ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], {})); // missing project id
               } else {
                 ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], "proj-bare-id"));
               }
             } else if (channel === "zcode-agent" && method === "initialize") {
-              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], {}));
+              if (initFails) {
+                ws.send(encodeRpcMessage([MSG.PromiseError, id, "init rejected"]));
+              } else {
+                ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], {}));
+              }
             } else if (channel === "zcode-session" && method === "createSession") {
-              if (createFails) {
+              if (createFails === "throwShape") {
+                ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], "not-an-object"));
+              } else if (createFails === true) {
                 ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], {})); // missing sessionId
               } else {
-                ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { sessionId: "s1" }));
+                ws.send(
+                  encodeRpcMessage([MSG.PromiseSuccess, id], {
+                    sessionId: "s1",
+                    settings: { model: { current: { ref: { modelId: "bare-model-id" } } } },
+                  }),
+                );
+              }
+            } else if (channel === "zcode-agent" && method === "subscribeConversationV4") {
+              if (subFails) {
+                ws.send(encodeRpcMessage([MSG.PromiseError, id, "sub rejected"]));
+              } else {
+                ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], {}));
+              }
+            } else if (channel === "skills" && method === "list") {
+              if (skillsFails) {
+                ws.send(encodeRpcMessage([MSG.PromiseError, id, "skills rejected"]));
+              } else {
+                ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], []));
               }
             } else {
               ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], {}));
@@ -293,6 +321,49 @@ describe("ServeSession lifecycle and operations", () => {
       expect(errCreate._tag).toBe("SessionError");
       expect(errCreate.message).toContain("createSession returned no sessionId");
       yield* session2.dispose();
+
+      // 3. saveProject RPC rejected with error
+      saveFails = "reject";
+      createFails = false;
+      const session3 = yield* factory.create("/ws3", {
+        onConversationFrame: () => Effect.void,
+        onLifecycle: () => Effect.void,
+        onRequest: () => Effect.succeed(undefined),
+        onClosed: () => Effect.void,
+      });
+      const errSaveReject = yield* Effect.flip(session3.createSession());
+      expect(errSaveReject._tag).toBe("SessionError");
+      yield* session3.dispose();
+
+      // 4. createSession returning malformed shape (throws in decodeCreateSessionShape)
+      saveFails = false;
+      createFails = "throwShape";
+      const session4 = yield* factory.create("/ws4", {
+        onConversationFrame: () => Effect.void,
+        onLifecycle: () => Effect.void,
+        onRequest: () => Effect.succeed(undefined),
+        onClosed: () => Effect.void,
+      });
+      const errCreateThrow = yield* Effect.flip(session4.createSession());
+      expect(errCreateThrow._tag).toBe("SessionError");
+      yield* session4.dispose();
+
+      // 5. tolerated failures: initFails, subFails, skillsFails, and bare modelId
+      saveFails = false;
+      createFails = false;
+      initFails = true;
+      subFails = true;
+      skillsFails = true;
+      const session5 = yield* factory.create("/ws5", {
+        onConversationFrame: () => Effect.void,
+        onLifecycle: () => Effect.void,
+        onRequest: () => Effect.succeed(undefined),
+        onClosed: () => Effect.void,
+      });
+      const successRes = yield* session5.createSession();
+      expect(successRes.daemonSessionId).toBe("s1");
+      expect(successRes.currentModel).toBe("bare-model-id");
+      yield* session5.dispose();
     }).pipe(
       Effect.provide(ServeSessionFactory.layerNoDeps),
       Effect.provide(Layer.succeed(Daemon, mockDaemon)),

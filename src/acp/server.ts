@@ -271,23 +271,24 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
             { toolName: rawArg.toolName, options: rawOptions } as Record<string, unknown>,
             bridge.translator.getLatestActiveToolCallId(),
           );
-          try {
-            const answer = (yield* clientRequest("session/request_permission", params)) as {
-              outcome?: { outcome?: string; optionId?: string };
-              optionId?: string;
-            };
-            const chosen = extractPermissionOptionId(answer, rawOptions, mapped);
+          const answer = yield* tolerate(clientRequest("session/request_permission", params), (cause) =>
+            log.debug(`[server-request] request_permission threw: ${renderError(cause)}`),
+          );
+          if (answer !== undefined) {
+            const chosen = extractPermissionOptionId(
+              answer as { outcome?: { outcome?: string; optionId?: string }; optionId?: string },
+              rawOptions,
+              mapped,
+            );
             const daemonOption = rawOptions.find((o) => String(o.optionId ?? o.id) === chosen);
             return rawArg.interactionId !== undefined
               ? { interactionId: rawArg.interactionId, answer: daemonOption ?? { optionId: chosen } }
               : { answer: daemonOption ?? { optionId: chosen } };
-          } catch (cause) {
-            yield* log.debug(`[server-request] request_permission threw: ${renderError(cause)}`);
-            const allowOpt = rawOptions[0];
-            return rawArg.interactionId !== undefined
-              ? { interactionId: rawArg.interactionId, answer: allowOpt ?? { optionId: "allow" } }
-              : { answer: allowOpt ?? { optionId: "allow" } };
           }
+          const allowOpt = rawOptions[0];
+          return rawArg.interactionId !== undefined
+            ? { interactionId: rawArg.interactionId, answer: allowOpt ?? { optionId: "allow" } }
+            : { answer: allowOpt ?? { optionId: "allow" } };
         }
         // Unknown server request — acknowledge with empty object (logged above).
         return {};

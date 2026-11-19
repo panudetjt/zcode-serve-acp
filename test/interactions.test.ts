@@ -226,5 +226,25 @@ describe("request_permission mapping", () => {
     ]);
     expect(resolved.action).toBe("accept");
     expect(resolved.optionId).toBe("my note");
+
+    // input.questions fallback
+    const inputQ = extractElicitationQuestions({
+      interactionId: "i2",
+      kind: "userInput",
+      payload: { input: { questions: [{ prompt: "From input?" }] } },
+    });
+    expect(inputQ.length).toBe(1);
+    expect(inputQ[0]?.question).toBe("From input?");
+
+    // reject_always mapping
+    const mappedRejectAlways = mapPermissionOptions([{ optionId: "opt_block", kind: "rejectAlways" }]);
+    expect(mappedRejectAlways[0]?.kind).toBe("reject_always");
+
+    // last option fallback to reject_once
+    const mappedLastFallback = mapPermissionOptions([
+      { optionId: "opt_1", kind: "allow" },
+      { optionId: "opt_2", kind: "custom" },
+    ]);
+    expect(mappedLastFallback[1]?.kind).toBe("reject_once");
   });
 });
