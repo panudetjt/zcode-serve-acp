@@ -235,7 +235,7 @@ const runScenario = (
 
 const program = Effect.gen(function* () {
   const daemon = yield* Daemon;
-  const connection = yield* daemon.connect();
+  const connection = yield* daemon.connect;
   const runtimeVersion = connection.status.version ?? "unknown";
   const cwd = process.cwd();
 

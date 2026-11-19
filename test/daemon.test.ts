@@ -120,7 +120,7 @@ describe("Daemon service operations", () => {
 
     const prog = Effect.gen(function* () {
       const daemon = yield* Daemon;
-      const conn = yield* daemon.connect();
+      const conn = yield* daemon.connect;
       expect(conn.status.host).toBe("127.0.0.1");
       expect(conn.token).toBe("secret-token");
       expect(conn.wsPath).toBe("/ws/host");
@@ -228,7 +228,7 @@ describe("Daemon service operations", () => {
 
       const prog = Effect.gen(function* () {
         const daemon = yield* Daemon;
-        return yield* daemon.connect();
+        return yield* daemon.connect;
       }).pipe(
         Effect.provide(Daemon.layer),
         Effect.provide(Layer.succeed(FileSystem, { exists: () => Effect.succeed(false) } as unknown as FileSystem)),
@@ -283,7 +283,7 @@ describe("Daemon service operations", () => {
 
       const prog = Effect.gen(function* () {
         const daemon = yield* Daemon;
-        const conn = yield* daemon.connect();
+        const conn = yield* daemon.connect;
         expect(conn.status.host).toBe("127.0.0.1");
         expect(conn.token).toBe("");
       }).pipe(

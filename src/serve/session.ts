@@ -138,9 +138,9 @@ const makeSession = (
     const ensureConnection: Effect.Effect<DaemonConnection, SessionError> = Effect.gen(function* () {
       const existing = yield* Ref.get(connectionRef);
       if (Option.isSome(existing)) return existing.value;
-      const connection = yield* daemon
-        .connect()
-        .pipe(Effect.mapError((cause) => new SessionError({ message: cause.message })));
+      const connection = yield* daemon.connect.pipe(
+        Effect.mapError((cause) => new SessionError({ message: cause.message })),
+      );
       yield* Ref.set(connectionRef, Option.some(connection));
       return connection;
     });
