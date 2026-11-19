@@ -57,6 +57,14 @@ export class ChannelClosed extends Schema.TaggedError<ChannelClosed>()("ChannelC
   reason: Schema.String,
 }) {}
 
+export class ChannelOpenError extends Schema.TaggedError<ChannelOpenError>()("ChannelOpenError", {
+  message: Schema.String,
+}) {}
+
+export class ClientRequestError extends Schema.TaggedError<ClientRequestError>()("ClientRequestError", {
+  message: Schema.String,
+}) {}
+
 /** The daemon answered a channel call with PromiseError. */
 export class RpcError extends Schema.TaggedError<RpcError>()("RpcError", {
   channel: Schema.String,

@@ -21,7 +21,7 @@ import {
   type PromptAttachment,
   type ServeSession,
 } from "../serve/session.ts";
-import { AcpMethodError, renderError, tolerate } from "../errors.ts";
+import { AcpMethodError, ClientRequestError, renderError, tolerate } from "../errors.ts";
 import { Log } from "../log.ts";
 import { fallbackModels, modelsToAcp } from "../models.ts";
 import {
@@ -97,7 +97,7 @@ export class AcpServer extends Context.Service<
         sessions,
         log,
         emitNotification: () => Effect.void, // replaced by the host at runtime
-        clientRequest: () => Effect.fail(new Error("client request channel not wired")),
+        clientRequest: () => Effect.fail(new ClientRequestError({ message: "client request channel not wired" })),
         fallbackModels: fallbackModels.pipe(Effect.provideService(FileSystem, fs)),
       });
     }),

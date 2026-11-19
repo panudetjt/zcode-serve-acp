@@ -9,7 +9,6 @@
  * answerPermissionServerRequest). Both paths shared near-verbatim option
  * classification in the old code — now they share these functions.
  */
-import { randomUUID } from "node:crypto";
 import { classifyToolKind } from "../translate/toolKind.ts";
 import type {
   PendingInteraction,
@@ -312,7 +311,7 @@ export function buildPermissionParams(
   const rawOptions = (rawPayload.options as Array<Record<string, unknown>> | undefined) ?? [];
   const options = mapPermissionOptions(rawOptions);
   const toolCallId = String(
-    STR(rawPayload, "toolCallId") ?? latestActiveToolCallId ?? `tool_${randomUUID().slice(0, 8)}`,
+    STR(rawPayload, "toolCallId") ?? latestActiveToolCallId ?? `tool_${crypto.randomUUID().slice(0, 8)}`,
   );
   const toolKind = classifyToolKind(str(rawPayload.toolName) ?? undefined);
   return {

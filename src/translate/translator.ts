@@ -23,7 +23,6 @@
  * the daemon overloads these shapes and the pre-rewrite per-field `typeof`
  * guards are the working spec; the golden fixtures encode the outcomes.
  */
-import { randomUUID } from "node:crypto";
 import { classifyToolKind, normalizeStatus } from "./toolKind.ts";
 
 export interface ToolCallContentItem {
@@ -774,7 +773,8 @@ export class FrameTranslator {
 
         let toolInfo = this.rowTool.get(rowId);
         if (toolInfo === undefined) {
-          const toolCallId = tool.toolCallId ?? (rowId >= 0 ? `tool_${rowId}` : `tool_${randomUUID().slice(0, 8)}`);
+          const toolCallId =
+            tool.toolCallId ?? (rowId >= 0 ? `tool_${rowId}` : `tool_${crypto.randomUUID().slice(0, 8)}`);
           toolInfo = { toolCallId, title, name, kind: kindCls };
           this.rowTool.set(rowId, toolInfo);
           updates.push({

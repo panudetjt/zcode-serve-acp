@@ -18,6 +18,7 @@ import { FetchHttpClient } from "effect/http";
 import { Stdio } from "effect/Stdio";
 import { FileSystem } from "effect/FileSystem";
 import { AcpServer } from "./acp/server.ts";
+import { ClientRequestError } from "./errors.ts";
 import {
   errorPayload,
   encodeLine,
@@ -51,7 +52,7 @@ const Main = Effect.gen(function* () {
   const writeLine = (message: unknown) => Stream.fromIterable([encodeLine(message)]).pipe(Stream.run(stdio.stdout()));
 
   // client→server requests WE send (permission/elicitation asks): id ↔ Deferred map
-  const pending = new Map<number, Deferred.Deferred<unknown, Error>>();
+  const pending = new Map<number, Deferred.Deferred<unknown, ClientRequestError>>();
   let nextRequestId = 900_000;
 
   const acp = AcpServer.make({
@@ -62,12 +63,14 @@ const Main = Effect.gen(function* () {
       Effect.gen(function* () {
         const id = nextRequestId++;
         yield* writeLine(clientRequest(id, method, params));
-        const deferred = Deferred.makeUnsafe<unknown, Error>();
+        const deferred = Deferred.makeUnsafe<unknown, ClientRequestError>();
         pending.set(id, deferred);
         return yield* Deferred.await(deferred).pipe(
           Effect.timeout(CLIENT_REQUEST_TIMEOUT_MS),
           Effect.catchTag("TimeoutError", () =>
-            Effect.fail(new Error(`client request ${method} timed out (client never answered)`)),
+            Effect.fail(
+              new ClientRequestError({ message: `client request ${method} timed out (client never answered)` }),
+            ),
           ),
           Effect.ensuring(Effect.sync(() => pending.delete(id))),
         );
@@ -96,7 +99,9 @@ const Main = Effect.gen(function* () {
           if (inbound.response.error !== undefined) {
             Deferred.doneUnsafe(
               entry,
-              Effect.fail(new Error(inbound.response.error.message ?? "client returned error")),
+              Effect.fail(
+                new ClientRequestError({ message: inbound.response.error.message ?? "client returned error" }),
+              ),
             );
           } else {
             Deferred.doneUnsafe(entry, Effect.succeed(inbound.response.result));

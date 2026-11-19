@@ -18,7 +18,6 @@
  * fails the connect immediately.
  */
 import { spawn as nodeSpawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Context, Effect, Layer, Result, Schema } from "effect";
@@ -67,7 +66,7 @@ class DaemonDeps extends Context.Service<
     Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient;
       const fs = yield* FileSystem;
-      const serveBin = resolveServeBinary();
+      const serveBin = yield* resolveServeBinary(fs);
       let spawnError: string | undefined;
 
       const spawnServe = Effect.fn("DaemonDeps.spawnServe")(function* () {
@@ -254,12 +253,16 @@ export function serverRoot(): string | undefined {
   return root === undefined ? undefined : path.join(root, ".zcode", "server");
 }
 
-export function resolveServeBinary(): string {
-  if (process.env.ZCODE_SERVE_BIN) return process.env.ZCODE_SERVE_BIN;
-  const candidates = [path.join(os.homedir(), ".zcode", "server", "bin", "zcode"), "/usr/local/bin/zcode"];
-  for (const p of candidates) if (existsSync(p)) return p;
-  return "zcode"; // last resort: hope PATH has it
-}
+export const resolveServeBinary = (fs: FileSystem): Effect.Effect<string> =>
+  Effect.gen(function* () {
+    if (process.env.ZCODE_SERVE_BIN) return process.env.ZCODE_SERVE_BIN;
+    const candidates = [path.join(os.homedir(), ".zcode", "server", "bin", "zcode"), "/usr/local/bin/zcode"];
+    for (const p of candidates) {
+      const exists = yield* fs.exists(p).pipe(Effect.orElseSucceed(() => false));
+      if (exists) return p;
+    }
+    return "zcode"; // last resort: hope PATH has it
+  });
 
 /**
  * Internal deps. The detached spawn is deliberately raw `node:child_process`:

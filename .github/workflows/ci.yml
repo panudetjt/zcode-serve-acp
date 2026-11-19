@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: mise-org/action@v1
+      - uses: jdx/mise-action@v2
         with:
           version: 2026.11.2
 

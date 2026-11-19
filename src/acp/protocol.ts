@@ -6,6 +6,7 @@
  * see the pre-rewrite acp/server.ts for where each quirk comes from.
  */
 import { Effect, Schema } from "effect";
+import { DecodeError } from "../errors.ts";
 import type { DiscoveredSkill } from "../serve/session.ts";
 
 export const BRIDGE_VERSION = "0.2.0";
@@ -153,10 +154,16 @@ export interface DecodedPrompt {
   images: Array<{ data?: string; mimeType?: string; uri?: string }>;
 }
 
-export const decodePrompt = (prompt: unknown): Effect.Effect<DecodedPrompt, Error> =>
+export const decodePrompt = (prompt: unknown): Effect.Effect<DecodedPrompt, DecodeError> =>
   Effect.gen(function* () {
     const blocks = yield* decodePromptBlocks(prompt ?? []).pipe(
-      Effect.mapError((issue) => new Error(`invalid prompt blocks: ${issue.message}`)),
+      Effect.mapError(
+        (issue) =>
+          new DecodeError({
+            location: "acp/prompt",
+            message: `invalid prompt blocks: ${issue.message}`,
+          }),
+      ),
     );
     const text = blocks.map((b) => (typeof b === "string" ? b : b.type === "text" ? (b.text ?? "") : "")).join("\n");
     const images = blocks.flatMap((b) => (typeof b !== "string" && b.type === "image" ? [b] : []));

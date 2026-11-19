@@ -16,7 +16,7 @@
 import { Deferred, Effect } from "effect";
 import * as ScopeNS from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
-import { ChannelClosed, RpcError, RpcTimeout, renderError, tolerate } from "../errors.ts";
+import { ChannelClosed, ChannelOpenError, RpcError, RpcTimeout, renderError, tolerate } from "../errors.ts";
 import type { Log } from "../log.ts";
 import { decodeRpcMessage, encodeRpcMessage, FrameSplitter, MSG } from "./wire.ts";
 
@@ -29,7 +29,7 @@ export interface ChannelHandlers {
   readonly onClose: (reason: string) => Effect.Effect<void, unknown>;
 }
 
-export class ChannelOpenError extends Error {}
+export { ChannelOpenError };
 
 const HANDSHAKE_TIMEOUT_MS = 15_000;
 const DEFAULT_CALL_TIMEOUT_MS = 30_000;
@@ -72,7 +72,9 @@ export class ChannelClient {
     Effect.gen(function* () {
       yield* log.debug(`[channel] connecting ${url.replace(/token=[^&]*/, "token=…")}`);
       const socket = yield* Socket.makeWebSocket(url, { headers }).pipe(
-        Effect.mapError((cause) => new ChannelOpenError(`zcode server channel dial failed: ${text(cause)}`)),
+        Effect.mapError(
+          (cause) => new ChannelOpenError({ message: `zcode server channel dial failed: ${text(cause)}` }),
+        ),
       );
       const writer = yield* socket.writer;
       const client = new ChannelClient(socket, writer, handlers, log);
@@ -85,7 +87,7 @@ export class ChannelClient {
       // The daemon sends [200] right after the socket opens.
       yield* Deferred.await(client.initDeferred).pipe(
         Effect.timeout(HANDSHAKE_TIMEOUT_MS),
-        Effect.mapError(() => new ChannelOpenError("zcode server channel handshake timed out")),
+        Effect.mapError(() => new ChannelOpenError({ message: "zcode server channel handshake timed out" })),
       );
       return client;
     });
