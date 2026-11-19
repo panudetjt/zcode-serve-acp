@@ -16,7 +16,15 @@
 import { Deferred, Effect, Result } from "effect";
 import * as ScopeNS from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
-import { ChannelClosed, ChannelOpenError, RpcError, RpcTimeout, renderError, tolerate } from "../errors.ts";
+import {
+  ChannelClosed,
+  ChannelOpenError,
+  DecodeError,
+  RpcError,
+  RpcTimeout,
+  renderError,
+  tolerate,
+} from "../errors.ts";
 import type { Log } from "../log.ts";
 import { decodeRpcMessage, encodeRpcMessage, FrameSplitter, MSG } from "./wire.ts";
 
@@ -45,7 +53,8 @@ export class ChannelClient {
   private readonly listeners = new Map<number, ChannelEventListener>();
   private readonly eventByKey = new Map<string, { id: number; handler: ChannelEventListener }>();
   private readonly splitter = new FrameSplitter();
-  private readonly initDeferred: Deferred.Deferred<void, unknown>;
+  /** Settled on [200] handshake or failed with ChannelClosed when the pump dies. */
+  private readonly initDeferred: Deferred.Deferred<void, ChannelClosed>;
   readonly closed: Deferred.Deferred<string, never>;
   private settled = false;
 
@@ -55,7 +64,7 @@ export class ChannelClient {
     private readonly handlers: ChannelHandlers,
     private readonly log: Log["Service"],
   ) {
-    this.initDeferred = Deferred.makeUnsafe<void, unknown>();
+    this.initDeferred = Deferred.makeUnsafe<void, ChannelClosed>();
     this.closed = Deferred.makeUnsafe<string, never>();
   }
 
@@ -92,8 +101,13 @@ export class ChannelClient {
       return client;
     });
 
-  /** Continuous read loop; fails with the socket error when the channel dies. */
-  private pumpReader(): Effect.Effect<void, unknown, ScopeNS.Scope> {
+  /**
+   * Continuous read loop; fails with the socket error when the channel dies
+   * (`Reader.pull` surfaces every termination — clean close included — as a
+   * `SocketError`). Frame decode failures do not escape: `dispatchFrame`
+   * swallows them into a warning log.
+   */
+  private pumpReader(): Effect.Effect<void, Socket.SocketError, ScopeNS.Scope> {
     return Effect.gen({ self: this }, function* () {
       const reader = yield* this.socket.reader;
       for (;;) {
@@ -109,9 +123,14 @@ export class ChannelClient {
 
   private dispatchFrame(frame: Uint8Array): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
-      const decoded = yield* Effect.try({ try: () => decodeRpcMessage(frame), catch: (cause) => cause }).pipe(
-        Effect.result,
-      );
+      // The wire codec throws DecodeError on malformed frames (13-byte header,
+      // VQL varints — see wire.ts); an undecodable frame is never fatal for the
+      // channel, so this is captured into a warning log below. The catch types
+      // the thrown value into the taxonomy instead of surfacing it bare.
+      const decoded = yield* Effect.try({
+        try: () => decodeRpcMessage(frame),
+        catch: (cause) => new DecodeError({ location: "channel/frame", message: renderError(cause), cause }),
+      }).pipe(Effect.result);
       if (!Result.isSuccess(decoded)) {
         yield* this.log.warn(`[channel] undecodable frame ignored: ${text(decoded.failure)}`);
         return;
@@ -175,12 +194,18 @@ export class ChannelClient {
     });
   }
 
+  /**
+   * Server→client request handling never fails: the handler outcome (success
+   * or failure) is rendered back to the daemon as a [202]/[203] frame, and any
+   * write failure is swallowed — a dead channel is already reported by the
+   * pump through `failAll`.
+   */
   private handleServerRequest(
     id: number,
     channelName: string,
     name: string,
     arg: unknown,
-  ): Effect.Effect<void, unknown> {
+  ): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       const outcome = yield* Effect.result(this.handlers.onRequest(channelName, name, arg));
       if (Result.isFailure(outcome)) {
