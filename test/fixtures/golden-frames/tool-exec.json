@@ -1,0 +1,1553 @@
+{
+  "fixtureVersion": 1,
+  "scenario": "tool-exec",
+  "prompt": "Use the shell/terminal tool to run exactly this command: echo capture-probe-1234 — then reply with just its output.",
+  "daemonRuntime": "3.18.2",
+  "frames": [
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-2",
+        "logicalFrameOrdinal": 2,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 0,
+          "toSeq": 2,
+          "sentAt": 1795080686396,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 1,
+                  "meta": {
+                    "title": "Use the shell/terminal tool to run exactly this command: ...",
+                    "titleSource": "generated"
+                  }
+                }
+              },
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 1,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080686366,
+                  "createdAtSeq": 2,
+                  "kind": "turnHeader",
+                  "origin": "userInput",
+                  "executionKind": "agent",
+                  "sourceCommandId": "INPUT_ID",
+                  "state": "running",
+                  "startedAt": 1795080686366
+                }
+              },
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 2,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080686366,
+                  "createdAtSeq": 2,
+                  "kind": "userInput",
+                  "text": "Use the shell/terminal tool to run exactly this command: echo capture-probe-1234 — then reply with just its output.",
+                  "origin": "realUser",
+                  "sourceCommandId": "INPUT_ID",
+                  "rootSourceCommandId": "INPUT_ID"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "control": {
+                    "phase": "running",
+                    "sessionEnded": false,
+                    "canStop": true,
+                    "stopState": "stoppable",
+                    "stopTargetKind": "assistant",
+                    "activeWorks": [
+                      {
+                        "kind": "primaryTurn",
+                        "foregroundExecutionId": "runtime_command_64",
+                        "sourceCommandId": "INPUT_ID",
+                        "startedAt": 1795080686366
+                      }
+                    ],
+                    "lastError": null,
+                    "apiRetry": null
+                  },
+                  "inputRouting": {
+                    "mode": "enqueue"
+                  }
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 2,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080686366,
+                  "createdAtSeq": 2,
+                  "actions": {
+                    "canEdit": true,
+                    "editDisposition": "rewind"
+                  },
+                  "kind": "userInput",
+                  "text": "Use the shell/terminal tool to run exactly this command: echo capture-probe-1234 — then reply with just its output.",
+                  "origin": "realUser",
+                  "sourceCommandId": "INPUT_ID",
+                  "rootSourceCommandId": "INPUT_ID"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 2,
+                  "availability": {
+                    "fork": {
+                      "allowed": true
+                    },
+                    "compact": {
+                      "allowed": true
+                    },
+                    "switchModelConfig": {
+                      "allowed": true
+                    },
+                    "setFollowupMode": {
+                      "allowed": true
+                    },
+                    "queueEdit": {
+                      "allowed": true
+                    },
+                    "sendQueuedNow": {
+                      "allowed": true
+                    },
+                    "pauseGoal": {
+                      "allowed": false,
+                      "reasonCode": "noGoalToPause"
+                    },
+                    "resumeGoal": {
+                      "allowed": false,
+                      "reasonCode": "noGoalToResume"
+                    },
+                    "rewindFiles": {
+                      "allowed": false,
+                      "reasonCode": "fileRewindUnavailable"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-3",
+        "logicalFrameOrdinal": 3,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 2,
+          "toSeq": 4,
+          "sentAt": 1795080687026,
+          "payload": {
+            "kind": "deltas",
+            "deltas": []
+          }
+        }
+      },
+      "oracle": {
+        "updates": [],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-4",
+        "logicalFrameOrdinal": 4,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 4,
+          "toSeq": 7,
+          "sentAt": 1795080694981,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 3,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "msg_mwncoyoh_a690403d-14fe-4941-acef-a7798f2ed79e",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080694951,
+                  "createdAtSeq": 6,
+                  "kind": "reasoning",
+                  "assistantResponseId": "msg_mwncoyoh_a690403d-14fe-4941-acef-a7798f2ed79e",
+                  "text": "",
+                  "state": "streaming"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 3
+                }
+              },
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": "The"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": "The"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-5",
+        "logicalFrameOrdinal": 5,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 7,
+          "toSeq": 12,
+          "sentAt": 1795080695021,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " user wants me to run"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " user wants me to run"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-6",
+        "logicalFrameOrdinal": 6,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 12,
+          "toSeq": 15,
+          "sentAt": 1795080695060,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " a simple command"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " a simple command"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-7",
+        "logicalFrameOrdinal": 7,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 15,
+          "toSeq": 19,
+          "sentAt": 1795080695142,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " and reply with just"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " and reply with just"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-8",
+        "logicalFrameOrdinal": 8,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 19,
+          "toSeq": 24,
+          "sentAt": 1795080695187,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " its output. This is"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " its output. This is"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-9",
+        "logicalFrameOrdinal": 9,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 24,
+          "toSeq": 25,
+          "sentAt": 1795080695224,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " straightforward"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " straightforward"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-10",
+        "logicalFrameOrdinal": 10,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 25,
+          "toSeq": 26,
+          "sentAt": 1795080695262,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " —"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " —"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-11",
+        "logicalFrameOrdinal": 11,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 26,
+          "toSeq": 27,
+          "sentAt": 1795080695304,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " no"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " no"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-12",
+        "logicalFrameOrdinal": 12,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 27,
+          "toSeq": 33,
+          "sentAt": 1795080695344,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " complexity, no planning needed."
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " complexity, no planning needed."
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-13",
+        "logicalFrameOrdinal": 13,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 33,
+          "toSeq": 37,
+          "sentAt": 1795080695407,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " I'll run the"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " I'll run the"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-14",
+        "logicalFrameOrdinal": 14,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 37,
+          "toSeq": 43,
+          "sentAt": 1795080695466,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 3,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "msg_mwncoyoh_a690403d-14fe-4941-acef-a7798f2ed79e",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080694951,
+                  "createdAtSeq": 6,
+                  "kind": "reasoning",
+                  "assistantResponseId": "msg_mwncoyoh_a690403d-14fe-4941-acef-a7798f2ed79e",
+                  "text": "The user wants me to run a simple command and reply with just its output. This is straightforward — no complexity, no planning needed. I'll run the echo command.",
+                  "state": "complete"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 4
+                }
+              },
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "call_18b57ebc5c1c42908615a63d",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080695441,
+                  "createdAtSeq": 43,
+                  "kind": "toolCall",
+                  "assistantResponseId": "msg_mwncoyoh_a690403d-14fe-4941-acef-a7798f2ed79e",
+                  "toolCallId": "call_18b57ebc5c1c42908615a63d",
+                  "toolName": "Bash",
+                  "status": "inputStreaming",
+                  "inputText": ""
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 5
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " echo command."
+            }
+          },
+          {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_18b57ebc5c1c42908615a63d",
+            "title": "Bash",
+            "name": "Bash",
+            "kind": "execute",
+            "status": "pending"
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-15",
+        "logicalFrameOrdinal": 15,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 43,
+          "toSeq": 46,
+          "sentAt": 1795080695677,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "call_18b57ebc5c1c42908615a63d",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080695441,
+                  "createdAtSeq": 43,
+                  "kind": "toolCall",
+                  "assistantResponseId": "msg_mwncoyoh_a690403d-14fe-4941-acef-a7798f2ed79e",
+                  "toolCallId": "call_18b57ebc5c1c42908615a63d",
+                  "toolName": "Bash",
+                  "status": "inputStreaming",
+                  "inputText": "{\"command\":\"echo capture-probe-1234\",\"description\":\"Echo a test string\"}",
+                  "input": {
+                    "command": "echo capture-probe-1234",
+                    "description": "Echo a test string"
+                  }
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 6
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_18b57ebc5c1c42908615a63d",
+            "title": "echo capture-probe-1234",
+            "name": "Bash",
+            "kind": "execute",
+            "status": "pending",
+            "rawInput": {
+              "command": "echo capture-probe-1234",
+              "description": "Echo a test string"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-16",
+        "logicalFrameOrdinal": 16,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 46,
+          "toSeq": 54,
+          "sentAt": 1795080695737,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 1,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080686366,
+                  "createdAtSeq": 2,
+                  "kind": "turnHeader",
+                  "origin": "userInput",
+                  "executionKind": "agent",
+                  "sourceCommandId": "INPUT_ID",
+                  "state": "running",
+                  "startedAt": 1795080686366,
+                  "outputTokens": 61
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 7,
+                  "usage": {
+                    "contextWindow": {
+                      "usedTokens": 30822,
+                      "maxTokens": 1000000,
+                      "autoCompactThresholdTokens": null,
+                      "cache": {
+                        "inputTokens": 30761,
+                        "cacheReadTokens": 15296,
+                        "cacheWriteTokens": 0,
+                        "latestHitRate": 0.49725301518156106,
+                        "hitRateRequestCount": 1,
+                        "totalInputTokens": 30761,
+                        "totalCacheReadTokens": 15296,
+                        "totalCacheWriteTokens": 0,
+                        "hitRate": 0.49725301518156106
+                      },
+                      "breakdown": [
+                        {
+                          "source": "system_prompt",
+                          "chars": 3010
+                        },
+                        {
+                          "source": "meta_user_context",
+                          "chars": 13002
+                        },
+                        {
+                          "source": "skills",
+                          "chars": 9611
+                        },
+                        {
+                          "source": "system_tool_schemas",
+                          "chars": 141100
+                        },
+                        {
+                          "source": "mcp_tool_schemas",
+                          "chars": 55824
+                        },
+                        {
+                          "source": "messages",
+                          "chars": 143
+                        }
+                      ]
+                    },
+                    "cumulative": {
+                      "inputTokens": 30761,
+                      "outputTokens": 61,
+                      "cacheReadTokens": 15296,
+                      "cacheWriteTokens": 0
+                    }
+                  }
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "call_18b57ebc5c1c42908615a63d",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080695441,
+                  "createdAtSeq": 43,
+                  "kind": "toolCall",
+                  "assistantResponseId": "msg_mwncoyoh_a690403d-14fe-4941-acef-a7798f2ed79e",
+                  "toolCallId": "call_18b57ebc5c1c42908615a63d",
+                  "toolName": "Bash",
+                  "status": "inputStreaming",
+                  "inputText": "{\"command\":\"echo capture-probe-1234\",\"description\":\"Echo a test string\"}",
+                  "input": {
+                    "command": "echo capture-probe-1234",
+                    "description": "Echo a test string"
+                  }
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 8
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "call_18b57ebc5c1c42908615a63d",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080695441,
+                  "createdAtSeq": 43,
+                  "kind": "toolCall",
+                  "assistantResponseId": "msg_mwncoyoh_a690403d-14fe-4941-acef-a7798f2ed79e",
+                  "toolCallId": "call_18b57ebc5c1c42908615a63d",
+                  "toolName": "Bash",
+                  "status": "running",
+                  "inputText": "{\"command\":\"echo capture-probe-1234\",\"description\":\"Echo a test string\"}",
+                  "input": {
+                    "command": "echo capture-probe-1234",
+                    "description": "Echo a test string"
+                  },
+                  "startedAt": 1795080695730
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 9
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "usage_update",
+            "used": 30822,
+            "size": 1000000
+          },
+          {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_18b57ebc5c1c42908615a63d",
+            "title": "echo capture-probe-1234",
+            "name": "Bash",
+            "kind": "execute",
+            "status": "pending",
+            "rawInput": {
+              "command": "echo capture-probe-1234",
+              "description": "Echo a test string"
+            }
+          },
+          {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_18b57ebc5c1c42908615a63d",
+            "title": "echo capture-probe-1234",
+            "name": "Bash",
+            "kind": "execute",
+            "status": "in_progress",
+            "rawInput": {
+              "command": "echo capture-probe-1234",
+              "description": "Echo a test string"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false,
+        "usage": {
+          "totalTokens": 30822,
+          "inputTokens": 30761,
+          "outputTokens": 61,
+          "cachedReadTokens": 15296,
+          "cachedWriteTokens": 0
+        }
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-17",
+        "logicalFrameOrdinal": 17,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 54,
+          "toSeq": 59,
+          "sentAt": 1795080695979,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "call_18b57ebc5c1c42908615a63d",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080695441,
+                  "createdAtSeq": 43,
+                  "kind": "toolCall",
+                  "assistantResponseId": "msg_mwncoyoh_a690403d-14fe-4941-acef-a7798f2ed79e",
+                  "toolCallId": "call_18b57ebc5c1c42908615a63d",
+                  "toolName": "Bash",
+                  "status": "success",
+                  "inputText": "{\"command\":\"echo capture-probe-1234\",\"description\":\"Echo a test string\"}",
+                  "input": {
+                    "command": "echo capture-probe-1234",
+                    "description": "Echo a test string"
+                  },
+                  "output": {
+                    "text": "capture-probe-1234"
+                  },
+                  "startedAt": 1795080695730,
+                  "endedAt": 1795080695947
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 10
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_18b57ebc5c1c42908615a63d",
+            "title": "echo capture-probe-1234",
+            "name": "Bash",
+            "kind": "execute",
+            "status": "completed",
+            "rawInput": {
+              "command": "echo capture-probe-1234",
+              "description": "Echo a test string"
+            },
+            "rawOutput": {
+              "text": "capture-probe-1234"
+            },
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": "capture-probe-1234"
+                }
+              }
+            ]
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-18",
+        "logicalFrameOrdinal": 18,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 59,
+          "toSeq": 60,
+          "sentAt": 1795080696018,
+          "payload": {
+            "kind": "deltas",
+            "deltas": []
+          }
+        }
+      },
+      "oracle": {
+        "updates": [],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-19",
+        "logicalFrameOrdinal": 19,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 60,
+          "toSeq": 68,
+          "sentAt": 1795080702384,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 5,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "msg_mwncp5ln_dadb527d-2e5a-4cca-a68f-6c4f9999a636",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080702354,
+                  "createdAtSeq": 62,
+                  "kind": "reasoning",
+                  "assistantResponseId": "msg_mwncp5ln_dadb527d-2e5a-4cca-a68f-6c4f9999a636",
+                  "text": "",
+                  "state": "streaming"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 11
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 5,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "msg_mwncp5ln_dadb527d-2e5a-4cca-a68f-6c4f9999a636",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080702354,
+                  "createdAtSeq": 62,
+                  "kind": "reasoning",
+                  "assistantResponseId": "msg_mwncp5ln_dadb527d-2e5a-4cca-a68f-6c4f9999a636",
+                  "text": "",
+                  "state": "complete"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 12
+                }
+              },
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 6,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "msg_mwncp5ln_dadb527d-2e5a-4cca-a68f-6c4f9999a636",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080702355,
+                  "createdAtSeq": 65,
+                  "kind": "assistantText",
+                  "assistantResponseId": "msg_mwncp5ln_dadb527d-2e5a-4cca-a68f-6c4f9999a636",
+                  "text": "",
+                  "state": "streaming"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 13
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 6,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "msg_mwncp5ln_dadb527d-2e5a-4cca-a68f-6c4f9999a636",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080702355,
+                  "createdAtSeq": 65,
+                  "kind": "assistantText",
+                  "assistantResponseId": "msg_mwncp5ln_dadb527d-2e5a-4cca-a68f-6c4f9999a636",
+                  "text": "capture-probe-1234",
+                  "state": "complete"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 14
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "capture-probe-1234"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": true,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-20",
+        "logicalFrameOrdinal": 20,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 68,
+          "toSeq": 73,
+          "sentAt": 1795080702666,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 1,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080686366,
+                  "createdAtSeq": 2,
+                  "kind": "turnHeader",
+                  "origin": "userInput",
+                  "executionKind": "agent",
+                  "sourceCommandId": "INPUT_ID",
+                  "state": "running",
+                  "startedAt": 1795080686366,
+                  "outputTokens": 69
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 15,
+                  "usage": {
+                    "contextWindow": {
+                      "usedTokens": 30855,
+                      "maxTokens": 1000000,
+                      "autoCompactThresholdTokens": null,
+                      "cache": {
+                        "inputTokens": 30847,
+                        "cacheReadTokens": 30720,
+                        "cacheWriteTokens": 0,
+                        "latestHitRate": 0.9958829059551982,
+                        "hitRateRequestCount": 2,
+                        "totalInputTokens": 61608,
+                        "totalCacheReadTokens": 46016,
+                        "totalCacheWriteTokens": 0,
+                        "hitRate": 0.7469159849370212
+                      },
+                      "breakdown": [
+                        {
+                          "source": "system_prompt",
+                          "chars": 3010
+                        },
+                        {
+                          "source": "meta_user_context",
+                          "chars": 13081
+                        },
+                        {
+                          "source": "skills",
+                          "chars": 9611
+                        },
+                        {
+                          "source": "system_tool_schemas",
+                          "chars": 141100
+                        },
+                        {
+                          "source": "mcp_tool_schemas",
+                          "chars": 55824
+                        },
+                        {
+                          "source": "messages",
+                          "chars": 765
+                        }
+                      ]
+                    },
+                    "cumulative": {
+                      "inputTokens": 61608,
+                      "outputTokens": 69,
+                      "cacheReadTokens": 46016,
+                      "cacheWriteTokens": 0
+                    }
+                  }
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 1,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080686366,
+                  "createdAtSeq": 2,
+                  "kind": "turnHeader",
+                  "origin": "userInput",
+                  "executionKind": "agent",
+                  "sourceCommandId": "INPUT_ID",
+                  "historyRoundCount": 2,
+                  "state": "completedSuccess",
+                  "startedAt": 1795080686366,
+                  "endedAt": 1795080702655,
+                  "activeMs": 16393,
+                  "outputTokens": 69,
+                  "modelDurationMs": 0,
+                  "toolDurationMs": 216,
+                  "otherDurationMs": 16177
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 6,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "msg_mwncp5ln_dadb527d-2e5a-4cca-a68f-6c4f9999a636",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080702355,
+                  "createdAtSeq": 65,
+                  "actions": {
+                    "canFork": true
+                  },
+                  "kind": "assistantText",
+                  "assistantResponseId": "msg_mwncp5ln_dadb527d-2e5a-4cca-a68f-6c4f9999a636",
+                  "text": "capture-probe-1234",
+                  "state": "complete"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "control": {
+                    "phase": "completedSuccess",
+                    "sessionEnded": true,
+                    "canStop": false,
+                    "stopState": "idle",
+                    "stopTargetKind": "unknown",
+                    "activeWorks": [],
+                    "lastError": null,
+                    "apiRetry": null
+                  },
+                  "inputRouting": {
+                    "mode": "startNow"
+                  }
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 6,
+                  "turnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "entityId": "msg_mwncp5ln_dadb527d-2e5a-4cca-a68f-6c4f9999a636",
+                  "productTurnId": "msg_mwncoy72_74a3546a-058d-4fa7-9e49-49dc71525a7c",
+                  "visibility": "visible",
+                  "createdAt": 1795080702355,
+                  "createdAtSeq": 65,
+                  "actions": {
+                    "canFork": true,
+                    "canRetry": true
+                  },
+                  "kind": "assistantText",
+                  "assistantResponseId": "msg_mwncp5ln_dadb527d-2e5a-4cca-a68f-6c4f9999a636",
+                  "text": "capture-probe-1234",
+                  "state": "complete"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 16,
+                  "availability": {
+                    "fork": {
+                      "allowed": true
+                    },
+                    "compact": {
+                      "allowed": true
+                    },
+                    "switchModelConfig": {
+                      "allowed": true
+                    },
+                    "setFollowupMode": {
+                      "allowed": true
+                    },
+                    "queueEdit": {
+                      "allowed": true
+                    },
+                    "sendQueuedNow": {
+                      "allowed": false,
+                      "reasonCode": "sendQueuedNowRequiresRunning"
+                    },
+                    "pauseGoal": {
+                      "allowed": false,
+                      "reasonCode": "noGoalToPause"
+                    },
+                    "resumeGoal": {
+                      "allowed": false,
+                      "reasonCode": "noGoalToResume"
+                    },
+                    "rewindFiles": {
+                      "allowed": true
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "usage_update",
+            "used": 30855,
+            "size": 1000000
+          }
+        ],
+        "turnComplete": true,
+        "assistantSettled": true,
+        "hasActiveWork": false,
+        "turnFailed": false,
+        "turnCancelled": false,
+        "usage": {
+          "totalTokens": 61677,
+          "inputTokens": 61608,
+          "outputTokens": 69,
+          "cachedReadTokens": 46016,
+          "cachedWriteTokens": 0
+        }
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncoy07-wx368itb-1-lf-21",
+        "logicalFrameOrdinal": 21,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncoy07-wx368itb-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncoy07-wx368itb-1",
+          "fromSeq": 73,
+          "toSeq": 74,
+          "sentAt": 1795080702709,
+          "payload": {
+            "kind": "deltas",
+            "deltas": []
+          }
+        }
+      },
+      "oracle": {
+        "updates": [],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": false,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    }
+  ],
+  "lifecycle": [],
+  "terminalReason": "complete",
+  "stopReason": "end_turn"
+}

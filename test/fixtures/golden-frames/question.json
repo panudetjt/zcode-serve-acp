@@ -1,0 +1,4247 @@
+{
+  "fixtureVersion": 1,
+  "scenario": "question",
+  "prompt": "Use the AskUserQuestion tool to ask me which capture scenario I like most, with exactly two options: \"plain\" and \"tool\". Do not do anything else.",
+  "daemonRuntime": "3.18.2",
+  "frames": [
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-2",
+        "logicalFrameOrdinal": 2,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 0,
+          "toSeq": 2,
+          "sentAt": 1795080703273,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 1,
+                  "meta": {
+                    "title": "Use the AskUserQuestion tool to ask me which capture scen...",
+                    "titleSource": "generated"
+                  }
+                }
+              },
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 1,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080703244,
+                  "createdAtSeq": 2,
+                  "kind": "turnHeader",
+                  "origin": "userInput",
+                  "executionKind": "agent",
+                  "sourceCommandId": "INPUT_ID",
+                  "state": "running",
+                  "startedAt": 1795080703244
+                }
+              },
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 2,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080703244,
+                  "createdAtSeq": 2,
+                  "kind": "userInput",
+                  "text": "Use the AskUserQuestion tool to ask me which capture scenario I like most, with exactly two options: \"plain\" and \"tool\". Do not do anything else.",
+                  "origin": "realUser",
+                  "sourceCommandId": "INPUT_ID",
+                  "rootSourceCommandId": "INPUT_ID"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "control": {
+                    "phase": "running",
+                    "sessionEnded": false,
+                    "canStop": true,
+                    "stopState": "stoppable",
+                    "stopTargetKind": "assistant",
+                    "activeWorks": [
+                      {
+                        "kind": "primaryTurn",
+                        "foregroundExecutionId": "runtime_command_65",
+                        "sourceCommandId": "INPUT_ID",
+                        "startedAt": 1795080703244
+                      }
+                    ],
+                    "lastError": null,
+                    "apiRetry": null
+                  },
+                  "inputRouting": {
+                    "mode": "enqueue"
+                  }
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 2,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080703244,
+                  "createdAtSeq": 2,
+                  "actions": {
+                    "canEdit": true,
+                    "editDisposition": "rewind"
+                  },
+                  "kind": "userInput",
+                  "text": "Use the AskUserQuestion tool to ask me which capture scenario I like most, with exactly two options: \"plain\" and \"tool\". Do not do anything else.",
+                  "origin": "realUser",
+                  "sourceCommandId": "INPUT_ID",
+                  "rootSourceCommandId": "INPUT_ID"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 2,
+                  "availability": {
+                    "fork": {
+                      "allowed": true
+                    },
+                    "compact": {
+                      "allowed": true
+                    },
+                    "switchModelConfig": {
+                      "allowed": true
+                    },
+                    "setFollowupMode": {
+                      "allowed": true
+                    },
+                    "queueEdit": {
+                      "allowed": true
+                    },
+                    "sendQueuedNow": {
+                      "allowed": true
+                    },
+                    "pauseGoal": {
+                      "allowed": false,
+                      "reasonCode": "noGoalToPause"
+                    },
+                    "resumeGoal": {
+                      "allowed": false,
+                      "reasonCode": "noGoalToResume"
+                    },
+                    "rewindFiles": {
+                      "allowed": false,
+                      "reasonCode": "fileRewindUnavailable"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-3",
+        "logicalFrameOrdinal": 3,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 2,
+          "toSeq": 4,
+          "sentAt": 1795080703914,
+          "payload": {
+            "kind": "deltas",
+            "deltas": []
+          }
+        }
+      },
+      "oracle": {
+        "updates": [],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-4",
+        "logicalFrameOrdinal": 4,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 4,
+          "toSeq": 7,
+          "sentAt": 1795080708993,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 3,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "msg_mwncpbpj_9f8ff41a-c078-4bd3-8cd7-8341b7d917a9",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080708963,
+                  "createdAtSeq": 6,
+                  "kind": "reasoning",
+                  "assistantResponseId": "msg_mwncpbpj_9f8ff41a-c078-4bd3-8cd7-8341b7d917a9",
+                  "text": "",
+                  "state": "streaming"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 3
+                }
+              },
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": "The"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": "The"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-5",
+        "logicalFrameOrdinal": 5,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 7,
+          "toSeq": 12,
+          "sentAt": 1795080709033,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " user wants me to use"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " user wants me to use"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-6",
+        "logicalFrameOrdinal": 6,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 12,
+          "toSeq": 18,
+          "sentAt": 1795080709103,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " AskUserQuestion to ask which"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " AskUserQuestion to ask which"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-7",
+        "logicalFrameOrdinal": 7,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 18,
+          "toSeq": 24,
+          "sentAt": 1795080709145,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " capture scenario they like most,"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " capture scenario they like most,"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-8",
+        "logicalFrameOrdinal": 8,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 24,
+          "toSeq": 30,
+          "sentAt": 1795080709186,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " with exactly two options: \""
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " with exactly two options: \""
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-9",
+        "logicalFrameOrdinal": 9,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 30,
+          "toSeq": 36,
+          "sentAt": 1795080709225,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": "plain\" and \"tool\"."
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": "plain\" and \"tool\"."
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-10",
+        "logicalFrameOrdinal": 10,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 36,
+          "toSeq": 39,
+          "sentAt": 1795080709283,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " This relates to"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " This relates to"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-11",
+        "logicalFrameOrdinal": 11,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 39,
+          "toSeq": 43,
+          "sentAt": 1795080709350,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " the capture-frames"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " the capture-frames"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-12",
+        "logicalFrameOrdinal": 12,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 43,
+          "toSeq": 44,
+          "sentAt": 1795080709413,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " script"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " script"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-13",
+        "logicalFrameOrdinal": 13,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 44,
+          "toSeq": 50,
+          "sentAt": 1795080709461,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " scenarios mentioned in AGENTS.md"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " scenarios mentioned in AGENTS.md"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-14",
+        "logicalFrameOrdinal": 14,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 50,
+          "toSeq": 51,
+          "sentAt": 1795080709514,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": "."
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": "."
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-15",
+        "logicalFrameOrdinal": 15,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 51,
+          "toSeq": 57,
+          "sentAt": 1795080709558,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " I should just ask the question"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " I should just ask the question"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-16",
+        "logicalFrameOrdinal": 16,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 57,
+          "toSeq": 62,
+          "sentAt": 1795080709632,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " with exactly those two options"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " with exactly those two options"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-17",
+        "logicalFrameOrdinal": 17,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 62,
+          "toSeq": 66,
+          "sentAt": 1795080709677,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 3,
+                "path": "text",
+                "append": " and do nothing else"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " and do nothing else"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-18",
+        "logicalFrameOrdinal": 18,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 66,
+          "toSeq": 70,
+          "sentAt": 1795080709734,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 3,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "msg_mwncpbpj_9f8ff41a-c078-4bd3-8cd7-8341b7d917a9",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080708963,
+                  "createdAtSeq": 6,
+                  "kind": "reasoning",
+                  "assistantResponseId": "msg_mwncpbpj_9f8ff41a-c078-4bd3-8cd7-8341b7d917a9",
+                  "text": "The user wants me to use AskUserQuestion to ask which capture scenario they like most, with exactly two options: \"plain\" and \"tool\". This relates to the capture-frames script scenarios mentioned in AGENTS.md. I should just ask the question with exactly those two options and do nothing else.",
+                  "state": "complete"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 4
+                }
+              },
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "call_30ea2a1be3434eb59a2349cd",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080709705,
+                  "createdAtSeq": 70,
+                  "kind": "toolCall",
+                  "assistantResponseId": "msg_mwncpbpj_9f8ff41a-c078-4bd3-8cd7-8341b7d917a9",
+                  "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+                  "toolName": "AskUserQuestion",
+                  "status": "inputStreaming",
+                  "inputText": ""
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 5
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": "."
+            }
+          },
+          {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+            "title": "AskUserQuestion",
+            "name": "AskUserQuestion",
+            "kind": "other",
+            "status": "pending"
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-19",
+        "logicalFrameOrdinal": 19,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 70,
+          "toSeq": 82,
+          "sentAt": 1795080710466,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "call_30ea2a1be3434eb59a2349cd",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080709705,
+                  "createdAtSeq": 70,
+                  "kind": "toolCall",
+                  "assistantResponseId": "msg_mwncpbpj_9f8ff41a-c078-4bd3-8cd7-8341b7d917a9",
+                  "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+                  "toolName": "AskUserQuestion",
+                  "status": "inputStreaming",
+                  "inputText": "{\"questions\":[{\"header\":\"Scenario\",\"multiSelect\":false,\"options\":[{\"description\":\"A plain conversation turn with no tool calls.\",\"label\":\"plain\"},{\"description\":\"A conversation turn that includes tool calls.\",\"label\":\"tool\"}],\"question\":\"Which capture scenario do you like most?\"}]}",
+                  "input": {
+                    "questions": [
+                      {
+                        "header": "Scenario",
+                        "multiSelect": false,
+                        "options": [
+                          {
+                            "description": "A plain conversation turn with no tool calls.",
+                            "label": "plain"
+                          },
+                          {
+                            "description": "A conversation turn that includes tool calls.",
+                            "label": "tool"
+                          }
+                        ],
+                        "question": "Which capture scenario do you like most?"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 6
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 1,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080703244,
+                  "createdAtSeq": 2,
+                  "kind": "turnHeader",
+                  "origin": "userInput",
+                  "executionKind": "agent",
+                  "sourceCommandId": "INPUT_ID",
+                  "state": "running",
+                  "startedAt": 1795080703244,
+                  "outputTokens": 140
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 7,
+                  "usage": {
+                    "contextWindow": {
+                      "usedTokens": 30908,
+                      "maxTokens": 1000000,
+                      "autoCompactThresholdTokens": null,
+                      "cache": {
+                        "inputTokens": 30768,
+                        "cacheReadTokens": 15296,
+                        "cacheWriteTokens": 0,
+                        "latestHitRate": 0.4971398855954238,
+                        "hitRateRequestCount": 1,
+                        "totalInputTokens": 30768,
+                        "totalCacheReadTokens": 15296,
+                        "totalCacheWriteTokens": 0,
+                        "hitRate": 0.4971398855954238
+                      },
+                      "breakdown": [
+                        {
+                          "source": "system_prompt",
+                          "chars": 3010
+                        },
+                        {
+                          "source": "meta_user_context",
+                          "chars": 13002
+                        },
+                        {
+                          "source": "skills",
+                          "chars": 9611
+                        },
+                        {
+                          "source": "system_tool_schemas",
+                          "chars": 141100
+                        },
+                        {
+                          "source": "mcp_tool_schemas",
+                          "chars": 55824
+                        },
+                        {
+                          "source": "messages",
+                          "chars": 177
+                        }
+                      ]
+                    },
+                    "cumulative": {
+                      "inputTokens": 30768,
+                      "outputTokens": 140,
+                      "cacheReadTokens": 15296,
+                      "cacheWriteTokens": 0
+                    }
+                  }
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "call_30ea2a1be3434eb59a2349cd",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080709705,
+                  "createdAtSeq": 70,
+                  "kind": "toolCall",
+                  "assistantResponseId": "msg_mwncpbpj_9f8ff41a-c078-4bd3-8cd7-8341b7d917a9",
+                  "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+                  "toolName": "AskUserQuestion",
+                  "status": "inputStreaming",
+                  "inputText": "{\"questions\":[{\"header\":\"Scenario\",\"multiSelect\":false,\"options\":[{\"description\":\"A plain conversation turn with no tool calls.\",\"label\":\"plain\"},{\"description\":\"A conversation turn that includes tool calls.\",\"label\":\"tool\"}],\"question\":\"Which capture scenario do you like most?\"}]}",
+                  "input": {
+                    "questions": [
+                      {
+                        "header": "Scenario",
+                        "multiSelect": false,
+                        "options": [
+                          {
+                            "description": "A plain conversation turn with no tool calls.",
+                            "label": "plain"
+                          },
+                          {
+                            "description": "A conversation turn that includes tool calls.",
+                            "label": "tool"
+                          }
+                        ],
+                        "question": "Which capture scenario do you like most?"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 8
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "call_30ea2a1be3434eb59a2349cd",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080709705,
+                  "createdAtSeq": 70,
+                  "kind": "toolCall",
+                  "assistantResponseId": "msg_mwncpbpj_9f8ff41a-c078-4bd3-8cd7-8341b7d917a9",
+                  "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+                  "toolName": "AskUserQuestion",
+                  "status": "pendingApproval",
+                  "inputText": "{\"questions\":[{\"header\":\"Scenario\",\"multiSelect\":false,\"options\":[{\"description\":\"A plain conversation turn with no tool calls.\",\"label\":\"plain\"},{\"description\":\"A conversation turn that includes tool calls.\",\"label\":\"tool\"}],\"question\":\"Which capture scenario do you like most?\"}]}",
+                  "input": {
+                    "questions": [
+                      {
+                        "header": "Scenario",
+                        "multiSelect": false,
+                        "options": [
+                          {
+                            "description": "A plain conversation turn with no tool calls.",
+                            "label": "plain"
+                          },
+                          {
+                            "description": "A conversation turn that includes tool calls.",
+                            "label": "tool"
+                          }
+                        ],
+                        "question": "Which capture scenario do you like most?"
+                      }
+                    ]
+                  },
+                  "approvalInteractionId": "perm_d58e3dfe-af2e-413b-8b7d-ff6beee0d8fd"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 9,
+                  "pendingInteractions": [
+                    {
+                      "interactionId": "perm_d58e3dfe-af2e-413b-8b7d-ff6beee0d8fd",
+                      "kind": "userInput",
+                      "anchorRowId": 4,
+                      "createdAt": 1795080710444,
+                      "payload": {
+                        "kind": "userInput",
+                        "prompt": "Tool AskUserQuestion requires user interaction",
+                        "freeText": true,
+                        "toolName": "AskUserQuestion",
+                        "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+                        "traceId": "c459d9cf-ed12-4d67-b8dd-579c587a23df",
+                        "input": {
+                          "questions": [
+                            {
+                              "question": "Which capture scenario do you like most?",
+                              "header": "Scenario",
+                              "options": [
+                                {
+                                  "label": "plain",
+                                  "description": "A plain conversation turn with no tool calls."
+                                },
+                                {
+                                  "label": "tool",
+                                  "description": "A conversation turn that includes tool calls."
+                                }
+                              ],
+                              "multiSelect": false
+                            }
+                          ]
+                        },
+                        "schema": {
+                          "toolName": "AskUserQuestion"
+                        },
+                        "questions": [
+                          {
+                            "question": "Which capture scenario do you like most?",
+                            "header": "Scenario",
+                            "options": [
+                              {
+                                "value": "plain",
+                                "label": "plain",
+                                "description": "A plain conversation turn with no tool calls."
+                              },
+                              {
+                                "value": "tool",
+                                "label": "tool",
+                                "description": "A conversation turn that includes tool calls."
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+            "title": "AskUserQuestion",
+            "name": "AskUserQuestion",
+            "kind": "other",
+            "status": "pending",
+            "rawInput": {
+              "questions": [
+                {
+                  "header": "Scenario",
+                  "multiSelect": false,
+                  "options": [
+                    {
+                      "description": "A plain conversation turn with no tool calls.",
+                      "label": "plain"
+                    },
+                    {
+                      "description": "A conversation turn that includes tool calls.",
+                      "label": "tool"
+                    }
+                  ],
+                  "question": "Which capture scenario do you like most?"
+                }
+              ]
+            }
+          },
+          {
+            "sessionUpdate": "usage_update",
+            "used": 30908,
+            "size": 1000000
+          },
+          {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+            "title": "AskUserQuestion",
+            "name": "AskUserQuestion",
+            "kind": "other",
+            "status": "pending",
+            "rawInput": {
+              "questions": [
+                {
+                  "header": "Scenario",
+                  "multiSelect": false,
+                  "options": [
+                    {
+                      "description": "A plain conversation turn with no tool calls.",
+                      "label": "plain"
+                    },
+                    {
+                      "description": "A conversation turn that includes tool calls.",
+                      "label": "tool"
+                    }
+                  ],
+                  "question": "Which capture scenario do you like most?"
+                }
+              ]
+            }
+          },
+          {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+            "title": "AskUserQuestion",
+            "name": "AskUserQuestion",
+            "kind": "other",
+            "status": "pending",
+            "rawInput": {
+              "questions": [
+                {
+                  "header": "Scenario",
+                  "multiSelect": false,
+                  "options": [
+                    {
+                      "description": "A plain conversation turn with no tool calls.",
+                      "label": "plain"
+                    },
+                    {
+                      "description": "A conversation turn that includes tool calls.",
+                      "label": "tool"
+                    }
+                  ],
+                  "question": "Which capture scenario do you like most?"
+                }
+              ]
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false,
+        "usage": {
+          "totalTokens": 30908,
+          "inputTokens": 30768,
+          "outputTokens": 140,
+          "cachedReadTokens": 15296,
+          "cachedWriteTokens": 0
+        },
+        "pendingInteractions": [
+          {
+            "interactionId": "perm_d58e3dfe-af2e-413b-8b7d-ff6beee0d8fd",
+            "kind": "userInput",
+            "anchorRowId": 4,
+            "payload": {
+              "kind": "userInput",
+              "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+              "toolName": "AskUserQuestion",
+              "input": {
+                "questions": [
+                  {
+                    "header": "Scenario",
+                    "multiSelect": false,
+                    "options": [
+                      {
+                        "description": "A plain conversation turn with no tool calls.",
+                        "label": "plain"
+                      },
+                      {
+                        "description": "A conversation turn that includes tool calls.",
+                        "label": "tool"
+                      }
+                    ],
+                    "question": "Which capture scenario do you like most?"
+                  }
+                ]
+              },
+              "questions": [
+                {
+                  "header": "Scenario",
+                  "multiSelect": false,
+                  "options": [
+                    {
+                      "description": "A plain conversation turn with no tool calls.",
+                      "label": "plain"
+                    },
+                    {
+                      "description": "A conversation turn that includes tool calls.",
+                      "label": "tool"
+                    }
+                  ],
+                  "question": "Which capture scenario do you like most?"
+                }
+              ]
+            }
+          },
+          {
+            "interactionId": "perm_d58e3dfe-af2e-413b-8b7d-ff6beee0d8fd",
+            "kind": "userInput",
+            "anchorRowId": 4,
+            "createdAt": 1795080710444,
+            "payload": {
+              "kind": "userInput",
+              "prompt": "Tool AskUserQuestion requires user interaction",
+              "freeText": true,
+              "toolName": "AskUserQuestion",
+              "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+              "traceId": "c459d9cf-ed12-4d67-b8dd-579c587a23df",
+              "input": {
+                "questions": [
+                  {
+                    "question": "Which capture scenario do you like most?",
+                    "header": "Scenario",
+                    "options": [
+                      {
+                        "label": "plain",
+                        "description": "A plain conversation turn with no tool calls."
+                      },
+                      {
+                        "label": "tool",
+                        "description": "A conversation turn that includes tool calls."
+                      }
+                    ],
+                    "multiSelect": false
+                  }
+                ]
+              },
+              "schema": {
+                "toolName": "AskUserQuestion"
+              },
+              "questions": [
+                {
+                  "question": "Which capture scenario do you like most?",
+                  "header": "Scenario",
+                  "options": [
+                    {
+                      "value": "plain",
+                      "label": "plain",
+                      "description": "A plain conversation turn with no tool calls."
+                    },
+                    {
+                      "value": "tool",
+                      "label": "tool",
+                      "description": "A conversation turn that includes tool calls."
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-20",
+        "logicalFrameOrdinal": 20,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 82,
+          "toSeq": 89,
+          "sentAt": 1795080710518,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "call_30ea2a1be3434eb59a2349cd",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080709705,
+                  "createdAtSeq": 70,
+                  "kind": "toolCall",
+                  "assistantResponseId": "msg_mwncpbpj_9f8ff41a-c078-4bd3-8cd7-8341b7d917a9",
+                  "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+                  "toolName": "AskUserQuestion",
+                  "status": "running",
+                  "inputText": "{\"questions\":[{\"header\":\"Scenario\",\"multiSelect\":false,\"options\":[{\"description\":\"A plain conversation turn with no tool calls.\",\"label\":\"plain\"},{\"description\":\"A conversation turn that includes tool calls.\",\"label\":\"tool\"}],\"question\":\"Which capture scenario do you like most?\"}]}",
+                  "input": {
+                    "questions": [
+                      {
+                        "header": "Scenario",
+                        "multiSelect": false,
+                        "options": [
+                          {
+                            "description": "A plain conversation turn with no tool calls.",
+                            "label": "plain"
+                          },
+                          {
+                            "description": "A conversation turn that includes tool calls.",
+                            "label": "tool"
+                          }
+                        ],
+                        "question": "Which capture scenario do you like most?"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 10,
+                  "pendingInteractions": []
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "call_30ea2a1be3434eb59a2349cd",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080709705,
+                  "createdAtSeq": 70,
+                  "kind": "toolCall",
+                  "assistantResponseId": "msg_mwncpbpj_9f8ff41a-c078-4bd3-8cd7-8341b7d917a9",
+                  "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+                  "toolName": "AskUserQuestion",
+                  "status": "running",
+                  "inputText": "{\"questions\":[{\"header\":\"Scenario\",\"multiSelect\":false,\"options\":[{\"description\":\"A plain conversation turn with no tool calls.\",\"label\":\"plain\"},{\"description\":\"A conversation turn that includes tool calls.\",\"label\":\"tool\"}],\"question\":\"Which capture scenario do you like most?\"}]}",
+                  "input": {
+                    "questions": [
+                      {
+                        "header": "Scenario",
+                        "multiSelect": false,
+                        "options": [
+                          {
+                            "description": "A plain conversation turn with no tool calls.",
+                            "label": "plain"
+                          },
+                          {
+                            "description": "A conversation turn that includes tool calls.",
+                            "label": "tool"
+                          }
+                        ],
+                        "question": "Which capture scenario do you like most?"
+                      }
+                    ]
+                  },
+                  "startedAt": 1795080710484
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 11
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 4,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "call_30ea2a1be3434eb59a2349cd",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080709705,
+                  "createdAtSeq": 70,
+                  "kind": "toolCall",
+                  "assistantResponseId": "msg_mwncpbpj_9f8ff41a-c078-4bd3-8cd7-8341b7d917a9",
+                  "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+                  "toolName": "AskUserQuestion",
+                  "status": "error",
+                  "inputText": "{\"questions\":[{\"header\":\"Scenario\",\"multiSelect\":false,\"options\":[{\"description\":\"A plain conversation turn with no tool calls.\",\"label\":\"plain\"},{\"description\":\"A conversation turn that includes tool calls.\",\"label\":\"tool\"}],\"question\":\"Which capture scenario do you like most?\"}]}",
+                  "input": {
+                    "questions": [
+                      {
+                        "header": "Scenario",
+                        "multiSelect": false,
+                        "options": [
+                          {
+                            "description": "A plain conversation turn with no tool calls.",
+                            "label": "plain"
+                          },
+                          {
+                            "description": "A conversation turn that includes tool calls.",
+                            "label": "tool"
+                          }
+                        ],
+                        "question": "Which capture scenario do you like most?"
+                      }
+                    ]
+                  },
+                  "error": {
+                    "code": "tool_execution_failed",
+                    "message": "AskUserQuestion requires user answers before execution"
+                  },
+                  "startedAt": 1795080710484,
+                  "endedAt": 1795080710491
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 12
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+            "title": "AskUserQuestion",
+            "name": "AskUserQuestion",
+            "kind": "other",
+            "status": "in_progress",
+            "rawInput": {
+              "questions": [
+                {
+                  "header": "Scenario",
+                  "multiSelect": false,
+                  "options": [
+                    {
+                      "description": "A plain conversation turn with no tool calls.",
+                      "label": "plain"
+                    },
+                    {
+                      "description": "A conversation turn that includes tool calls.",
+                      "label": "tool"
+                    }
+                  ],
+                  "question": "Which capture scenario do you like most?"
+                }
+              ]
+            }
+          },
+          {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+            "title": "AskUserQuestion",
+            "name": "AskUserQuestion",
+            "kind": "other",
+            "status": "in_progress",
+            "rawInput": {
+              "questions": [
+                {
+                  "header": "Scenario",
+                  "multiSelect": false,
+                  "options": [
+                    {
+                      "description": "A plain conversation turn with no tool calls.",
+                      "label": "plain"
+                    },
+                    {
+                      "description": "A conversation turn that includes tool calls.",
+                      "label": "tool"
+                    }
+                  ],
+                  "question": "Which capture scenario do you like most?"
+                }
+              ]
+            }
+          },
+          {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_30ea2a1be3434eb59a2349cd",
+            "title": "AskUserQuestion",
+            "name": "AskUserQuestion",
+            "kind": "other",
+            "status": "failed",
+            "rawInput": {
+              "questions": [
+                {
+                  "header": "Scenario",
+                  "multiSelect": false,
+                  "options": [
+                    {
+                      "description": "A plain conversation turn with no tool calls.",
+                      "label": "plain"
+                    },
+                    {
+                      "description": "A conversation turn that includes tool calls.",
+                      "label": "tool"
+                    }
+                  ],
+                  "question": "Which capture scenario do you like most?"
+                }
+              ]
+            },
+            "rawOutput": {
+              "error": {
+                "code": "tool_execution_failed",
+                "message": "AskUserQuestion requires user answers before execution"
+              }
+            },
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": "AskUserQuestion requires user answers before execution"
+                }
+              }
+            ]
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-21",
+        "logicalFrameOrdinal": 21,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 89,
+          "toSeq": 90,
+          "sentAt": 1795080710567,
+          "payload": {
+            "kind": "deltas",
+            "deltas": []
+          }
+        }
+      },
+      "oracle": {
+        "updates": [],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-22",
+        "logicalFrameOrdinal": 22,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 90,
+          "toSeq": 115,
+          "sentAt": 1795080715048,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 5,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "msg_mwncpgtn_b773540d-b84b-436f-9356-01ce134a5fef",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080715017,
+                  "createdAtSeq": 92,
+                  "kind": "reasoning",
+                  "assistantResponseId": "msg_mwncpgtn_b773540d-b84b-436f-9356-01ce134a5fef",
+                  "text": "",
+                  "state": "streaming"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 13
+                }
+              },
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": "The tool returned an error saying it requires user answers before execution. This likely means the question was presented to the user"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": "The tool returned an error saying it requires user answers before execution. This likely means the question was presented to the user"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-23",
+        "logicalFrameOrdinal": 23,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 115,
+          "toSeq": 116,
+          "sentAt": 1795080715100,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " and"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " and"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-24",
+        "logicalFrameOrdinal": 24,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 116,
+          "toSeq": 120,
+          "sentAt": 1795080715132,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " I need to wait"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " I need to wait"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-25",
+        "logicalFrameOrdinal": 25,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 120,
+          "toSeq": 123,
+          "sentAt": 1795080715180,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": ", or the"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": ", or the"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-26",
+        "logicalFrameOrdinal": 26,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 123,
+          "toSeq": 125,
+          "sentAt": 1795080715230,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " question was"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " question was"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-27",
+        "logicalFrameOrdinal": 27,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 125,
+          "toSeq": 129,
+          "sentAt": 1795080715264,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " cancelled. Actually,"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " cancelled. Actually,"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-28",
+        "logicalFrameOrdinal": 28,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 129,
+          "toSeq": 135,
+          "sentAt": 1795080715299,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " this error typically means the user"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " this error typically means the user"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-29",
+        "logicalFrameOrdinal": 29,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 135,
+          "toSeq": 141,
+          "sentAt": 1795080715332,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " hasn't answered yet or the"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " hasn't answered yet or the"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-30",
+        "logicalFrameOrdinal": 30,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 141,
+          "toSeq": 143,
+          "sentAt": 1795080715369,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " question was"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " question was"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-31",
+        "logicalFrameOrdinal": 31,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 143,
+          "toSeq": 145,
+          "sentAt": 1795080715418,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " dismissed."
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " dismissed."
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-32",
+        "logicalFrameOrdinal": 32,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 145,
+          "toSeq": 147,
+          "sentAt": 1795080715454,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " Since the"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " Since the"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-33",
+        "logicalFrameOrdinal": 33,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 147,
+          "toSeq": 148,
+          "sentAt": 1795080715510,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " error"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " error"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-34",
+        "logicalFrameOrdinal": 34,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 148,
+          "toSeq": 151,
+          "sentAt": 1795080715552,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " indicates the tool"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " indicates the tool"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-35",
+        "logicalFrameOrdinal": 35,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 151,
+          "toSeq": 152,
+          "sentAt": 1795080715590,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " call"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " call"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-36",
+        "logicalFrameOrdinal": 36,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 152,
+          "toSeq": 155,
+          "sentAt": 1795080715634,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " couldn't complete"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " couldn't complete"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-37",
+        "logicalFrameOrdinal": 37,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 155,
+          "toSeq": 159,
+          "sentAt": 1795080715675,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " without user answers,"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " without user answers,"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-38",
+        "logicalFrameOrdinal": 38,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 159,
+          "toSeq": 160,
+          "sentAt": 1795080715744,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " the"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " the"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-39",
+        "logicalFrameOrdinal": 39,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 160,
+          "toSeq": 161,
+          "sentAt": 1795080715803,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " question"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " question"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-40",
+        "logicalFrameOrdinal": 40,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 161,
+          "toSeq": 164,
+          "sentAt": 1795080715851,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " may have been"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " may have been"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-41",
+        "logicalFrameOrdinal": 41,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 164,
+          "toSeq": 165,
+          "sentAt": 1795080715886,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " shown"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " shown"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-42",
+        "logicalFrameOrdinal": 42,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 165,
+          "toSeq": 167,
+          "sentAt": 1795080715963,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " and dismissed"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " and dismissed"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-43",
+        "logicalFrameOrdinal": 43,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 167,
+          "toSeq": 168,
+          "sentAt": 1795080716030,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " without"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " without"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-44",
+        "logicalFrameOrdinal": 44,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 168,
+          "toSeq": 171,
+          "sentAt": 1795080716071,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " an answer.\n\n"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " an answer.\n\n"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-45",
+        "logicalFrameOrdinal": 45,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 171,
+          "toSeq": 172,
+          "sentAt": 1795080716124,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": "I"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": "I"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-46",
+        "logicalFrameOrdinal": 46,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 172,
+          "toSeq": 174,
+          "sentAt": 1795080716170,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " should just"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " should just"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-47",
+        "logicalFrameOrdinal": 47,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 174,
+          "toSeq": 176,
+          "sentAt": 1795080716225,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " report that"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " report that"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-48",
+        "logicalFrameOrdinal": 48,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 176,
+          "toSeq": 180,
+          "sentAt": 1795080716262,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " I asked the question"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " I asked the question"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-49",
+        "logicalFrameOrdinal": 49,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 180,
+          "toSeq": 182,
+          "sentAt": 1795080716387,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": ", or"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": ", or"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-50",
+        "logicalFrameOrdinal": 50,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 182,
+          "toSeq": 184,
+          "sentAt": 1795080716497,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " note the"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " note the"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-51",
+        "logicalFrameOrdinal": 51,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 184,
+          "toSeq": 190,
+          "sentAt": 1795080716577,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " result. The user said \""
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " result. The user said \""
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-52",
+        "logicalFrameOrdinal": 52,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 190,
+          "toSeq": 198,
+          "sentAt": 1795080716633,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": "Do not do anything else.\" So I"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": "Do not do anything else.\" So I"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-53",
+        "logicalFrameOrdinal": 53,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 198,
+          "toSeq": 200,
+          "sentAt": 1795080716710,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": "'ll just"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": "'ll just"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-54",
+        "logicalFrameOrdinal": 54,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 200,
+          "toSeq": 203,
+          "sentAt": 1795080716755,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 5,
+                "path": "text",
+                "append": " briefly note the"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " briefly note the"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-55",
+        "logicalFrameOrdinal": 55,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 203,
+          "toSeq": 207,
+          "sentAt": 1795080716792,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 5,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "msg_mwncpgtn_b773540d-b84b-436f-9356-01ce134a5fef",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080715017,
+                  "createdAtSeq": 92,
+                  "kind": "reasoning",
+                  "assistantResponseId": "msg_mwncpgtn_b773540d-b84b-436f-9356-01ce134a5fef",
+                  "text": "The tool returned an error saying it requires user answers before execution. This likely means the question was presented to the user and I need to wait, or the question was cancelled. Actually, this error typically means the user hasn't answered yet or the question was dismissed. Since the error indicates the tool call couldn't complete without user answers, the question may have been shown and dismissed without an answer.\n\nI should just report that I asked the question, or note the result. The user said \"Do not do anything else.\" So I'll just briefly note the state.",
+                  "state": "complete"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 14
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {
+              "type": "text",
+              "text": " state."
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-56",
+        "logicalFrameOrdinal": 56,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 207,
+          "toSeq": 213,
+          "sentAt": 1795080716850,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.appended",
+                "row": {
+                  "rowId": 6,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "msg_mwncpgtn_b773540d-b84b-436f-9356-01ce134a5fef",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080716820,
+                  "createdAtSeq": 208,
+                  "kind": "assistantText",
+                  "assistantResponseId": "msg_mwncpgtn_b773540d-b84b-436f-9356-01ce134a5fef",
+                  "text": "",
+                  "state": "streaming"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 15
+                }
+              },
+              {
+                "op": "row.delta",
+                "rowId": 6,
+                "path": "text",
+                "append": "I asked the question with"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "I asked the question with"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-57",
+        "logicalFrameOrdinal": 57,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 213,
+          "toSeq": 216,
+          "sentAt": 1795080716903,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 6,
+                "path": "text",
+                "append": " the two options"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": " the two options"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-58",
+        "logicalFrameOrdinal": 58,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 216,
+          "toSeq": 217,
+          "sentAt": 1795080716963,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 6,
+                "path": "text",
+                "append": " (\""
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": " (\""
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-59",
+        "logicalFrameOrdinal": 59,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 217,
+          "toSeq": 223,
+          "sentAt": 1795080717016,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 6,
+                "path": "text",
+                "append": "plain\" and \"tool\"),"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "plain\" and \"tool\"),"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-60",
+        "logicalFrameOrdinal": 60,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 223,
+          "toSeq": 225,
+          "sentAt": 1795080717066,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 6,
+                "path": "text",
+                "append": " but no"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": " but no"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-61",
+        "logicalFrameOrdinal": 61,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 225,
+          "toSeq": 227,
+          "sentAt": 1795080717098,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 6,
+                "path": "text",
+                "append": " answer came"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": " answer came"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-62",
+        "logicalFrameOrdinal": 62,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 227,
+          "toSeq": 229,
+          "sentAt": 1795080717154,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 6,
+                "path": "text",
+                "append": " back —"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": " back —"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-63",
+        "logicalFrameOrdinal": 63,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 229,
+          "toSeq": 231,
+          "sentAt": 1795080717209,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 6,
+                "path": "text",
+                "append": " the question"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": " the question"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-64",
+        "logicalFrameOrdinal": 64,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 231,
+          "toSeq": 234,
+          "sentAt": 1795080717256,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 6,
+                "path": "text",
+                "append": " was dismissed before"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": " was dismissed before"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-65",
+        "logicalFrameOrdinal": 65,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 234,
+          "toSeq": 235,
+          "sentAt": 1795080717382,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 6,
+                "path": "text",
+                "append": " a"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": " a"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-66",
+        "logicalFrameOrdinal": 66,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 235,
+          "toSeq": 240,
+          "sentAt": 1795080717515,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 6,
+                "path": "text",
+                "append": " selection was made. Let"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": " selection was made. Let"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-67",
+        "logicalFrameOrdinal": 67,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 240,
+          "toSeq": 243,
+          "sentAt": 1795080717558,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 6,
+                "path": "text",
+                "append": " me know which"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": " me know which"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-68",
+        "logicalFrameOrdinal": 68,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 243,
+          "toSeq": 248,
+          "sentAt": 1795080717606,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 6,
+                "path": "text",
+                "append": " scenario you'd like,"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": " scenario you'd like,"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-69",
+        "logicalFrameOrdinal": 69,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 248,
+          "toSeq": 253,
+          "sentAt": 1795080717649,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.delta",
+                "rowId": 6,
+                "path": "text",
+                "append": " or I can re-"
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": " or I can re-"
+            }
+          }
+        ],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": true,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-70",
+        "logicalFrameOrdinal": 70,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 253,
+          "toSeq": 260,
+          "sentAt": 1795080717741,
+          "payload": {
+            "kind": "deltas",
+            "deltas": [
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 6,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "msg_mwncpgtn_b773540d-b84b-436f-9356-01ce134a5fef",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080716820,
+                  "createdAtSeq": 208,
+                  "kind": "assistantText",
+                  "assistantResponseId": "msg_mwncpgtn_b773540d-b84b-436f-9356-01ce134a5fef",
+                  "text": "I asked the question with the two options (\"plain\" and \"tool\"), but no answer came back — the question was dismissed before a selection was made. Let me know which scenario you'd like, or I can re-ask.",
+                  "state": "complete"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 16
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 1,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080703244,
+                  "createdAtSeq": 2,
+                  "kind": "turnHeader",
+                  "origin": "userInput",
+                  "executionKind": "agent",
+                  "sourceCommandId": "INPUT_ID",
+                  "state": "running",
+                  "startedAt": 1795080703244,
+                  "outputTokens": 302
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 17,
+                  "usage": {
+                    "contextWindow": {
+                      "usedTokens": 31097,
+                      "maxTokens": 1000000,
+                      "autoCompactThresholdTokens": null,
+                      "cache": {
+                        "inputTokens": 30935,
+                        "cacheReadTokens": 30720,
+                        "cacheWriteTokens": 0,
+                        "latestHitRate": 0.9930499434297722,
+                        "hitRateRequestCount": 2,
+                        "totalInputTokens": 61703,
+                        "totalCacheReadTokens": 46016,
+                        "totalCacheWriteTokens": 0,
+                        "hitRate": 0.745766008135747
+                      },
+                      "breakdown": [
+                        {
+                          "source": "system_prompt",
+                          "chars": 3010
+                        },
+                        {
+                          "source": "meta_user_context",
+                          "chars": 13081
+                        },
+                        {
+                          "source": "skills",
+                          "chars": 9611
+                        },
+                        {
+                          "source": "system_tool_schemas",
+                          "chars": 141100
+                        },
+                        {
+                          "source": "mcp_tool_schemas",
+                          "chars": 55824
+                        },
+                        {
+                          "source": "messages",
+                          "chars": 1201
+                        }
+                      ]
+                    },
+                    "cumulative": {
+                      "inputTokens": 61703,
+                      "outputTokens": 302,
+                      "cacheReadTokens": 46016,
+                      "cacheWriteTokens": 0
+                    }
+                  }
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 1,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080703244,
+                  "createdAtSeq": 2,
+                  "kind": "turnHeader",
+                  "origin": "userInput",
+                  "executionKind": "agent",
+                  "sourceCommandId": "INPUT_ID",
+                  "historyRoundCount": 2,
+                  "state": "completedSuccess",
+                  "startedAt": 1795080703244,
+                  "endedAt": 1795080717715,
+                  "activeMs": 14559,
+                  "outputTokens": 302,
+                  "modelDurationMs": 0,
+                  "toolDurationMs": 7,
+                  "otherDurationMs": 14552
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 6,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "msg_mwncpgtn_b773540d-b84b-436f-9356-01ce134a5fef",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080716820,
+                  "createdAtSeq": 208,
+                  "actions": {
+                    "canFork": true
+                  },
+                  "kind": "assistantText",
+                  "assistantResponseId": "msg_mwncpgtn_b773540d-b84b-436f-9356-01ce134a5fef",
+                  "text": "I asked the question with the two options (\"plain\" and \"tool\"), but no answer came back — the question was dismissed before a selection was made. Let me know which scenario you'd like, or I can re-ask.",
+                  "state": "complete"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "control": {
+                    "phase": "completedSuccess",
+                    "sessionEnded": true,
+                    "canStop": false,
+                    "stopState": "idle",
+                    "stopTargetKind": "unknown",
+                    "activeWorks": [],
+                    "lastError": null,
+                    "apiRetry": null
+                  },
+                  "inputRouting": {
+                    "mode": "startNow"
+                  }
+                }
+              },
+              {
+                "op": "row.upserted",
+                "row": {
+                  "rowId": 6,
+                  "turnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "entityId": "msg_mwncpgtn_b773540d-b84b-436f-9356-01ce134a5fef",
+                  "productTurnId": "msg_mwncpb7w_1de88760-d82b-4652-a695-9d715a4c15d2",
+                  "visibility": "visible",
+                  "createdAt": 1795080716820,
+                  "createdAtSeq": 208,
+                  "actions": {
+                    "canFork": true,
+                    "canRetry": true
+                  },
+                  "kind": "assistantText",
+                  "assistantResponseId": "msg_mwncpgtn_b773540d-b84b-436f-9356-01ce134a5fef",
+                  "text": "I asked the question with the two options (\"plain\" and \"tool\"), but no answer came back — the question was dismissed before a selection was made. Let me know which scenario you'd like, or I can re-ask.",
+                  "state": "complete"
+                }
+              },
+              {
+                "op": "state.updated",
+                "patch": {
+                  "revision": 18,
+                  "availability": {
+                    "fork": {
+                      "allowed": true
+                    },
+                    "compact": {
+                      "allowed": true
+                    },
+                    "switchModelConfig": {
+                      "allowed": true
+                    },
+                    "setFollowupMode": {
+                      "allowed": true
+                    },
+                    "queueEdit": {
+                      "allowed": true
+                    },
+                    "sendQueuedNow": {
+                      "allowed": false,
+                      "reasonCode": "sendQueuedNowRequiresRunning"
+                    },
+                    "pauseGoal": {
+                      "allowed": false,
+                      "reasonCode": "noGoalToPause"
+                    },
+                    "resumeGoal": {
+                      "allowed": false,
+                      "reasonCode": "noGoalToResume"
+                    },
+                    "rewindFiles": {
+                      "allowed": true
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "oracle": {
+        "updates": [
+          {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "ask."
+            }
+          },
+          {
+            "sessionUpdate": "usage_update",
+            "used": 31097,
+            "size": 1000000
+          }
+        ],
+        "turnComplete": true,
+        "assistantSettled": true,
+        "hasActiveWork": false,
+        "turnFailed": false,
+        "turnCancelled": false,
+        "usage": {
+          "totalTokens": 62005,
+          "inputTokens": 61703,
+          "outputTokens": 302,
+          "cachedReadTokens": 46016,
+          "cachedWriteTokens": 0
+        }
+      }
+    },
+    {
+      "payload": {
+        "wireVersion": 3,
+        "kind": "complete",
+        "deliveryKind": "online",
+        "logicalFrameId": "sub-mwncpb25-blnhppos-1-lf-71",
+        "logicalFrameOrdinal": 71,
+        "topic": "conversation/SESSION_ID",
+        "subscriptionId": "sub-mwncpb25-blnhppos-1",
+        "frame": {
+          "topic": "conversation/SESSION_ID",
+          "subscriptionId": "sub-mwncpb25-blnhppos-1",
+          "fromSeq": 260,
+          "toSeq": 261,
+          "sentAt": 1795080717774,
+          "payload": {
+            "kind": "deltas",
+            "deltas": []
+          }
+        }
+      },
+      "oracle": {
+        "updates": [],
+        "turnComplete": false,
+        "assistantSettled": false,
+        "hasActiveWork": false,
+        "turnFailed": false,
+        "turnCancelled": false
+      }
+    }
+  ],
+  "lifecycle": [],
+  "terminalReason": "complete",
+  "stopReason": "end_turn"
+}
