@@ -122,7 +122,9 @@ export class Daemon extends Context.Service<
       const readStatus = Effect.fn("Daemon.readStatus")(function* (rootDir: string) {
         const text = yield* readFile(path.join(rootDir, "run", "status.json"));
         if (text === undefined) return undefined;
-        const parsed = yield* Effect.try(() => JSON.parse(text) as unknown).pipe(Effect.result);
+        const parsed = yield* Effect.try({ try: () => JSON.parse(text) as unknown, catch: (cause) => cause }).pipe(
+          Effect.result,
+        );
         if (!Result.isSuccess(parsed)) return undefined;
         const result = yield* Effect.result(Schema.decodeUnknownEffect(ServerStatusSchema)(parsed.success));
         return Result.isSuccess(result) ? result.success : undefined;

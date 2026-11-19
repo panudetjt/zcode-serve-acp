@@ -66,12 +66,13 @@ const Main = Effect.gen(function* () {
         const deferred = Deferred.makeUnsafe<unknown, ClientRequestError>();
         pending.set(id, deferred);
         return yield* Deferred.await(deferred).pipe(
-          Effect.timeout(CLIENT_REQUEST_TIMEOUT_MS),
-          Effect.catchTag("TimeoutError", () =>
-            Effect.fail(
-              new ClientRequestError({ message: `client request ${method} timed out (client never answered)` }),
-            ),
-          ),
+          Effect.timeoutOrElse({
+            duration: CLIENT_REQUEST_TIMEOUT_MS,
+            orElse: () =>
+              Effect.fail(
+                new ClientRequestError({ message: `client request ${method} timed out (client never answered)` }),
+              ),
+          }),
           Effect.ensuring(Effect.sync(() => pending.delete(id))),
         );
       }),

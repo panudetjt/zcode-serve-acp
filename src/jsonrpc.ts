@@ -9,7 +9,7 @@
 import { Effect, Result, Schema } from "effect";
 import { DecodeError } from "./errors.ts";
 
-export const JsonRpcId = Schema.Union([Schema.Number, Schema.String]);
+export const JsonRpcId = Schema.Union([Schema.Finite, Schema.String]);
 export type JsonRpcId = typeof JsonRpcId.Type;
 
 export const JsonRpcErrorObject = Schema.Struct({
@@ -62,7 +62,7 @@ const decodeMessage = Schema.decodeUnknownEffect(JsonRpcMessage, {
 
 export const parseLine = (line: string): Effect.Effect<ParseOutcome, DecodeError> =>
   Effect.gen(function* () {
-    const parsed = yield* Effect.try(() => JSON.parse(line)).pipe(Effect.result);
+    const parsed = yield* Effect.try({ try: () => JSON.parse(line), catch: (cause) => cause }).pipe(Effect.result);
     if (!Result.isSuccess(parsed)) return { _tag: "Malformed" };
     const raw: unknown = parsed.success;
     const msg = yield* decodeMessage(raw).pipe(

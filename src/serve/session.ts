@@ -18,7 +18,6 @@ import { Clock, Context, Effect, Exit, Layer, Option, Ref, Schema } from "effect
 import * as ScopeType from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import { ChannelClosed, RpcError, RpcTimeout, SessionError, renderError, tolerate } from "../errors.ts";
-import { envDataOverride, envHome } from "../config.ts";
 import { Log } from "../log.ts";
 import { ChannelClient, type ServerRequestHandler } from "./channel.ts";
 import { Daemon, type DaemonConnection } from "./daemon.ts";
