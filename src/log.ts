@@ -6,25 +6,17 @@
  * through this service, which writes to stderr only, gated on
  * `ZCODE_SERVE_ACP_DEBUG=1` (verbose) at layer construction.
  */
-import { Context, Effect, Layer, type ReadonlyArray } from "effect";
+import { Context, Effect, Layer } from "effect";
 
-export class Log extends Context.Service<Log, {
+export interface LogShape {
   /** verbose, only when ZCODE_SERVE_ACP_DEBUG=1 */
-  debug: (...parts: ReadonlyArray<unknown>) => Effect.Effect<void>;
+  debug: (...parts: readonly unknown[]) => Effect.Effect<void>;
   /** always emitted on stderr */
-  warn: (...parts: ReadonlyArray<unknown>) => Effect.Effect<void>;
-}>()("zcode-serve-acp/Log") {
-  static readonly layerVerbose: Layer.Layer<Log> = Log.makeLayer(true);
+  warn: (...parts: readonly unknown[]) => Effect.Effect<void>;
+}
 
-  static readonly layerQuiet: Layer.Layer<Log> = Log.makeLayer(false);
-
-  /** Verbose iff ZCODE_SERVE_ACP_DEBUG=1 at layer build time. */
-  static readonly layerFromEnv: Layer.Layer<Log> = Layer.effect(
-    Log,
-    Effect.sync(() => Log.makeService(process.env.ZCODE_SERVE_ACP_DEBUG === "1")),
-  );
-
-  private static makeService = (debug: boolean): Log =>
+export class Log extends Context.Service<Log, LogShape>()("zcode-serve-acp/Log") {
+  static readonly makeService = (debug: boolean): LogShape =>
     Log.of({
       debug: (...parts) =>
         Effect.sync(() => {
@@ -36,6 +28,13 @@ export class Log extends Context.Service<Log, {
         }),
     });
 
-  private static makeLayer = (debug: boolean): Layer.Layer<Log> =>
-    Layer.succeed(Log, Log.makeService(debug));
+  static readonly layerVerbose: Layer.Layer<Log> = Layer.succeed(Log, Log.makeService(true));
+
+  static readonly layerQuiet: Layer.Layer<Log> = Layer.succeed(Log, Log.makeService(false));
+
+  /** Verbose iff ZCODE_SERVE_ACP_DEBUG=1 at layer build time. */
+  static readonly layerFromEnv: Layer.Layer<Log> = Layer.effect(
+    Log,
+    Effect.sync(() => Log.makeService(process.env.ZCODE_SERVE_ACP_DEBUG === "1")),
+  );
 }

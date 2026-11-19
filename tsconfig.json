@@ -1,13 +1,15 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
+    "target": "esnext",
+    "module": "esnext",
     "moduleResolution": "bundler",
     "types": ["bun-types"],
     "strict": true,
+    "allowImportingTsExtensions": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "verbatimModuleSyntax": false
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.mjs"]
+  "exclude": ["repos", "dist", "node_modules"]
 }

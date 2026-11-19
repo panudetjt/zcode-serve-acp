@@ -6,13 +6,37 @@
  * serializes any of these to the ACP client as code -32000 with the message,
  * preserving the wire contract.
  */
-import { Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
+
+/**
+ * Run an effect, logging (optionally) and swallowing any failure.
+ *
+ * v4.1.4 has no catch-all combinator with usable data-last typing, so this
+ * helper — built on `Effect.result` — is THE project-wide pattern for the
+ * pre-rewrite "try/catch-and-continue" sites (best-effort workspace init,
+ * skills listing, interaction fallbacks, …). Best-effort steps must stay
+ * best-effort: a failure here never aborts the surrounding flow.
+ */
+export const tolerate = <A, E>(
+  effect: Effect.Effect<A, E>,
+  onFail?: (cause: E) => Effect.Effect<void, unknown>,
+): Effect.Effect<A | undefined> =>
+  Effect.gen(function* () {
+    const result = yield* Effect.result(effect);
+    if (!Result.isSuccess(result)) {
+      if (onFail !== undefined) {
+        yield* Effect.orElseSucceed(onFail(result.failure), () => undefined);
+      }
+      return undefined;
+    }
+    return result.success;
+  });
 
 export class DecodeError extends Schema.TaggedError<DecodeError>()("DecodeError", {
   /** what boundary failed to decode, e.g. "wire/frame" or "acp/params" */
   location: Schema.String,
   message: Schema.String,
-  cause: Schema.optionalWith(Schema.Defect(), { as: "Option" }),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 export class DiscoveryError extends Schema.TaggedError<DiscoveryError>()("DiscoveryError", {

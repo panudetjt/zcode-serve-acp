@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { FrameTranslator } from "../src/translate.ts";
+import { FrameTranslator } from "../src/translate/translator.ts";
 
 describe("FrameTranslator", () => {
   it("translates streaming assistant text and settlement", () => {
     const translator = new FrameTranslator(() => {});
-    
+
     // Chunk 1
     const res1 = translator.fold({
       payload: {
@@ -18,7 +18,7 @@ describe("FrameTranslator", () => {
       },
     });
     expect(res1.updates).toHaveLength(1);
-    expect(res1.updates[0]).toEqual({
+    expect(res1.updates[0]!).toEqual({
       sessionUpdate: "agent_message_chunk",
       content: { type: "text", text: "Hello" },
     });
@@ -38,7 +38,7 @@ describe("FrameTranslator", () => {
       },
     });
     expect(res2.updates).toHaveLength(1);
-    expect(res2.updates[0]).toEqual({
+    expect(res2.updates[0]!).toEqual({
       sessionUpdate: "agent_message_chunk",
       content: { type: "text", text: " world!" },
     });
@@ -60,7 +60,7 @@ describe("FrameTranslator", () => {
       },
     });
     expect(res.updates).toHaveLength(1);
-    expect(res.updates[0]).toEqual({
+    expect(res.updates[0]!).toEqual({
       sessionUpdate: "agent_message_chunk",
       content: { type: "text", text: "Chunk text" },
     });
@@ -85,7 +85,7 @@ describe("FrameTranslator", () => {
       },
     });
     expect(res.updates).toHaveLength(1);
-    expect(res.updates[0]).toEqual({
+    expect(res.updates[0]!).toEqual({
       sessionUpdate: "agent_thought_chunk",
       content: { type: "text", text: "Thinking through the problem..." },
     });
@@ -149,9 +149,9 @@ describe("FrameTranslator", () => {
     });
 
     expect(res1.updates).toHaveLength(1);
-    expect(res1.updates[0].sessionUpdate).toBe("tool_call");
-    expect(res1.updates[0].title).toBe("Subagent: general-purpose");
-    expect(res1.updates[0].content).toEqual([{ type: "content", content: { type: "text", text: "Investigating repo dependencies" } }]);
+    expect(res1.updates[0]!.sessionUpdate).toBe("tool_call");
+    expect(res1.updates[0]!.title).toBe("Subagent: general-purpose");
+    expect(res1.updates[0]!.content).toEqual([{ type: "content", content: { type: "text", text: "Investigating repo dependencies" } }]);
     expect(res1.hasActiveWork).toBe(true);
 
     // Subagent progress update
@@ -173,9 +173,9 @@ describe("FrameTranslator", () => {
       },
     });
     expect(res2.updates).toHaveLength(1);
-    expect(res2.updates[0].sessionUpdate).toBe("tool_call_update");
-    expect(res2.updates[0].status).toBe("in_progress");
-    expect(res2.updates[0].content).toEqual([{ type: "content", content: { type: "text", text: "Found node_modules in main checkout" } }]);
+    expect(res2.updates[0]!.sessionUpdate).toBe("tool_call_update");
+    expect(res2.updates[0]!.status).toBe("in_progress");
+    expect(res2.updates[0]!.content).toEqual([{ type: "content", content: { type: "text", text: "Found node_modules in main checkout" } }]);
     expect(res2.hasActiveWork).toBe(true);
 
     // Subagent completed
@@ -197,8 +197,8 @@ describe("FrameTranslator", () => {
       },
     });
     expect(res3.updates).toHaveLength(1);
-    expect(res3.updates[0].sessionUpdate).toBe("tool_call_update");
-    expect(res3.updates[0].status).toBe("completed");
+    expect(res3.updates[0]!.sessionUpdate).toBe("tool_call_update");
+    expect(res3.updates[0]!.status).toBe("completed");
     expect(res3.hasActiveWork).toBe(false);
   });
 
@@ -219,7 +219,7 @@ describe("FrameTranslator", () => {
               toolCallId: "call_abc123",
               toolName: "Bash",
               status: "inputStreaming",
-              inputText: "{\"command\":\"git log --oneline -15\"}",
+              inputText: '{"command":"git log --oneline -15"}',
               input: { command: "git log --oneline -15" },
             },
           },
@@ -228,13 +228,13 @@ describe("FrameTranslator", () => {
     });
 
     expect(res1.updates).toHaveLength(1);
-    expect(res1.updates[0].sessionUpdate).toBe("tool_call");
-    expect(res1.updates[0].toolCallId).toBe("call_abc123");
-    expect(res1.updates[0].name).toBe("Bash");
-    expect(res1.updates[0].kind).toBe("execute");
-    expect(res1.updates[0].title).toBe("git log --oneline -15");
-    expect(res1.updates[0].status).toBe("pending");
-    expect(res1.updates[0].rawInput).toEqual({ command: "git log --oneline -15" });
+    expect(res1.updates[0]!.sessionUpdate).toBe("tool_call");
+    expect(res1.updates[0]!.toolCallId).toBe("call_abc123");
+    expect(res1.updates[0]!.name).toBe("Bash");
+    expect(res1.updates[0]!.kind).toBe("execute");
+    expect(res1.updates[0]!.title).toBe("git log --oneline -15");
+    expect(res1.updates[0]!.status).toBe("pending");
+    expect(res1.updates[0]!.rawInput).toEqual({ command: "git log --oneline -15" });
     expect(res1.hasActiveWork).toBe(true);
 
     // 2. Tool call running
@@ -258,8 +258,8 @@ describe("FrameTranslator", () => {
     });
 
     expect(res2.updates).toHaveLength(1);
-    expect(res2.updates[0].sessionUpdate).toBe("tool_call_update");
-    expect(res2.updates[0].status).toBe("in_progress");
+    expect(res2.updates[0]!.sessionUpdate).toBe("tool_call_update");
+    expect(res2.updates[0]!.status).toBe("in_progress");
     expect(res2.hasActiveWork).toBe(true);
 
     // 3. Tool call completed with output
@@ -284,9 +284,9 @@ describe("FrameTranslator", () => {
     });
 
     expect(res3.updates).toHaveLength(1);
-    expect(res3.updates[0].sessionUpdate).toBe("tool_call_update");
-    expect(res3.updates[0].status).toBe("completed");
-    expect(res3.updates[0].content).toEqual([
+    expect(res3.updates[0]!.sessionUpdate).toBe("tool_call_update");
+    expect(res3.updates[0]!.status).toBe("completed");
+    expect(res3.updates[0]!.content).toEqual([
       { type: "content", content: { type: "text", text: "ee3706a feat(content-sync)\n1234567 fix" } },
     ]);
   });
@@ -315,8 +315,8 @@ describe("FrameTranslator", () => {
       },
     });
 
-    expect(res.updates[0].title).toBe("[Background] npm run build");
-    expect(res.updates[0]._meta).toEqual({ backgrounded: true, workId: "work_999" });
+    expect(res.updates[0]!.title).toBe("[Background] npm run build");
+    expect(res.updates[0]!._meta).toEqual({ backgrounded: true, workId: "work_999" });
     expect(res.hasActiveWork).toBe(true);
   });
 
@@ -408,11 +408,11 @@ describe("FrameTranslator", () => {
     });
 
     expect(res1.updates).toHaveLength(1);
-    expect(res1.updates[0].sessionUpdate).toBe("tool_call_update");
-    expect(res1.updates[0].toolCallId).toBe("call_stream_1");
-    expect(res1.updates[0].status).toBe("in_progress");
-    expect(res1.updates[0].rawOutput).toEqual({ text: "PASS test/a.test.ts\n" });
-    expect(res1.updates[0].content).toEqual([
+    expect(res1.updates[0]!.sessionUpdate).toBe("tool_call_update");
+    expect(res1.updates[0]!.toolCallId).toBe("call_stream_1");
+    expect(res1.updates[0]!.status).toBe("in_progress");
+    expect(res1.updates[0]!.rawOutput).toEqual({ text: "PASS test/a.test.ts\n" });
+    expect(res1.updates[0]!.content).toEqual([
       { type: "content", content: { type: "text", text: "PASS test/a.test.ts\n" } },
     ]);
 
@@ -432,10 +432,10 @@ describe("FrameTranslator", () => {
     });
 
     expect(res2.updates).toHaveLength(1);
-    expect(res2.updates[0].sessionUpdate).toBe("tool_call_update");
-    expect(res2.updates[0].toolCallId).toBe("call_stream_1");
-    expect(res2.updates[0].rawOutput).toEqual({ text: "PASS test/a.test.ts\nPASS test/b.test.ts\n" });
-    expect(res2.updates[0].content).toEqual([
+    expect(res2.updates[0]!.sessionUpdate).toBe("tool_call_update");
+    expect(res2.updates[0]!.toolCallId).toBe("call_stream_1");
+    expect(res2.updates[0]!.rawOutput).toEqual({ text: "PASS test/a.test.ts\nPASS test/b.test.ts\n" });
+    expect(res2.updates[0]!.content).toEqual([
       { type: "content", content: { type: "text", text: "PASS test/a.test.ts\nPASS test/b.test.ts\n" } },
     ]);
 
@@ -459,9 +459,9 @@ describe("FrameTranslator", () => {
     });
 
     expect(res3.updates).toHaveLength(1);
-    expect(res3.updates[0].sessionUpdate).toBe("tool_call_update");
-    expect(res3.updates[0].status).toBe("completed");
-    expect(res3.updates[0].content).toEqual([
+    expect(res3.updates[0]!.sessionUpdate).toBe("tool_call_update");
+    expect(res3.updates[0]!.status).toBe("completed");
+    expect(res3.updates[0]!.content).toEqual([
       { type: "content", content: { type: "text", text: "PASS test/a.test.ts\nPASS test/b.test.ts\n" } },
     ]);
   });
@@ -554,8 +554,8 @@ describe("FrameTranslator", () => {
     expect(res1.hasActiveWork).toBe(true);
     expect(res1.pendingInteractions).toBeDefined();
     expect(res1.pendingInteractions).toHaveLength(1);
-    expect(res1.pendingInteractions![0].interactionId).toBe("interact_req_456");
-    expect(res1.pendingInteractions![0].payload?.toolCallId).toBe("call_bash_gh_123");
+    expect(res1.pendingInteractions![0]!.interactionId).toBe("interact_req_456");
+    expect(res1.pendingInteractions![0]!.payload?.toolCallId).toBe("call_bash_gh_123");
 
     // 2. state.updated patch with pendingInteractions
     const res2 = translator.fold({
@@ -588,8 +588,8 @@ describe("FrameTranslator", () => {
 
     expect(res2.hasActiveWork).toBe(true);
     expect(res2.pendingInteractions).toBeDefined();
-    expect(res2.pendingInteractions![0].interactionId).toBe("interact_req_789");
-    expect(res2.pendingInteractions![0].payload?.options).toHaveLength(2);
+    expect(res2.pendingInteractions![0]!.interactionId).toBe("interact_req_789");
+    expect(res2.pendingInteractions![0]!.payload?.options).toHaveLength(2);
   });
 
   it("handles AskUserQuestion toolCall as userInput with extracted questions", () => {
@@ -632,13 +632,12 @@ describe("FrameTranslator", () => {
     expect(res.hasActiveWork).toBe(true);
     expect(res.pendingInteractions).toBeDefined();
     expect(res.pendingInteractions).toHaveLength(1);
-    const item = res.pendingInteractions![0];
+    const item = res.pendingInteractions![0]!;
     expect(item.interactionId).toBe("interact_ask_1");
-    expect(item.kind).toBe("userInput");
-    expect(item.payload?.toolName).toBe("AskUserQuestion");
-    expect(item.payload?.questions).toHaveLength(1);
-    expect(item.payload?.questions![0].header).toBe("Unblock");
-    expect(item.payload?.questions![0].options).toHaveLength(2);
+    expect(item!.kind).toBe("userInput");
+    expect(item!.payload?.toolName).toBe("AskUserQuestion");
+    expect(item!.payload?.questions).toHaveLength(1);
+    expect(item!.payload?.questions![0]!.header).toBe("Unblock");
+    expect(item!.payload?.questions![0]!.options).toHaveLength(2);
   });
 });
-

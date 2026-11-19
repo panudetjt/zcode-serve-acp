@@ -1,208 +1,284 @@
+/**
+ * Channel RPC client over the binary WS protocol — the rewrite of the
+ * pre-rewrite ChannelClient: `call("zcode-agent", method, arg)` mirrors the
+ * upstream ChannelClient (CALL=100 / RESULT=201 / ERROR=202 / EVENT=204).
+ * The daemon sends [200] right after the socket opens; we also answer
+ * server→client requests (interaction asks) on the same socket.
+ *
+ * Hand-rolled pending-promise maps and definite-assignment deferreds are
+ * replaced by `Deferred`s and `Effect.timeout`; the WS dial goes through
+ * `Socket.makeWebSocket` (handshake headers are first-class there), and the
+ * read pump is a scoped fiber whose teardown closes the socket. Event
+ * listeners and server requests run on detached fibers forked from the pump —
+ * the same concurrency shape as the pre-rewrite `void` handlers, but
+ * interruption-safe.
+ */
+import { Deferred, Effect } from "effect";
+import * as ScopeNS from "effect/Scope";
+import * as Socket from "effect/socket/Socket";
+import { ChannelClosed, RpcError, RpcTimeout, renderError, tolerate } from "../errors.ts";
+import type { Log } from "../log.ts";
 import { decodeRpcMessage, encodeRpcMessage, FrameSplitter, MSG } from "./wire.ts";
 
-export type ChannelEventListener = (data: unknown) => void;
-export type ServerRequestHandler = (channelName: string, name: string, arg: unknown) => Promise<unknown>;
+export type ChannelEventListener = (data: unknown) => Effect.Effect<void, unknown>;
+export type ServerRequestHandler = (
+  channelName: string,
+  name: string,
+  arg: unknown,
+) => Effect.Effect<unknown, unknown>;
 
-export interface ChannelClientOptions {
-  url: string;
-  /** e.g. `x-zcode-rpc-host-capability: <capability>` */
-  headers?: Record<string, string>;
-  /** ms to wait for the server's [200] Initialize (default 15_000, per upstream client) */
-  initializeTimeoutMs?: number;
-  /** called for server→client requests (e.g. interaction requests); null = reject */
-  onRequest?: ServerRequestHandler;
-  onClose?: (reason: string) => void;
-  /** debug logger (stderr — stdout is the ACP channel) */
-  log?: (...parts: unknown[]) => void;
+export interface ChannelHandlers {
+  /** daemon → client request (e.g. interaction requests) */
+  readonly onRequest: ServerRequestHandler;
+  readonly onClose: (reason: string) => Effect.Effect<void, unknown>;
 }
 
-/**
- * Channel RPC client over the binary WS protocol: `call("zcode-agent", method, arg)`
- * mirrors the upstream ChannelClient (CALL=100 / RESULT=201 / ERROR=202 / EVENT=204).
- * The daemon sends [200] right after the socket opens; we also run a ChannelServer
- * on the same socket so the daemon can call US back (interaction requests).
- */
+export class ChannelOpenError extends Error {}
+
+const HANDSHAKE_TIMEOUT_MS = 15_000;
+const DEFAULT_CALL_TIMEOUT_MS = 30_000;
+
+const toBytes = (chunk: Uint8Array | string): Uint8Array =>
+  typeof chunk === "string" ? Buffer.from(chunk, "utf8") : new Uint8Array(chunk);
+
+const text = (cause: unknown): string => (renderError(cause));
+
 export class ChannelClient {
   private nextId = 1_000;
-  private pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: Timer }>();
-  private listeners = new Map<number, { event: string; handler: ChannelEventListener }>();
-  private eventByKey = new Map<string, { id: number; handler: ChannelEventListener }>();
-  private splitter = new FrameSplitter();
-  private ws: WebSocket | null = null;
-  private initialized: Promise<void>;
+  private readonly pending = new Map<number, Deferred.Deferred<unknown, RpcError | ChannelClosed>>();
+  private readonly listeners = new Map<number, ChannelEventListener>();
+  private readonly eventByKey = new Map<string, { id: number; handler: ChannelEventListener }>();
+  private readonly splitter = new FrameSplitter();
+  private readonly initDeferred: Deferred.Deferred<void, unknown>;
+  readonly closed: Deferred.Deferred<string, never>;
   private settled = false;
-  readonly closed: Promise<string>;
 
-  constructor(private readonly opts: ChannelClientOptions) {
-    this.initialized = new Promise((resolve, reject) => {
-      this.initResolve = resolve;
-      this.initReject = reject;
-    });
-    this.closed = new Promise((resolve) => {
-      this.closedResolve = resolve;
-    });
-    this.open();
+  private constructor(
+    private readonly socket: Socket.Socket,
+    private readonly writer: Socket.Writer,
+    private readonly handlers: ChannelHandlers,
+    private readonly log: Log["Service"],
+  ) {
+    this.initDeferred = Deferred.makeUnsafe<void, unknown>();
+    this.closed = Deferred.makeUnsafe<string, never>();
   }
 
-  private initResolve!: () => void;
-  private initReject!: (e: Error) => void;
-  private closedResolve!: (reason: string) => void;
+  /**
+   * Dial the daemon channel. The pump runs in the CALLER's Scope (provide one
+   * with `Scope.provide`); closing it tears down the read loop and socket.
+   */
+  static readonly connect = (
+    url: string,
+    headers: Record<string, string>,
+    handlers: ChannelHandlers,
+    log: Log["Service"],
+  ): Effect.Effect<ChannelClient, ChannelOpenError, ScopeNS.Scope | Socket.WebSocketConstructor> =>
+    Effect.gen(function* () {
+      yield* log.debug(`[channel] connecting ${url.replace(/token=[^&]*/, "token=…")}`);
+      const socket = yield* Socket.makeWebSocket(url, { headers }).pipe(
+        Effect.mapError((cause) => new ChannelOpenError(`zcode server channel dial failed: ${text(cause)}`)),
+      );
+      const writer = yield* socket.writer;
+      const client = new ChannelClient(socket, writer, handlers, log);
 
-  private open(): void {
-    const { url, headers = {}, initializeTimeoutMs = 15_000, log } = this.opts;
-    const ws = new WebSocket(url, { headers } as never);
-    this.ws = ws;
-    const timeout = setTimeout(() => {
-      this.initReject(new Error("zcode server channel handshake timed out"));
-      ws.close();
-    }, initializeTimeoutMs);
+      yield* client.pumpReader().pipe(
+        Effect.catchCause((cause) => client.failAll(`zcode server channel closed (${text(cause)})`)),
+        Effect.forkScoped,
+      );
 
-    ws.addEventListener("open", () => {
-      clearTimeout(timeout);
-      // (Bun fires open after headers are sent; the daemon now sends [200].)
+      // The daemon sends [200] right after the socket opens.
+      yield* Deferred.await(client.initDeferred).pipe(
+        Effect.timeout(HANDSHAKE_TIMEOUT_MS),
+        Effect.mapError(() => new ChannelOpenError("zcode server channel handshake timed out")),
+      );
+      return client;
     });
-    ws.addEventListener("message", (ev) => {
-      const data =
-        typeof (ev as { data?: unknown }).data === "string"
-          ? Buffer.from((ev as { data: string }).data, "utf8")
-          : new Uint8Array((ev as { data: ArrayBuffer | Uint8Array }).data);
-      for (const frame of this.splitter.push(data)) this.handleFrame(frame);
+
+  /** Continuous read loop; fails with the socket error when the channel dies. */
+  private pumpReader(): Effect.Effect<void, unknown, ScopeNS.Scope> {
+    const self = this;
+    return Effect.gen(function* () {
+      const reader = yield* self.socket.reader;
+      for (;;) {
+        const batch = yield* reader.pull;
+        for (const chunk of batch) {
+          for (const frame of self.splitter.push(toBytes(chunk))) {
+            yield* self.dispatchFrame(frame);
+          }
+        }
+      }
     });
-    ws.addEventListener("close", () => {
-      const reason = "zcode server channel closed";
-      this.failAll(reason);
-      this.opts.onClose?.(reason);
-      this.closedResolve(reason);
+  }
+
+  private dispatchFrame(frame: Uint8Array): Effect.Effect<void> {
+    const self = this;
+    return Effect.gen(function* () {
+      let decoded: ReturnType<typeof decodeRpcMessage>;
+      try {
+        decoded = decodeRpcMessage(frame);
+      } catch (cause) {
+        yield* self.log.warn(`[channel] undecodable frame ignored: ${text(cause)}`);
+        return;
+      }
+      const type = decoded.header[0];
+      if (type === MSG.Initialize) {
+        Deferred.doneUnsafe(self.initDeferred, Effect.void);
+        return;
+      }
+      const id = decoded.header[1] as number;
+      if (type === MSG.PromiseSuccess) {
+        const deferred = self.pending.get(id);
+        if (deferred !== undefined) {
+          self.pending.delete(id);
+          Deferred.doneUnsafe(deferred, Effect.succeed(decoded.body));
+        }
+        return;
+      }
+      if (type === MSG.PromiseError || type === MSG.PromiseErrorObj) {
+        const deferred = self.pending.get(id);
+        if (deferred !== undefined) {
+          self.pending.delete(id);
+          const payload = decoded.body as { message?: string } | undefined;
+          Deferred.doneUnsafe(
+            deferred,
+            Effect.fail(
+              new RpcError({
+                channel: "zcode",
+                method: "?",
+                message: payload?.message ?? `zcode channel error (type ${type})`,
+              }),
+            ),
+          );
+        }
+        return;
+      }
+      if (type === MSG.EventFire) {
+        const handler = self.listeners.get(id);
+        if (handler !== undefined) {
+          // Inline (not forked): frame handlers drive a sequential state
+          // machine, so event order must be preserved — same as the
+          // pre-rewrite synchronous listener dispatch.
+          yield* tolerate(
+            handler(decoded.body),
+            (cause) => self.log.warn(`[channel] event handler failed: ${text(cause)}`),
+          );
+        }
+        return;
+      }
+      if (type === MSG.EventError) {
+        yield* self.log.debug(`[channel] event error id=${id}`, decoded.body);
+        return;
+      }
+      if (type === MSG.Promise) {
+        // server→client request (e.g. interaction requests): [100, id, channelName, name]
+        const [, , channelName, name] = decoded.header as [number, number, string, string];
+        yield* Effect.forkDetach(self.handleServerRequest(id, channelName, name, decoded.body));
+        return;
+      }
+      yield* self.log.debug(`[channel] unhandled frame type ${type}`, decoded.header);
     });
-    ws.addEventListener("error", () => {
-      const reason = "zcode server channel error";
-      this.failAll(reason);
-      this.opts.onClose?.(reason);
-      this.closedResolve(reason);
+  }
+
+  private handleServerRequest(id: number, channelName: string, name: string, arg: unknown): Effect.Effect<void, unknown> {
+    const self = this;
+    return Effect.gen(function* () {
+      let result: unknown;
+      try {
+        result = yield* self.handlers.onRequest(channelName, name, arg);
+      } catch (cause) {
+        yield* self.write(
+          encodeRpcMessage([MSG.PromiseErrorObj, id], {
+            message: renderError(cause),
+            name: cause instanceof Error ? cause.name : "Error",
+          }),
+        ).pipe(Effect.orElseSucceed(() => undefined));
+        return;
+      }
+      yield* self.write(encodeRpcMessage([MSG.PromiseSuccess, id], result)).pipe(Effect.orElseSucceed(() => undefined));
     });
-    log?.(`[channel] connecting ${url}`);
   }
 
-  private handleFrame(frame: Uint8Array): void {
-    const { header, body } = decodeRpcMessage(frame);
-    const type = header[0];
-    if (type === MSG.Initialize) {
-      this.initResolve();
-      return;
-    }
-    const id = header[1] as number;
-    if (type === MSG.PromiseSuccess) {
-      this.pending.get(id)?.resolve(body);
-      this.pending.delete(id);
-      return;
-    }
-    if (type === MSG.PromiseError || type === MSG.PromiseErrorObj) {
-      const payload = body as { message?: string } | undefined;
-      this.pending
-        .get(id)
-        ?.reject(new Error(payload?.message ?? `zcode channel error (type ${type})`));
-      this.pending.delete(id);
-      return;
-    }
-    if (type === MSG.EventFire) {
-      const listener = this.listeners.get(id);
-      listener?.handler(body);
-      return;
-    }
-    if (type === MSG.EventError) {
-      this.opts.log?.(`[channel] event error id=${id}`, body);
-      return;
-    }
-    if (type === MSG.Promise) {
-      // server→client request (e.g. interaction requests): [100, id, channelName, name]
-      const [, , channelName, name] = header as [number, number, string, string];
-      void this.handleServerRequest(id, channelName, name, body);
-      return;
-    }
-    this.opts.log?.(`[channel] unhandled frame type ${type}`, header);
+  private failAll(reason: string): Effect.Effect<void, unknown> {
+    const self = this;
+    return Effect.gen(function* () {
+      if (self.settled) return;
+      self.settled = true;
+      const error = new ChannelClosed({ reason });
+      for (const deferred of self.pending.values()) Deferred.doneUnsafe(deferred, Effect.fail(error));
+      self.pending.clear();
+      Deferred.doneUnsafe(self.initDeferred, Effect.fail(error));
+      Deferred.doneUnsafe(self.closed, Effect.succeed(reason));
+      yield* self.handlers.onClose(reason);
+    });
   }
 
-  private async handleServerRequest(id: number, channelName: string, name: string, arg: unknown): Promise<void> {
-    let result: unknown;
-    try {
-      if (!this.opts.onRequest) throw new Error(`no handler for server request ${channelName}.${name}`);
-      result = await this.opts.onRequest(channelName, name, arg);
-    } catch (error) {
-      const payload = {
-        message: error instanceof Error ? error.message : String(error),
-        name: error instanceof Error ? error.name : "Error",
-      };
-      this.send(encodeRpcMessage([MSG.PromiseErrorObj, id], payload));
-      return;
-    }
-    this.send(encodeRpcMessage([MSG.PromiseSuccess, id], result));
-  }
-
-  private failAll(reason: string): void {
-    if (this.settled) return;
-    this.settled = true;
-    const error = new Error(reason);
-    for (const p of this.pending.values()) {
-      clearTimeout(p.timer);
-      p.reject(error);
-    }
-    this.pending.clear();
-    this.initReject(error);
-  }
-
-  private send(bytes: Uint8Array): void {
-    if (!this.ws || this.ws.readyState !== this.ws.OPEN) {
-      throw new Error("zcode server channel is not open");
-    }
-    this.ws.send(bytes);
-  }
-
-  async ready(): Promise<void> {
-    return this.initialized;
+  private write(bytes: Uint8Array): Effect.Effect<void, ChannelClosed> {
+    return this.writer.write(bytes).pipe(
+      Effect.mapError((cause) => new ChannelClosed({ reason: `zcode server channel write failed: ${text(cause)}` })),
+    );
   }
 
   /** `channel.call("zcode-agent", "sendPrompt", arg)` equivalent. */
-  call<T = unknown>(channelName: string, method: string, arg?: unknown, timeoutMs = 30_000): Promise<T> {
-    const id = this.nextId++;
-    const promise = new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        this.send(encodeRpcMessage([MSG.PromiseCancel, id]));
-        reject(new Error(`zcode channel call ${channelName}.${method} timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-      this.pending.set(id, {
-        resolve: resolve as (v: unknown) => void,
-        reject: reject as (e: Error) => void,
-        timer,
+  call(
+    channelName: string,
+    method: string,
+    arg?: unknown,
+    timeoutMs: number = DEFAULT_CALL_TIMEOUT_MS,
+  ): Effect.Effect<unknown, RpcError | RpcTimeout | ChannelClosed> {
+    const self = this;
+    return Effect.gen(function* () {
+      const id = self.nextId++;
+      const deferred = Deferred.makeUnsafe<unknown, RpcError | ChannelClosed>();
+      self.pending.set(id, deferred);
+      yield* self.write(encodeRpcMessage([MSG.Promise, id, channelName, method], [arg])).pipe(
+        Effect.catchTag("ChannelClosed", (error) => {
+          self.pending.delete(id);
+          return Effect.fail(error);
+        }),
+      );
+      return yield* Deferred.await(deferred).pipe(
+        Effect.timeout(timeoutMs),
+        Effect.catchTag("TimeoutError", () => Effect.fail(new RpcTimeout({ channel: channelName, method, timeoutMs }))),
+        Effect.ensuring(
+          Effect.gen(function* () {
+            const stillPending = self.pending.get(id) === deferred;
+            self.pending.delete(id);
+            if (stillPending) {
+              yield* self.write(encodeRpcMessage([MSG.PromiseCancel, id])).pipe(Effect.orElseSucceed(() => undefined));
+            }
+          }),
+        ),
+      );
+    });
+  }
+
+  /** `channel.listen("zcode-agent", event, arg, handler)` equivalent. Returns dispose. */
+  listen(
+    channelName: string,
+    event: string,
+    arg: unknown,
+    handler: ChannelEventListener,
+  ): Effect.Effect<Effect.Effect<void, unknown>> {
+    const self = this;
+    return Effect.gen(function* () {
+      const id = self.nextId++;
+      self.listeners.set(id, handler);
+      self.eventByKey.set(`${channelName}:${event}`, { id, handler });
+      yield* self.write(encodeRpcMessage([MSG.EventListen, id, channelName, event], arg ?? undefined)).pipe(
+        Effect.orElseSucceed(() => undefined),
+      );
+      return Effect.gen(function* () {
+        self.listeners.delete(id);
+        self.eventByKey.delete(`${channelName}:${event}`);
+        yield* self.write(encodeRpcMessage([MSG.EventDispose, id])).pipe(Effect.orElseSucceed(() => undefined));
       });
     });
-    this.send(encodeRpcMessage([MSG.Promise, id, channelName, method], [arg]));
-    return promise;
   }
 
-  /** `channel.listen("zcode-agent", event, arg, handler)` equivalent. Returns a dispose fn. */
-  listen(channelName: string, event: string, arg: unknown, handler: ChannelEventListener): () => void {
-    const id = this.nextId++;
-    this.listeners.set(id, { event, handler });
-    const key = `${channelName}:${event}`;
-    this.eventByKey.set(key, { id, handler });
-    this.send(encodeRpcMessage([MSG.EventListen, id, channelName, event], arg ?? undefined));
-    return () => {
-      this.listeners.delete(id);
-      this.eventByKey.delete(key);
-      try {
-        this.send(encodeRpcMessage([MSG.EventDispose, id]));
-      } catch {
-        /* channel already closed */
-      }
-    };
-  }
-
-  close(): void {
-    try {
-      this.ws?.close();
-    } catch {
-      /* ignore */
-    }
+  close(): Effect.Effect<void, unknown> {
+    const self = this;
+    return Effect.gen(function* () {
+      yield* self.failAll("zcode server channel closed by client");
+    });
   }
 }

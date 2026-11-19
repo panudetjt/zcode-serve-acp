@@ -3,8 +3,8 @@
 bun = "1.4.4"
 
 [tasks.test]
-description = "Unit tests (codec, models)"
-run = "bun test"
+description = "Unit tests (wire codec, translator parity, golden replay, interactions, models)"
+run = "bun test ./test"
 
 [tasks.compile]
 description = "Single-binary build → dist/zcode-serve-acp"

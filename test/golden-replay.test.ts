@@ -37,7 +37,7 @@ describe("golden replay (pre-rewrite translator parity)", () => {
 
   for (const file of fixtureFiles) {
     it(`replays ${file} identically to the pre-rewrite translator`, async () => {
-      const fixture = (await import(path.join(FIXTURES_DIR, file))) as ScenarioFixture;
+      const fixture = JSON.parse(await Bun.file(path.join(FIXTURES_DIR, file)).text()) as ScenarioFixture;
       const translator = new FrameTranslator(() => {});
       translator.startTurn();
 

@@ -9,11 +9,11 @@
  * the CLI's bundled provider table (`~/.zcode/v2/runtime/provider/bundled/
  * zcode-builtin.json`) filtered by OAuth-selection presence in setting.json —
  * the #33684 extraction: presence of `oauth:<family>:access_token` in the
- * store proves the login; no decryption needed.
+ * store proves the login; no decryption needed. Reads go through the platform
+ * FileSystem service; any failure yields no fallback models (never throws).
  */
-import { existsSync, readFileSync } from "node:fs";
-import os from "node:os";
-import path from "node:path";
+import { Effect, Schema } from "effect";
+import { FileSystem } from "effect/FileSystem";
 import type { AvailableModel } from "./serve/session.ts";
 
 export interface AcpiModel {
@@ -28,10 +28,12 @@ export interface AcpiModel {
   };
 }
 
-export function modelsToAcp(
-  models: AvailableModel[],
-  current?: string,
-): { currentModelId: string | null; availableModels: AcpiModel[] } {
+export interface ModelsToAcpResult {
+  currentModelId: string | null;
+  availableModels: AcpiModel[];
+}
+
+export function modelsToAcp(models: AvailableModel[], current?: string): ModelsToAcpResult {
   const availableModels: AcpiModel[] = models.map((m) => {
     const modelId = `${m.providerId}/${m.modelId}`;
     const name = m.providerLabel ? `${m.label ?? m.modelId} (${m.providerLabel})` : (m.label ?? m.modelId);
@@ -54,74 +56,114 @@ export function modelsToAcp(
   let currentId: string | null = null;
   if (current !== undefined && current !== "") {
     currentId =
-      availableModels.find(
-        (m) => m.modelId === current || m.modelId.endsWith(`/${current}`)
-      )?.modelId ?? null;
+      availableModels.find((m) => m.modelId === current || m.modelId.endsWith(`/${current}`))?.modelId ?? null;
   }
   if (!currentId && availableModels.length > 0) {
-    currentId = availableModels[0].modelId;
+    currentId = availableModels[0]?.modelId ?? null;
   }
   return { currentModelId: currentId, availableModels };
 }
 
-export interface FallbackModelsResult {
-  models: AvailableModel[];
-}
+const ProviderSetting = Schema.Struct({
+  providerFamilyConnectionSelections: Schema.optional(
+    Schema.Record(Schema.String, Schema.Struct({ kind: Schema.optional(Schema.String) })),
+  ),
+  modelProviderFamilyModes: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+});
+const ProviderCredentials = Schema.Record(Schema.String, Schema.Unknown);
+const ProviderTable = Schema.Struct({
+  config: Schema.optional(
+    Schema.Struct({
+      providerConfigRules: Schema.optional(
+        Schema.Struct({
+          providerRules: Schema.optional(
+            Schema.Array(
+              Schema.Struct({
+                providerId: Schema.optional(Schema.String),
+                config: Schema.optional(
+                  Schema.Struct({
+                    access: Schema.optional(
+                      Schema.Struct({
+                        type: Schema.optional(Schema.String),
+                        mode: Schema.optional(Schema.String),
+                        accountType: Schema.optional(Schema.String),
+                      }),
+                    ),
+                    builtinModelIds: Schema.optional(Schema.Array(Schema.String)),
+                  }),
+                ),
+              }),
+            ),
+          ),
+        }),
+      ),
+    }),
+  ),
+});
+
+const decodeSetting = Schema.decodeUnknownSync(ProviderSetting);
+const decodeCreds = Schema.decodeUnknownSync(ProviderCredentials);
+const decodeTable = Schema.decodeUnknownSync(ProviderTable);
 
 /** Presence-check fallback — never decrypts anything. */
-export function fallbackModels(env: NodeJS.ProcessEnv = process.env): FallbackModelsResult {
-  const root = env.ZCODE_DATA_BASE_DIR ?? path.join(env.HOME ?? os.homedir(), "");
-  const v2 = path.join(root, ".zcode", "v2");
-  const tablePath = path.join(v2, "runtime", "provider", "bundled", "zcode-builtin.json");
-  const settingPath = path.join(v2, "setting.json");
-  const credsPath = path.join(v2, "credentials.json");
-  const out: AvailableModel[] = [];
-  if (!existsSync(tablePath) || !existsSync(settingPath) || !existsSync(credsPath)) return { models: out };
-  try {
-    const setting = JSON.parse(readFileSync(settingPath, "utf8")) as {
-      providerFamilyConnectionSelections?: Record<string, { kind?: string }>;
-      modelProviderFamilyModes?: Record<string, string>;
-    };
-    const creds = JSON.parse(readFileSync(credsPath, "utf8")) as Record<string, unknown>;
-    const families: string[] = [];
-    for (const [family, selection] of Object.entries(setting.providerFamilyConnectionSelections ?? {})) {
-      if (selection?.kind !== "individual-coding-plan") continue;
-      if (setting.modelProviderFamilyModes?.[family] === "apiKey") continue;
-      const token = creds[`oauth:${family}:access_token`];
-      if (typeof token !== "string" || token.length === 0) continue;
-      families.push(family);
-    }
-    const table = JSON.parse(readFileSync(tablePath, "utf8")) as {
-      config?: {
-        providerConfigRules?: {
-          providerRules?: Array<{
-            providerId?: string;
-            config?: { access?: { type?: string; mode?: string; accountType?: string }; builtinModelIds?: string[] };
-          }>;
-        };
-      };
-    };
-    for (const rule of table.config?.providerConfigRules?.providerRules ?? []) {
-      const access = rule.config?.access;
-      if (access?.type !== "zhipu-account" || access.mode !== "individual-coding-plan") continue;
-      if (!families.includes(access.accountType ?? "")) continue;
-      for (const modelId of rule.config?.builtinModelIds ?? []) {
-        out.push({
-          providerId: rule.providerId ?? "",
-          modelId,
-          label: modelId,
-          providerLabel: `${(access.accountType ?? "").toUpperCase()} Coding Plan`,
-          reasoningLevels: [
-            { value: "low", label: "low" },
-            { value: "high", label: "high" },
-            { value: "max", label: "max" },
-          ],
-          reasoningDefaultLevel: "max",
-        });
-      }
-    }
-  } catch {
-    /* fall through with whatever we have */
+export const fallbackModels: Effect.Effect<AvailableModel[], never, FileSystem> = Effect.gen(function* () {
+  const root = process.env.ZCODE_DATA_BASE_DIR ?? process.env.HOME ?? "";
+  const v2 = `${root}/.zcode/v2`;
+  const tablePath = `${v2}/runtime/provider/bundled/zcode-builtin.json`;
+  const settingPath = `${v2}/setting.json`;
+  const credsPath = `${v2}/credentials.json`;
+  const fs = yield* FileSystem;
+
+  const readJson = (file: string): Effect.Effect<unknown | undefined> =>
+    fs.readFileString(file).pipe(
+      Effect.map((text) => {
+        try {
+          return JSON.parse(text) as unknown;
+        } catch {
+          return undefined;
+        }
+      }),
+      Effect.orElseSucceed(() => undefined),
+    );
+
+  const [settingRaw, credsRaw, tableRaw] = yield* Effect.all([readJson(settingPath), readJson(credsPath), readJson(tablePath)]);
+  if (settingRaw === undefined || credsRaw === undefined || tableRaw === undefined) return [];
+
+  const setting = decodeSetting(settingRaw);
+  const creds = decodeCreds(credsRaw);
+  const table = decodeTable(tableRaw);
+
+  const families: string[] = [];
+  for (const [family, selection] of Object.entries(setting.providerFamilyConnectionSelections ?? {})) {
+    if (selection?.kind !== "individual-coding-plan") continue;
+    if (setting.modelProviderFamilyModes?.[family] === "apiKey") continue;
+    const token = creds[`oauth:${family}:access_token`];
+    if (typeof token !== "string" || token.length === 0) continue;
+    families.push(family);
   }
-  return { models: out };
-}
+
+  const out: AvailableModel[] = [];
+  for (const rule of table.config?.providerConfigRules?.providerRules ?? []) {
+    const access = rule.config?.access;
+    if (access?.type !== "zhipu-account" || access.mode !== "individual-coding-plan") continue;
+    if (!families.includes(access.accountType ?? "")) continue;
+    for (const modelId of rule.config?.builtinModelIds ?? []) {
+      out.push({
+        providerId: rule.providerId ?? "",
+        modelId,
+        label: modelId,
+        providerLabel: `${(access.accountType ?? "").toUpperCase()} Coding Plan`,
+        reasoningLevels: [
+          { value: "low", label: "low" },
+          { value: "high", label: "high" },
+          { value: "max", label: "max" },
+        ],
+        reasoningDefaultLevel: "max",
+      });
+    }
+  }
+  return out;
+}).pipe(
+  // The fallback path is best-effort: any decode/read failure yields nothing.
+  Effect.orElseSucceed((): AvailableModel[] => []),
+);

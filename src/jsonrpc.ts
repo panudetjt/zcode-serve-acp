@@ -9,7 +9,7 @@
 import { Effect, Schema } from "effect";
 import { DecodeError } from "./errors.ts";
 
-export const JsonRpcId = Schema.Union(Schema.Number, Schema.String);
+export const JsonRpcId = Schema.Union([Schema.Number, Schema.String]);
 export type JsonRpcId = typeof JsonRpcId.Type;
 
 export const JsonRpcErrorObject = Schema.Struct({

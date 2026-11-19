@@ -2,8 +2,8 @@
 /**
  * Golden-frame capture — drives a REAL local `zcode serve` daemon through
  * short scripted turns, records every raw conversation frame plus the
- * pre-rewrite FrameTranslator's output per frame (the parity oracle), and
- * writes sanitized fixtures to test/fixtures/golden-frames/.
+ * CURRENT FrameTranslator's output per frame (the parity oracle), and writes
+ * sanitized fixtures to test/fixtures/golden-frames/.
  *
  * Usage: bun scripts/capture-frames.ts [--out test/fixtures/golden-frames]
  *
@@ -16,22 +16,27 @@
  * Re-capture policy (AGENTS.md): fixtures are the parity baseline for the
  * FrameTranslator. When the daemon protocol changes, re-run this script — the
  * then-current translator output becomes the new oracle. Never hand-edit a
- * fixture.
+ * fixture. (The fixtures captured on 19 พ.ย. 2026 use the PRE-rewrite
+ * translator as oracle; later re-captures use the current one.)
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { connectDaemon } from "../src/serve/daemon.ts";
-import { ServeSession, type CreateSessionResult } from "../src/serve/session.ts";
-import { FrameTranslator, type AcpUpdate, type FoldResult, type PendingInteraction } from "../src/translate.ts";
+import * as BunFileSystem from "@effect/platform-bun/BunFileSystem";
+import * as BunSocket from "@effect/platform-bun/BunSocket";
+import { Effect, Layer, type Fiber } from "effect";
+import { FetchHttpClient } from "effect/http";
+import { FileSystem } from "effect/FileSystem";
+import { Socket } from "effect/socket/Socket";
+import { Daemon } from "../src/serve/daemon.ts";
+import { ServeSessionFactory, type CreateSessionResult, type ServeSession } from "../src/serve/session.ts";
+import { Log } from "../src/log.ts";
+import { FrameTranslator, type AcpUpdate, type FoldResult, type PendingInteraction } from "../src/translate/translator.ts";
 
 const args = process.argv.slice(2);
 const outIdx = args.indexOf("--out");
 const OUT_DIR = outIdx >= 0 ? path.resolve(args[outIdx + 1]!) : path.resolve(import.meta.dir, "../test/fixtures/golden-frames");
 const DEBUG = process.env.ZCODE_SERVE_ACP_DEBUG === "1";
-const log = (...parts: unknown[]) => {
-  if (DEBUG) console.error("[capture]", ...parts);
-};
 
 interface Scenario {
   name: string;
@@ -57,18 +62,7 @@ const SCENARIOS: Scenario[] = [
 
 interface RecordedFrame {
   payload: unknown;
-  oracle: FoldOracle;
-}
-interface FoldOracle {
-  updates: AcpUpdate[];
-  turnComplete: boolean;
-  assistantSettled: boolean;
-  hasActiveWork: boolean;
-  turnFailed: boolean;
-  turnCancelled?: boolean;
-  errorMessage?: string;
-  usage?: unknown;
-  pendingInteractions?: PendingInteraction[];
+  oracle: FoldResult;
 }
 
 interface ScenarioFixture {
@@ -94,166 +88,182 @@ function sanitize(text: string, secrets: Array<[string, string]>): string {
   return out;
 }
 
-async function runScenario(scenario: Scenario, cwd: string, runtimeVersion: string): Promise<ScenarioFixture> {
-  const daemon = await connectDaemon(process.env, log);
-  const translator = new FrameTranslator(log);
-  const frames: RecordedFrame[] = [];
-  const lifecycle: unknown[] = [];
-  const handled = new Set<string>();
-  let daemonSession: CreateSessionResult | null = null;
-  let inputId = "";
-  const secrets: Array<[string, string]> = [
-    [cwd, "/workspace"],
-    [os.homedir(), "~"],
-  ];
+const runScenario = (
+  scenario: Scenario,
+  cwd: string,
+  runtimeVersion: string,
+): Effect.Effect<ScenarioFixture, unknown, Daemon | Log | ServeSessionFactory> =>
+  Effect.gen(function* () {
+    const log = yield* Log;
+    const factory = yield* ServeSessionFactory;
+    const translator = new FrameTranslator((...parts) => {
+      if (DEBUG) console.error(...parts);
+    });
+    const frames: RecordedFrame[] = [];
+    const lifecycle: unknown[] = [];
+    const handled = new Set<string>();
+    const secrets: Array<[string, string]> = [
+      [cwd, "/workspace"],
+      [os.homedir(), "~"],
+    ];
 
-  const quietWait = { timer: null as Timer | null };
-  const outcome = { done: false, reason: "", stopReason: "", failure: "" };
+    const outcome = { done: false, reason: "", stopReason: "", failure: "" };
+    let quietFiber: Fiber.Fiber<void, never> | null = null;
 
-  const settle = (reason: string, stopReason: string, failure: string) => {
-    if (outcome.done) return;
-    if (quietWait.timer !== null) {
-      clearTimeout(quietWait.timer);
-      quietWait.timer = null;
-    }
-    outcome.done = true;
-    outcome.reason = reason;
-    outcome.stopReason = stopReason;
-    outcome.failure = failure;
-  };
+    const settle = (reason: string, stopReason: string, failure: string) => {
+      if (outcome.done) return;
+      outcome.done = true;
+      outcome.reason = reason;
+      outcome.stopReason = stopReason;
+      outcome.failure = failure;
+    };
 
-  const autoAnswer = async (interaction: PendingInteraction): Promise<void> => {
-    if (handled.has(interaction.interactionId)) return;
-    handled.add(interaction.interactionId);
-    const payload = (interaction.payload ?? {}) as Record<string, unknown>;
-    const isElicitation =
-      interaction.kind === "userInput" ||
-      interaction.kind === "elicitation" ||
-      payload.kind === "userInput" ||
-      payload.kind === "elicitation" ||
-      payload.toolName === "AskUserQuestion" ||
-      payload.toolName === "ExitPlanMode";
-    if (isElicitation) {
-      let firstValue: string | undefined;
-      const questions = (payload.questions ?? (payload.input as { questions?: unknown[] } | undefined)?.questions ?? []) as
-        Array<Record<string, unknown>>;
-      const firstOptions = (questions[0]?.options ?? payload.options) as
-        | Array<{ value?: string; optionId?: string }>
-        | undefined;
-      firstValue = String(firstOptions?.[0]?.value ?? firstOptions?.[0]?.optionId ?? "accept");
-      await session.resolveInteraction(interaction.interactionId, {
-        action: "accept",
-        content: { q0: firstValue },
-        optionId: firstValue,
+    const autoAnswer = (interaction: PendingInteraction): Effect.Effect<void, unknown> =>
+      Effect.gen(function* () {
+        if (handled.has(interaction.interactionId)) return;
+        handled.add(interaction.interactionId);
+        const payload = (interaction.payload ?? {}) as Record<string, unknown>;
+        const isElicitation =
+          interaction.kind === "userInput" ||
+          interaction.kind === "elicitation" ||
+          payload.kind === "userInput" ||
+          payload.kind === "elicitation" ||
+          payload.toolName === "AskUserQuestion" ||
+          payload.toolName === "ExitPlanMode";
+        if (isElicitation) {
+          const questions = (payload.questions ?? (payload.input as { questions?: unknown[] } | undefined)?.questions ?? []) as
+            Array<Record<string, unknown>>;
+          const firstOptions = (questions[0]?.options ?? payload.options) as
+            | Array<{ value?: string; optionId?: string }>
+            | undefined;
+          const firstValue = String(firstOptions?.[0]?.value ?? firstOptions?.[0]?.optionId ?? "accept");
+          yield* session.resolveInteraction(interaction.interactionId, {
+            action: "accept",
+            content: { q0: firstValue },
+            optionId: firstValue,
+          });
+        } else {
+          const options = (payload.options ?? []) as Array<{ optionId?: string; kind?: string }>;
+          const allow = options.find((o) => String(o.kind ?? "").includes("allow")) ?? options[0];
+          yield* session.resolveInteraction(interaction.interactionId, {
+            optionId: String(allow?.optionId ?? "allow"),
+          });
+        }
       });
-    } else {
-      const options = (payload.options ?? []) as Array<{ optionId?: string; kind?: string }>;
-      const allow = options.find((o) => String(o.kind ?? "").includes("allow")) ?? options[0];
-      await session.resolveInteraction(interaction.interactionId, {
-        optionId: String(allow?.optionId ?? "allow"),
-      });
-    }
-  };
 
-  const session = new ServeSession(daemon, cwd, {
-    onConversationFrame: (payload) => {
-      const result = translator.fold(payload);
-      frames.push({ payload, oracle: structuredClone(result) });
-      const pending = result.pendingInteractions ?? [];
-      for (const interaction of pending) void autoAnswer(interaction);
-      if (result.turnFailed) {
-        settle("failed", "error", result.errorMessage ?? "turn failed");
-        return;
-      }
-      if (result.turnCancelled) {
-        settle("cancelled", "cancelled", "");
-        return;
-      }
-      if (result.turnComplete) {
-        settle("complete", "end_turn", "");
-        return;
-      }
-      if (result.assistantSettled && !result.hasActiveWork) {
-        if (quietWait.timer !== null) clearTimeout(quietWait.timer);
-        quietWait.timer = setTimeout(() => settle("quiet", "end_turn", ""), QUIET_MS);
-        return;
-      }
-      if (result.hasActiveWork && quietWait.timer !== null) {
-        clearTimeout(quietWait.timer);
-        quietWait.timer = null;
-      }
-    },
-    onLifecycle: (payload) => {
-      lifecycle.push(payload);
-      const p = payload as { state?: string; lastError?: { message?: string } | null; error?: string };
-      if (p.state === "faulted" || p.lastError) {
-        settle("faulted", "error", p.lastError?.message ?? p.error ?? "daemon session faulted");
-        return;
-      }
-      if (p.state === "stopping" || p.state === "unloaded") {
-        settle(`lifecycle:${p.state}`, "cancelled", "");
-      }
-    },
-    onRequest: async (channelName, name, arg) => {
-      log(`[capture] server request ${channelName}.${name}`);
-      if (name.toLowerCase().includes("permission")) {
-        const raw = (arg ?? {}) as {
-          interactionId?: string;
-          options?: Array<{ id?: string; optionId?: string; kind?: string }>;
-        };
-        const options = raw.options ?? [];
-        const allow = options.find((o) => String(o.kind ?? "").includes("allow")) ?? options[0];
-        const answer = allow ?? { optionId: "allow" };
-        return raw.interactionId !== undefined
-          ? { interactionId: raw.interactionId, answer }
-          : { answer };
-      }
-      return {};
-    },
-    log,
+    let session!: ServeSession;
+
+    const handlers = {
+      onConversationFrame: (payload: unknown): Effect.Effect<void, unknown, never> =>
+        Effect.gen(function* () {
+          const result = translator.fold(payload);
+          frames.push({ payload, oracle: structuredClone(result) });
+          for (const interaction of result.pendingInteractions ?? []) {
+            yield* Effect.forkDetach(autoAnswer(interaction));
+          }
+          if (result.turnFailed) return settle("failed", "error", result.errorMessage ?? "turn failed");
+          if (result.turnCancelled === true) return settle("cancelled", "cancelled", "");
+          if (result.turnComplete) return settle("complete", "end_turn", "");
+          if (result.assistantSettled && !result.hasActiveWork) {
+            quietFiber = yield* Effect.forkDetach(
+              Effect.sleep(`${QUIET_MS} millis`).pipe(
+                Effect.andThen(Effect.sync(() => settle("quiet", "end_turn", ""))),
+              ) as Effect.Effect<void, never, never>,
+            );
+            return;
+          }
+          if (result.hasActiveWork && quietFiber !== null) {
+            quietFiber = null; // detached fiber observes settle() idempotence
+          }
+        }),
+      onLifecycle: (payload: unknown): Effect.Effect<void, unknown, never> =>
+        Effect.sync(() => {
+          lifecycle.push(payload);
+          const p = payload as { state?: string; lastError?: { message?: string } | null; error?: string };
+          if (p.state === "faulted" || p.lastError) {
+            settle("faulted", "error", p.lastError?.message ?? p.error ?? "daemon session faulted");
+          } else if (p.state === "stopping" || p.state === "unloaded") {
+            settle(`lifecycle:${p.state}`, "cancelled", "");
+          }
+        }),
+      onRequest: (channelName: string, name: string, arg: unknown): Effect.Effect<unknown, unknown, never> =>
+        Effect.gen(function* () {
+          yield* log.debug(`[capture] server request ${channelName}.${name}`);
+          if (name.toLowerCase().includes("permission")) {
+            const raw = (arg ?? {}) as {
+              interactionId?: string;
+              options?: Array<{ id?: string; optionId?: string; kind?: string }>;
+            };
+            const options = raw.options ?? [];
+            const allow = options.find((o) => String(o.kind ?? "").includes("allow")) ?? options[0];
+            const answer = allow ?? { optionId: "allow" };
+            return raw.interactionId !== undefined ? { interactionId: raw.interactionId, answer } : { answer };
+          }
+          return {};
+        }),
+      onClosed: (reason: string): Effect.Effect<void, unknown, never> =>
+        Effect.sync(() => settle("channel closed", "error", `connection closed: ${reason}`)),
+    };
+
+    session = yield* factory.create(cwd, handlers);
+    const created: CreateSessionResult = yield* session.createSession();
+    secrets.push([created.daemonSessionId, "SESSION_ID"]);
+    translator.startTurn();
+    const { inputId } = yield* session.sendPrompt(scenario.prompt);
+    secrets.push([inputId, "INPUT_ID"]);
+
+    const deadline = Date.now() + TURN_TIMEOUT_MS;
+    while (!outcome.done && Date.now() < deadline) {
+      yield* Effect.sleep(250);
+    }
+    if (!outcome.done) settle("timeout", "error", "capture turn exceeded 180s");
+    yield* session.dispose().pipe(Effect.orElseSucceed(() => undefined));
+
+    const sanitizeValue = (value: unknown): unknown => JSON.parse(sanitize(JSON.stringify(value), secrets));
+    return {
+      fixtureVersion: 1 as const,
+      scenario: scenario.name,
+      prompt: sanitize(scenario.prompt, secrets),
+      daemonRuntime: runtimeVersion,
+      frames: frames.map((f) => ({ payload: sanitizeValue(f.payload), oracle: sanitizeValue(f.oracle) as FoldResult })),
+      lifecycle: lifecycle.map(sanitizeValue),
+      terminalReason: outcome.reason,
+      ...(outcome.stopReason !== "" ? { stopReason: outcome.stopReason } : {}),
+      ...(outcome.failure !== "" ? { failure: outcome.failure } : {}),
+    } satisfies ScenarioFixture;
   });
 
-  daemonSession = await session.createSession();
-  secrets.push([daemonSession.daemonSessionId, "SESSION_ID"]);
-  translator.startTurn();
-  inputId = (await session.sendPrompt(scenario.prompt)).inputId;
-  secrets.push([inputId, "INPUT_ID"]);
+const program = Effect.gen(function* () {
+  const daemon = yield* Daemon;
+  const connection = yield* daemon.connect();
+  const runtimeVersion = connection.status.version ?? "unknown";
+  const cwd = process.cwd();
 
-  const deadline = Date.now() + TURN_TIMEOUT_MS;
-  while (!outcome.done && Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 250));
+  mkdirSync(OUT_DIR, { recursive: true });
+  for (const scenario of SCENARIOS) {
+    console.error(`[capture] scenario ${scenario.name} …`);
+    const fixture = yield* runScenario(scenario, cwd, runtimeVersion);
+    const file = path.join(OUT_DIR, `${scenario.name}.json`);
+    writeFileSync(file, `${JSON.stringify(fixture, null, 2)}\n`);
+    console.error(`[capture] ${scenario.name}: ${fixture.frames.length} frames → ${file} (${fixture.terminalReason})`);
   }
-  if (!outcome.done) settle("timeout", "error", "capture turn exceeded 180s");
+  console.error("[capture] done");
+}).pipe(
+  Effect.provide(ServeSessionFactory.layerNoDeps),
+  Effect.provide(Daemon.layer),
+  Effect.provide(Layer.mergeAll(Log.layerFromEnv, FetchHttpClient.layer, BunFileSystem.layer, BunSocket.layerWebSocketConstructor)),
+);
 
-  const sanitizeValue = (value: unknown): unknown =>
-    JSON.parse(sanitize(JSON.stringify(value), secrets));
-  const fixture: ScenarioFixture = {
-    fixtureVersion: 1,
-    scenario: scenario.name,
-    prompt: sanitize(scenario.prompt, secrets),
-    daemonRuntime: runtimeVersion,
-    frames: frames.map((f) => ({ payload: sanitizeValue(f.payload), oracle: sanitizeValue(f.oracle) })),
-    lifecycle: lifecycle.map(sanitizeValue),
-    terminalReason: outcome.reason,
-    ...(outcome.stopReason !== "" ? { stopReason: outcome.stopReason } : {}),
-    ...(outcome.failure !== "" ? { failure: outcome.failure } : {}),
-  };
-  return fixture;
-}
-
-const daemonInfo = await connectDaemon(process.env, log);
-const runtimeVersion = daemonInfo.status.version ?? "unknown";
-
-mkdirSync(OUT_DIR, { recursive: true });
-const cwd = process.cwd();
-for (const scenario of SCENARIOS) {
-  console.error(`[capture] scenario ${scenario.name} …`);
-  const fixture = await runScenario(scenario, cwd, runtimeVersion);
-  const file = path.join(OUT_DIR, `${scenario.name}.json`);
-  writeFileSync(file, `${JSON.stringify(fixture, null, 2)}\n`);
-  console.error(`[capture] ${scenario.name}: ${fixture.frames.length} frames → ${file} (${fixture.terminalReason})`);
-}
-console.error("[capture] done");
-// Capture keeps WS channels open per scenario; exit explicitly so the
-// long-lived sockets don't hold the event loop after the fixtures are written.
-process.exit(0);
+// Capture keeps WS channels open per scenario; runMain would wait on fibers —
+// run and exit explicitly once fixtures are written.
+const exitCode = await Effect.runPromiseExit(program).then(
+  (exit) => {
+    if (exit._tag === "Failure") {
+      console.error("[capture] failed:", exit.cause);
+      return 1;
+    }
+    return 0;
+  },
+  () => 1,
+);
+process.exit(exitCode);

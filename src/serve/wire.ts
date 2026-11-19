@@ -145,7 +145,8 @@ function reviver(_key: string, value: unknown): unknown {
     typeof (value as Record<string, unknown>)[NESTED_U8_B64] === "string" &&
     Object.keys(value).length === 2
   ) {
-    return new Uint8Array(Buffer.from((value as Record<string, string>)[NESTED_U8_B64], "base64"));
+    const b64 = (value as Record<string, unknown>)[NESTED_U8_B64];
+    return new Uint8Array(Buffer.from(typeof b64 === "string" ? b64 : "", "base64"));
   }
   return value;
 }

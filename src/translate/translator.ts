@@ -694,14 +694,15 @@ export class FrameTranslator {
             },
           };
           const existingIdx = pendingInteractions.findIndex((p) => p.interactionId === tool.approvalInteractionId);
-          if (existingIdx >= 0) {
+          const existingInteraction = existingIdx >= 0 ? pendingInteractions[existingIdx] : undefined;
+          if (existingInteraction !== undefined) {
             pendingInteractions[existingIdx] = {
               ...interactionItem,
-              ...pendingInteractions[existingIdx],
+              ...existingInteraction,
               payload: {
                 ...interactionItem.payload,
-                ...pendingInteractions[existingIdx].payload,
-                ...(questionsFromInput !== undefined && pendingInteractions[existingIdx].payload?.questions === undefined
+                ...existingInteraction.payload,
+                ...(questionsFromInput !== undefined && existingInteraction.payload?.questions === undefined
                   ? { questions: questionsFromInput }
                   : {}),
               },
