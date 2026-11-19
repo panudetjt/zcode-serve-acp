@@ -3,8 +3,12 @@
 bun = "1.4.4"
 
 [tasks.test]
-description = "Unit tests (wire codec, translator parity, golden replay, interactions, models)"
-run = "bun test ./test"
+description = "Unit tests with coverage (wire codec, translator parity, golden replay, interactions, models, daemon, jsonrpc, acp-server)"
+run = "bun test --coverage ./test"
+
+[tasks.check]
+description = "Typecheck TypeScript with bun check"
+run = "bun check"
 
 [tasks.compile]
 description = "Single-binary build → dist/zcode-serve-acp"
@@ -27,5 +31,5 @@ description = "Lint with oxlint (scoped: vendored repos/ carries its own oxlint 
 run = "bun x oxlint src test scripts"
 
 [tasks.ci]
-description = "test + compile + smoke"
-depends = ["test", "compile", "smoke"]
+description = "check + test + fmt-check + lint + compile + smoke"
+depends = ["check", "test", "fmt-check", "lint", "compile", "smoke"]

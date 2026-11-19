@@ -9,6 +9,8 @@
   "type": "module",
   "scripts": {
     "test": "bun test ./test",
+    "test:coverage": "bun test --coverage ./test",
+    "check": "bun check",
     "compile": "bun build --compile --target=bun-linux-x64 --outfile dist/zcode-serve-acp src/bin.ts",
     "smoke": "bun scripts/smoke.mjs"
   },

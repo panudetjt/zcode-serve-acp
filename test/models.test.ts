@@ -1,12 +1,16 @@
 import { describe, expect, it } from "bun:test";
-import { modelsToAcp } from "../src/models.ts";
-import { buildAvailableCommands, buildInitializeResult, rewriteSkillMention } from "../src/acp/protocol.ts";
-import { AcpServer } from "../src/acp/server.ts";
 import { Effect } from "effect";
+import { FileSystem } from "effect/FileSystem";
+import { fallbackModels, modelsToAcp } from "../src/models.ts";
+import {
+  buildAvailableCommands,
+  buildInitializeResult,
+  decodePrompt,
+  rewriteSkillMention,
+} from "../src/acp/protocol.ts";
+import { AcpServer } from "../src/acp/server.ts";
 import { Log } from "../src/log.ts";
 import type { AvailableModel } from "../src/serve/session.ts";
-
-void Log;
 
 const sampleModels: AvailableModel[] = [
   {
@@ -117,5 +121,84 @@ describe("skills advertising and prompt formatting", () => {
     expect(parsedSkills).toEqual([{ name: "tdd", description: "TDD skill" }]);
     expect(parsedSlash).toEqual([{ name: "goal", description: "Set goal" }]);
     expect(seen.size).toBe(availableCommands.length);
+  });
+});
+
+describe("fallbackModels", () => {
+  it("returns empty array when setting/credentials files are missing", async () => {
+    const fakeFs = {
+      readFileString: () => Effect.fail(new Error("ENOENT")),
+    } as unknown as FileSystem;
+    const res = await Effect.runPromise(fallbackModels.pipe(Effect.provideService(FileSystem, fakeFs)));
+    expect(res).toEqual([]);
+  });
+
+  it("decodes fallback models when files are present and match individual-coding-plan", async () => {
+    const settingJson = JSON.stringify({
+      providerFamilyConnectionSelections: {
+        zai: { kind: "individual-coding-plan" },
+      },
+      modelProviderFamilyModes: {},
+    });
+    const credsJson = JSON.stringify({
+      "oauth:zai:access_token": "valid-token-123",
+    });
+    const tableJson = JSON.stringify({
+      config: {
+        providerConfigRules: {
+          providerRules: [
+            {
+              providerId: "zai-provider",
+              config: {
+                access: {
+                  type: "zhipu-account",
+                  mode: "individual-coding-plan",
+                  accountType: "zai",
+                },
+                builtinModelIds: ["GLM-5.3"],
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    const fakeFs = {
+      readFileString: (path: string) => {
+        if (path.includes("setting.json")) return Effect.succeed(settingJson);
+        if (path.includes("credentials.json")) return Effect.succeed(credsJson);
+        if (path.includes("zcode-builtin.json")) return Effect.succeed(tableJson);
+        return Effect.fail(new Error("ENOENT"));
+      },
+    } as unknown as FileSystem;
+
+    const res = await Effect.runPromise(fallbackModels.pipe(Effect.provideService(FileSystem, fakeFs)));
+    expect(res.length).toBe(1);
+    expect(res[0]?.modelId).toBe("GLM-5.3");
+    expect(res[0]?.providerId).toBe("zai-provider");
+  });
+});
+
+describe("decodePrompt", () => {
+  it("decodes string and text blocks", async () => {
+    const res = await Effect.runPromise(decodePrompt(["hello world", { type: "text", text: "from block" }]));
+    expect(res.text).toBe("hello world\nfrom block");
+    expect(res.images).toEqual([]);
+  });
+
+  it("decodes image blocks", async () => {
+    const imgBlock = { type: "image", data: "base64...", mimeType: "image/png" };
+    const res = await Effect.runPromise(decodePrompt([imgBlock]));
+    expect(res.images.length).toBe(1);
+    expect(res.images[0]?.mimeType).toBe("image/png");
+  });
+
+  it("fails with DecodeError on invalid prompt blocks", async () => {
+    const result = await Effect.runPromise(decodePrompt([{ type: "unknown-type" }]).pipe(Effect.result));
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure._tag).toBe("DecodeError");
+      expect(result.failure.location).toBe("acp/prompt");
+    }
   });
 });

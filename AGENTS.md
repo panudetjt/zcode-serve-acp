@@ -50,10 +50,11 @@ Each update lands as exactly one reviewable commit. Keep everything under
 
 | Task | Command |
 |---|---|
-| Unit tests | `mise run test` (= `bun test`) |
+| Unit tests (with coverage) | `mise run test` (= `bun test --coverage ./test`) |
+| Typecheck | `mise run check` (= `bun check`) |
 | Compile single binary | `mise run compile` |
 | E2E smoke (needs a real local daemon) | `mise run smoke` |
-| All three | `mise run ci` |
+| All tasks | `mise run ci` |
 | Format | `mise run fmt` |
 | Lint | `mise run lint` |
 
