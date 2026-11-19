@@ -41,6 +41,15 @@ describe("Errors & tolerate helper", () => {
     expect(res).toBeUndefined();
   });
 
+  // The onFail handler is best-effort too: if it fails, tolerate still
+  // resolves to undefined and the handler's error never escapes.
+  test("tolerate swallows a failing onFail handler", async () => {
+    const res = await Effect.runPromise(
+      tolerate(Effect.fail("boom"), () => new SessionError({ message: "onFail itself failed" })),
+    );
+    expect(res).toBeUndefined();
+  });
+
   test("renderError renders errors and strings", () => {
     expect(renderError(new Error("err message"))).toBe("err message");
     expect(renderError("simple string")).toBe("simple string");
