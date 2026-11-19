@@ -7,10 +7,12 @@ import { describe, expect, it } from "bun:test";
 import {
   buildElicitationParams,
   buildElicitationResolve,
+  buildPermissionParams,
   extractElicitationQuestions,
   extractPermissionOptionId,
   isElicitation,
   mapPermissionOptions,
+  readPermissionServerRequest,
   type ExtractedQuestion,
 } from "../src/acp/interactions.ts";
 import type { PendingInteraction } from "../src/translate/translator.ts";
@@ -148,5 +150,81 @@ describe("request_permission mapping", () => {
     const rawOptions = [{ optionId: "a", label: "Allow", kind: "allowOnce" }];
     const mapped = mapPermissionOptions(rawOptions);
     expect(extractPermissionOptionId({}, rawOptions, mapped)).toBe("a");
+  });
+
+  it("buildPermissionParams creates params with default or custom options", () => {
+    const withDefaults = buildPermissionParams("sess-1", {}, "tool_123");
+    expect(withDefaults.toolCall.toolCallId).toBe("tool_123");
+    expect(withDefaults.options.length).toBe(2);
+
+    const withCustom = buildPermissionParams(
+      "sess-1",
+      {
+        toolCallId: "tool_custom",
+        toolName: "Bash",
+        summary: "Execute bash command",
+        options: [{ optionId: "opt1", name: "Run once", kind: "allowOnce" }],
+      },
+      undefined,
+    );
+    expect(withCustom.toolCall.toolCallId).toBe("tool_custom");
+    expect(withCustom.toolCall.title).toBe("Execute bash command");
+    expect(withCustom.options[0]?.optionId).toBe("opt1");
+  });
+
+  it("readPermissionServerRequest parses server requests safely", () => {
+    const parsed = readPermissionServerRequest({
+      interactionId: "act_1",
+      toolCallId: "t_1",
+      toolName: "Bash",
+      options: [{ id: "opt1" }],
+    });
+    expect(parsed.interactionId).toBe("act_1");
+    expect(parsed.toolCallId).toBe("t_1");
+    expect(parsed.toolName).toBe("Bash");
+    expect(parsed.options?.length).toBe(1);
+
+    expect(readPermissionServerRequest(null)).toEqual({});
+    expect(readPermissionServerRequest("not an object")).toEqual({});
+  });
+
+  it("extractElicitationQuestions fallbacks and multiselect schema", () => {
+    const fallbackQ = extractElicitationQuestions({
+      interactionId: "i1",
+      kind: "userInput",
+      payload: { prompt: "Please enter your name:" },
+    });
+    expect(fallbackQ.length).toBe(1);
+    expect(fallbackQ[0]?.question).toBe("Please enter your name:");
+
+    // multiSelect schema building
+    const multiParams = buildElicitationParams(
+      "sess-1",
+      [
+        {
+          id: "choices",
+          header: "Select items",
+          question: "Choose items:",
+          options: [{ label: "A", value: "a" }],
+          multiSelect: true,
+        },
+        {
+          id: "notes",
+          header: "Notes",
+          question: "Extra notes",
+          options: [],
+        },
+      ],
+      {},
+    );
+    expect((multiParams.requestedSchema.properties.choices as { type: string }).type).toBe("array");
+    expect((multiParams.requestedSchema.properties.notes as { type: string }).type).toBe("string");
+
+    // resolve text-only question
+    const resolved = buildElicitationResolve({ action: "accept", content: { notes: "my note" } }, [
+      { id: "notes", header: "Notes", question: "Extra notes", options: [] },
+    ]);
+    expect(resolved.action).toBe("accept");
+    expect(resolved.optionId).toBe("my note");
   });
 });

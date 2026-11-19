@@ -13,7 +13,7 @@
  * the same concurrency shape as the pre-rewrite `void` handlers, but
  * interruption-safe.
  */
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, Result } from "effect";
 import * as ScopeNS from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import { ChannelClosed, ChannelOpenError, RpcError, RpcTimeout, renderError, tolerate } from "../errors.ts";
@@ -181,10 +181,9 @@ export class ChannelClient {
     arg: unknown,
   ): Effect.Effect<void, unknown> {
     return Effect.gen({ self: this }, function* () {
-      let result: unknown;
-      try {
-        result = yield* this.handlers.onRequest(channelName, name, arg);
-      } catch (cause) {
+      const outcome = yield* Effect.result(this.handlers.onRequest(channelName, name, arg));
+      if (Result.isFailure(outcome)) {
+        const cause = outcome.failure;
         yield* this.write(
           encodeRpcMessage([MSG.PromiseErrorObj, id], {
             message: renderError(cause),
@@ -193,7 +192,9 @@ export class ChannelClient {
         ).pipe(Effect.orElseSucceed(() => undefined));
         return;
       }
-      yield* this.write(encodeRpcMessage([MSG.PromiseSuccess, id], result)).pipe(Effect.orElseSucceed(() => undefined));
+      yield* this.write(encodeRpcMessage([MSG.PromiseSuccess, id], outcome.success)).pipe(
+        Effect.orElseSucceed(() => undefined),
+      );
     });
   }
 
@@ -211,6 +212,9 @@ export class ChannelClient {
   }
 
   private write(bytes: Uint8Array): Effect.Effect<void, ChannelClosed> {
+    if (this.settled) {
+      return Effect.fail(new ChannelClosed({ reason: "zcode server channel already closed" }));
+    }
     return this.writer
       .write(bytes)
       .pipe(
