@@ -57,7 +57,7 @@ class DaemonDeps extends Context.Service<
     readonly fs: FileSystem;
     readonly serveBin: string;
     /** spawn `serve` detached; resolves immediately, daemon keeps running */
-    readonly spawnServe: () => Effect.Effect<void, SpawnError>;
+    readonly spawnServe: Effect.Effect<void, SpawnError>;
     /** first async spawn error, if the detached spawn already failed */
     readonly spawnFailure: Effect.Effect<string | undefined>;
   }
@@ -70,25 +70,29 @@ class DaemonDeps extends Context.Service<
       const serveBin = yield* resolveServeBinary(fs);
       let spawnError: string | undefined;
 
-      const spawnServe = Effect.fn("DaemonDeps.spawnServe")(function* () {
-        yield* Effect.try({
-          try: () => {
-            const child = nodeSpawn(serveBin, ["serve"], {
-              env: childEnv(),
-              detached: true,
-              stdio: "ignore",
-            });
-            // Pre-rewrite bug fix: record the async spawn error so the
-            // readiness loop can fail fast instead of waiting out 30s.
-            child.on("error", (error) => {
-              spawnError ??= error.message;
-            });
-            // The daemon must outlive the bridge — fully detach.
-            child.unref();
-          },
-          catch: (cause) => new SpawnError({ bin: serveBin, message: renderError(cause) }),
-        });
-      });
+      // Effect-valued property (not a zero-arg function): the Effect is already
+      // lazy, so `spawnServe` runs the wrapped `Effect.fn` fresh on each run.
+      const spawnServe: Effect.Effect<void, SpawnError> = Effect.suspend(
+        Effect.fn("DaemonDeps.spawnServe")(function* () {
+          yield* Effect.try({
+            try: () => {
+              const child = nodeSpawn(serveBin, ["serve"], {
+                env: childEnv(),
+                detached: true,
+                stdio: "ignore",
+              });
+              // Pre-rewrite bug fix: record the async spawn error so the
+              // readiness loop can fail fast instead of waiting out 30s.
+              child.on("error", (error) => {
+                spawnError ??= error.message;
+              });
+              // The daemon must outlive the bridge — fully detach.
+              child.unref();
+            },
+            catch: (cause) => new SpawnError({ bin: serveBin, message: renderError(cause) }),
+          });
+        }),
+      );
 
       return DaemonDeps.of({
         client,
@@ -190,7 +194,7 @@ export class Daemon extends Context.Service<
         const ready = status !== undefined && (yield* probeServerInfo(status.host, status.port, token));
 
         if (!ready) {
-          yield* deps.spawnServe();
+          yield* deps.spawnServe;
           const found = yield* waitForReadyDaemon();
           return { status: found.status, token: found.token, wsPath: "/ws/host" } satisfies DaemonConnection;
         }
