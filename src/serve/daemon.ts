@@ -23,7 +23,7 @@ import path from "node:path";
 import { Clock, Context, Effect, Layer, Result, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { HttpClient, HttpClientRequest } from "effect/http";
-import { CapabilityError, DiscoveryError, SpawnError, renderError } from "../errors.ts";
+import { CapabilityError, DecodeError, DiscoveryError, SpawnError, renderError } from "../errors.ts";
 import { childEnv, envDataOverride, envHome, envServeBin, envServerRoot } from "../config.ts";
 import { Log } from "../log.ts";
 
@@ -126,9 +126,14 @@ export class Daemon extends Context.Service<
       const readStatus = Effect.fn("Daemon.readStatus")(function* (rootDir: string) {
         const text = yield* readFile(path.join(rootDir, "run", "status.json"));
         if (text === undefined) return undefined;
-        const parsed = yield* Effect.try({ try: () => JSON.parse(text) as unknown, catch: (cause) => cause }).pipe(
-          Effect.result,
-        );
+        // Typed catch (DecodeError) per the error taxonomy; the failure is
+        // swallowed via Effect.result right after — malformed status stays
+        // tolerated as "not ready" (pre-rewrite behavior).
+        const parsed = yield* Effect.try({
+          try: () => JSON.parse(text) as unknown,
+          catch: (cause) =>
+            new DecodeError({ location: "daemon/status.json", message: "malformed daemon status JSON", cause }),
+        }).pipe(Effect.result);
         if (!Result.isSuccess(parsed)) return undefined;
         const result = yield* Effect.result(Schema.decodeUnknownEffect(ServerStatusSchema)(parsed.success));
         return Result.isSuccess(result) ? result.success : undefined;
