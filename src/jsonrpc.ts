@@ -6,14 +6,14 @@
  * contract from the pre-rewrite bin.ts). Outbound messages are written
  * through the Stdio sink, so writes get the platform's backpressure handling.
  */
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import { DecodeError } from "./errors.ts";
 
 export const JsonRpcId = Schema.Union([Schema.Number, Schema.String]);
 export type JsonRpcId = typeof JsonRpcId.Type;
 
 export const JsonRpcErrorObject = Schema.Struct({
-  code: Schema.Number,
+  code: Schema.Finite,
   message: Schema.String,
 });
 export type JsonRpcErrorObject = typeof JsonRpcErrorObject.Type;
@@ -62,12 +62,9 @@ const decodeMessage = Schema.decodeUnknownEffect(JsonRpcMessage, {
 
 export const parseLine = (line: string): Effect.Effect<ParseOutcome, DecodeError> =>
   Effect.gen(function* () {
-    let raw: unknown;
-    try {
-      raw = JSON.parse(line);
-    } catch {
-      return { _tag: "Malformed" };
-    }
+    const parsed = yield* Effect.try(() => JSON.parse(line)).pipe(Effect.result);
+    if (!Result.isSuccess(parsed)) return { _tag: "Malformed" };
+    const raw: unknown = parsed.success;
     const msg = yield* decodeMessage(raw).pipe(
       Effect.mapError((issue) => new DecodeError({ location: "jsonrpc/inbound", message: issue.message })),
     );

@@ -20,10 +20,11 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
-import { Context, Effect, Layer, Result, Schema } from "effect";
+import { Clock, Context, Effect, Layer, Result, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { CapabilityError, DiscoveryError, SpawnError, renderError } from "../errors.ts";
+import { childEnv, envDataOverride, envHome, envServeBin, envServerRoot } from "../config.ts";
 import { Log } from "../log.ts";
 
 export interface ServerStatus {
@@ -37,9 +38,9 @@ export interface ServerStatus {
 export const ServerStatusSchema = Schema.Struct({
   state: Schema.String,
   host: Schema.String,
-  port: Schema.Number,
+  port: Schema.Finite,
   version: Schema.optional(Schema.String),
-  pid: Schema.optional(Schema.Number),
+  pid: Schema.optional(Schema.Finite),
 });
 
 export interface DaemonConnection {
@@ -73,7 +74,7 @@ class DaemonDeps extends Context.Service<
         yield* Effect.try({
           try: () => {
             const child = nodeSpawn(serveBin, ["serve"], {
-              env: process.env,
+              env: childEnv(),
               detached: true,
               stdio: "ignore",
             });
@@ -121,13 +122,9 @@ export class Daemon extends Context.Service<
       const readStatus = Effect.fn("Daemon.readStatus")(function* (rootDir: string) {
         const text = yield* readFile(path.join(rootDir, "run", "status.json"));
         if (text === undefined) return undefined;
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(text) as unknown;
-        } catch {
-          return undefined;
-        }
-        const result = yield* Effect.result(Schema.decodeUnknownEffect(ServerStatusSchema)(parsed));
+        const parsed = yield* Effect.try(() => JSON.parse(text) as unknown).pipe(Effect.result);
+        if (!Result.isSuccess(parsed)) return undefined;
+        const result = yield* Effect.result(Schema.decodeUnknownEffect(ServerStatusSchema)(parsed.success));
         return Result.isSuccess(result) ? result.success : undefined;
       });
 
@@ -154,14 +151,14 @@ export class Daemon extends Context.Service<
         DiscoveryError | SpawnError
       > {
         const rootDir = serverRoot()!;
-        const deadline = Date.now() + 30_000;
+        const deadline = (yield* Clock.currentTimeMillis) + 30_000;
         for (;;) {
           const status = yield* readStatus(rootDir);
           const token = yield* readToken(rootDir);
           if (status !== undefined && (yield* probeServerInfo(status.host, status.port, token))) {
             return { status, token };
           }
-          if (Date.now() > deadline) {
+          if ((yield* Clock.currentTimeMillis) > deadline) {
             const spawnFailure = yield* deps.spawnFailure;
             if (spawnFailure !== undefined) {
               return yield* new SpawnError({
@@ -243,19 +240,22 @@ const rec = (value: unknown): Record<string, unknown> | undefined =>
 const formatCause = (cause: unknown): string => renderError(cause);
 
 export function dataRoot(): string {
-  if (process.env.ZCODE_DATA_BASE_DIR) return process.env.ZCODE_DATA_BASE_DIR;
-  return process.env.HOME ?? os.homedir();
+  const override = envDataOverride();
+  if (override) return override;
+  return envHome() ?? os.homedir();
 }
 
 export function serverRoot(): string | undefined {
-  if (process.env.ZCODE_SERVER_ROOT) return process.env.ZCODE_SERVER_ROOT;
+  const override = envServerRoot();
+  if (override) return override;
   const root = dataRoot();
   return root === undefined ? undefined : path.join(root, ".zcode", "server");
 }
 
 export const resolveServeBinary = (fs: FileSystem): Effect.Effect<string> =>
   Effect.gen(function* () {
-    if (process.env.ZCODE_SERVE_BIN) return process.env.ZCODE_SERVE_BIN;
+    const serveBin = envServeBin();
+    if (serveBin) return serveBin;
     const candidates = [path.join(os.homedir(), ".zcode", "server", "bin", "zcode"), "/usr/local/bin/zcode"];
     for (const p of candidates) {
       const exists = yield* fs.exists(p).pipe(Effect.orElseSucceed(() => false));

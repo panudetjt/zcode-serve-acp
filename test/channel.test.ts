@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import * as BunSocket from "@effect/platform-bun/BunSocket";
-import { Deferred, Effect, Fiber } from "effect";
+import { Deferred, Effect, Fiber, Layer } from "effect";
 import { Log } from "../src/log.ts";
 import { ChannelClient } from "../src/serve/channel.ts";
-import { decodeRpcMessage, encodeRpcMessage, MSG } from "../src/serve/wire.ts";
+import { decodeRpcMessage, encodeRpcMessage, FRAME_KIND_REGULAR, MSG, writeProtocolFrame } from "../src/serve/wire.ts";
 
 describe("ChannelClient over WebSocket", () => {
   test("connect and handshake completes on MSG.Initialize [200]", async () => {
@@ -332,6 +332,113 @@ describe("ChannelClient over WebSocket", () => {
 
       const err = yield* Effect.flip(Fiber.join(pendingFiber));
       expect(err._tag).toBe("ChannelClosed");
+    }).pipe(Effect.provide(BunSocket.layerWebSocketConstructor), Effect.provide(Log.layerQuiet), Effect.scoped);
+
+    try {
+      await Effect.runPromise(prog);
+    } finally {
+      server.stop(true);
+    }
+  });
+});
+
+describe("dispatchFrame edge branches", () => {
+  test("undecodable frame is logged and ignored, channel stays usable", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(req, server) {
+        if (server.upgrade(req)) return;
+        return new Response("Not found", { status: 404 });
+      },
+      websocket: {
+        async open(ws) {
+          ws.send(encodeRpcMessage([MSG.Initialize]));
+          // let the client's dispatch pump attach before the edge frames land
+          await new Promise((resolve) => setTimeout(resolve, 80));
+          ws.send(encodeRpcMessage([MSG.EventError, 999, { message: "event error frame" }]));
+          // unknown frame type → unhandled branch
+          ws.send(encodeRpcMessage([42, 1, "whatever"]));
+          // well-framed but truncated VQL body → decodeRpcMessage throws → warn+ignore
+          ws.send(writeProtocolFrame(FRAME_KIND_REGULAR, 0, 0, new Uint8Array([0x05])));
+        },
+        message() {},
+      },
+    });
+
+    const captured: string[] = [];
+    const captureLog = Log.of({
+      debug: (...parts: unknown[]) => Effect.sync(() => captured.push(parts.map((x) => String(x)).join(" "))),
+      warn: (...parts: unknown[]) => Effect.sync(() => captured.push("WARN " + parts.map((x) => String(x)).join(" "))),
+    });
+    const prog = Effect.gen(function* () {
+      const client = yield* ChannelClient.connect(
+        `ws://localhost:${server.port}`,
+        {},
+        { onRequest: () => Effect.succeed(undefined), onClose: () => Effect.void },
+        yield* Log,
+      );
+      expect(client).toBeDefined();
+      // let the edge frames land and dispatch before closing
+      yield* Effect.sleep(300);
+      yield* client.close();
+    }).pipe(
+      Effect.provide(BunSocket.layerWebSocketConstructor),
+      Effect.provide(Layer.succeed(Log, captureLog)),
+      Effect.scoped,
+    );
+
+    try {
+      await Effect.runPromise(prog);
+    } finally {
+      server.stop(true);
+    }
+    const joined = captured.join("\n");
+    expect(joined).toContain("event error id=999");
+    expect(joined).toContain("unhandled frame type 42");
+    expect(joined).toContain("undecodable frame ignored");
+  });
+
+  test("failing event handler is tolerated and channel keeps working", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(req, server) {
+        if (server.upgrade(req)) return;
+        return new Response("Not found", { status: 404 });
+      },
+      websocket: {
+        open(ws) {
+          ws.send(encodeRpcMessage([MSG.Initialize]));
+        },
+        message(ws, msg) {
+          const raw = typeof msg === "string" ? Buffer.from(msg) : new Uint8Array(msg);
+          const decoded = decodeRpcMessage(raw);
+          if (decoded.header[0] === MSG.EventListen) {
+            const listenId = decoded.header[1] as number;
+            // echo the listen id back as an event so the registered handler runs
+            ws.send(encodeRpcMessage([MSG.EventFire, listenId, { payload: "boom" }]));
+          }
+        },
+      },
+    });
+
+    const prog = Effect.gen(function* () {
+      const log = yield* Log;
+      const client = yield* ChannelClient.connect(
+        `ws://localhost:${server.port}`,
+        {},
+        { onRequest: () => Effect.succeed(undefined), onClose: () => Effect.void },
+        log,
+      );
+      const disposeBoom = yield* client.listen("zcode-agent", "boom", undefined, () =>
+        Effect.fail("handler failed on purpose"),
+      );
+      // give the event round-trip a moment, then prove the channel is still usable
+      yield* Effect.sleep(120);
+      const dispose = yield* client.listen("zcode-agent", "second", undefined, () => Effect.void);
+      expect(typeof dispose).toBe("object");
+      yield* disposeBoom.pipe(Effect.orElseSucceed(() => undefined));
+      yield* dispose.pipe(Effect.orElseSucceed(() => undefined));
+      yield* client.close();
     }).pipe(Effect.provide(BunSocket.layerWebSocketConstructor), Effect.provide(Log.layerQuiet), Effect.scoped);
 
     try {

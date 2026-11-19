@@ -15,6 +15,7 @@
 import { Context, Deferred, Effect, Fiber, Layer, Option, Ref } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import type { DiscoveredSkill } from "../serve/session.ts";
+import { envDump } from "../config.ts";
 import {
   ServeSessionFactory,
   type AvailableModel,
@@ -66,7 +67,7 @@ interface TurnState {
   initialGuard?: Fiber.Fiber<void, unknown>;
 }
 
-const DUMP_FRAMES = process.env.ZCODE_SERVE_ACP_DUMP === "1";
+const DUMP_FRAMES = envDump();
 
 export interface AcpServerDeps {
   readonly sessions: ServeSessionFactory["Service"];
@@ -181,7 +182,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
           const dumped = yield* Ref.get(bridge.dumpRef);
           if (!dumped) {
             yield* Ref.set(bridge.dumpRef, true);
-            yield* Effect.sync(() => console.error(`[dump] first frame: ${JSON.stringify(payload)}`));
+            yield* deps.log.debug(`[dump] first frame: ${JSON.stringify(payload)}`);
           }
         }
         const result = bridge.translator.fold(payload);

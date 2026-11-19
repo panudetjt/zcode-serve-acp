@@ -15,6 +15,7 @@
 import { Effect, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import type { AvailableModel } from "./serve/session.ts";
+import { envDataOverride, envHome } from "./config.ts";
 
 export interface AcpiModel {
   modelId: string;
@@ -107,7 +108,7 @@ const decodeTable = Schema.decodeUnknownSync(ProviderTable);
 
 /** Presence-check fallback — never decrypts anything. */
 export const fallbackModels: Effect.Effect<AvailableModel[], never, FileSystem> = Effect.gen(function* () {
-  const root = process.env.ZCODE_DATA_BASE_DIR ?? process.env.HOME ?? "";
+  const root = envDataOverride() ?? envHome() ?? "";
   const v2 = `${root}/.zcode/v2`;
   const tablePath = `${v2}/runtime/provider/bundled/zcode-builtin.json`;
   const settingPath = `${v2}/setting.json`;

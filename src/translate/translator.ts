@@ -24,6 +24,7 @@
  * guards are the working spec; the golden fixtures encode the outcomes.
  */
 import { classifyToolKind, normalizeStatus } from "./toolKind.ts";
+import { envDebug } from "../config.ts";
 
 export interface ToolCallContentItem {
   type: "content" | "diff" | "terminal";
@@ -278,7 +279,7 @@ interface ToolInfo {
   kind?: string;
 }
 
-const DEBUG = process.env.ZCODE_SERVE_ACP_DEBUG === "1";
+const DEBUG = envDebug();
 
 export class FrameTranslator {
   private rowText = new Map<number, string>();

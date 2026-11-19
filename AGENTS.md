@@ -102,3 +102,18 @@ Bun version is pinned via `mise.toml` (1.4.4).
 - `dist/`, `node_modules/`, and `.repos/` are gitignored; never commit binaries or reference clones.
 - The prebuilt binary at `dist/zcode-serve-acp` is only produced by
   `mise run compile`, never checked in.
+
+## Effect Devtools (installed)
+
+- `@effect/tsgo` + `oxlint-tsgolint` + `typescript` 7 are devDependencies; `bun install`
+  runs `effect-tsgo patch --oxlint` (patches the oxlint native binding, its `.d.ts`
+  type augmentation for `oxlint.config.ts`, and tsgolint). Don't remove the prepare
+  script — the Effect lint rules need the patch after every fresh install.
+- `oxlint.config.ts` extends `@effect/tsgo/oxlint-presets/recommended` — the 154 Effect
+  diagnostics run type-aware through the patched tsgolint. `mise run lint` is the gate.
+- `tsconfig.json` plugins entry enables the LSP in editors that use the workspace
+  TypeScript version (VS Code/Cursor: status-bar TS version → "Use Workspace Version").
+  `diagnostics: false` per the Devtools docs so diagnostics come from Oxlint only;
+  `allowedUnstableApis` lists the platform surfaces this project deliberately uses
+  (ADR 0002). The VS Code/Cursor debugger extension (`effectful-tech.effect-vscode`)
+  adds fiber/context/span-stack inspection — install it in the editor, not the repo.

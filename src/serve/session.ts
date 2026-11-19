@@ -14,10 +14,11 @@
  * four-shape `as` probing. Each session owns an internal Scope holding its
  * WS channel; `dispose()` closes it (used by session/unload).
  */
-import { Context, Effect, Exit, Layer, Option, Ref, Schema } from "effect";
+import { Clock, Context, Effect, Exit, Layer, Option, Ref, Schema } from "effect";
 import * as ScopeType from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import { ChannelClosed, RpcError, RpcTimeout, SessionError, renderError, tolerate } from "../errors.ts";
+import { envDataOverride, envHome } from "../config.ts";
 import { Log } from "../log.ts";
 import { ChannelClient, type ServerRequestHandler } from "./channel.ts";
 import { Daemon, type DaemonConnection } from "./daemon.ts";
@@ -203,6 +204,9 @@ const makeSession = (
       return workspace;
     });
 
+    // listener disposers (from channel.listen) drained by dispose() on session/unload
+    const listenerDisposers: Array<Effect.Effect<void, unknown>> = [];
+
     const subscribeConversation = (daemonSessionId: string, workspace: WorkspaceInfo): Effect.Effect<void, unknown> =>
       Effect.gen(function* () {
         if ((yield* Ref.get(subscribedRef)) === true) return;
@@ -221,38 +225,42 @@ const makeSession = (
         );
         yield* log.debug(`[session] subscribed conversation ${daemonSessionId}`);
         const topic = `conversation/${daemonSessionId}`;
-        yield* channel.listen(
-          "zcode-agent",
-          "onDynamicConversationFrame",
-          {
-            sessionId: daemonSessionId,
-            workspacePath: workspace.workspacePath,
-            workspaceIdentity: workspace.workspaceIdentity,
-          },
-          (payload) =>
-            Effect.gen(function* () {
-              // The daemon pushes workspace-wide frames — filter to OUR conversation
-              // (client-side filtering, same as the upstream adapter).
-              const p = payload as { topic?: string; frame?: { topic?: string } } | undefined;
-              const frameTopic = p?.frame?.topic ?? p?.topic;
-              if (frameTopic !== undefined && frameTopic !== topic) return;
-              yield* handlers.onConversationFrame(payload);
-            }),
+        listenerDisposers.push(
+          yield* channel.listen(
+            "zcode-agent",
+            "onDynamicConversationFrame",
+            {
+              sessionId: daemonSessionId,
+              workspacePath: workspace.workspacePath,
+              workspaceIdentity: workspace.workspaceIdentity,
+            },
+            (payload) =>
+              Effect.gen(function* () {
+                // The daemon pushes workspace-wide frames — filter to OUR conversation
+                // (client-side filtering, same as the upstream adapter).
+                const p = payload as { topic?: string; frame?: { topic?: string } } | undefined;
+                const frameTopic = p?.frame?.topic ?? p?.topic;
+                if (frameTopic !== undefined && frameTopic !== topic) return;
+                yield* handlers.onConversationFrame(payload);
+              }),
+          ),
         );
-        yield* channel.listen(
-          "zcode-agent",
-          "onDynamicSessionLifecycle",
-          {
-            sessionId: daemonSessionId,
-            workspacePath: workspace.workspacePath,
-            workspaceIdentity: workspace.workspaceIdentity,
-          },
-          (payload) =>
-            Effect.gen(function* () {
-              const lifecycleSessionId = (payload as { sessionId?: string } | undefined)?.sessionId;
-              if (lifecycleSessionId !== undefined && lifecycleSessionId !== daemonSessionId) return;
-              yield* handlers.onLifecycle(payload);
-            }),
+        listenerDisposers.push(
+          yield* channel.listen(
+            "zcode-agent",
+            "onDynamicSessionLifecycle",
+            {
+              sessionId: daemonSessionId,
+              workspacePath: workspace.workspacePath,
+              workspaceIdentity: workspace.workspaceIdentity,
+            },
+            (payload) =>
+              Effect.gen(function* () {
+                const lifecycleSessionId = (payload as { sessionId?: string } | undefined)?.sessionId;
+                if (lifecycleSessionId !== undefined && lifecycleSessionId !== daemonSessionId) return;
+                yield* handlers.onLifecycle(payload);
+              }),
+          ),
         );
       });
 
@@ -358,7 +366,7 @@ const makeSession = (
               sessionId: daemonSessionId,
               type: "resolveInteraction",
               payload: { interactionId, answer },
-              issuedAt: Date.now(),
+              issuedAt: yield* Clock.currentTimeMillis,
             },
           },
           30_000,
@@ -397,7 +405,7 @@ const makeSession = (
               type,
               payload,
               ...(expectedForegroundExecutionId !== undefined ? { expectedForegroundExecutionId } : {}),
-              issuedAt: Date.now(),
+              issuedAt: yield* Clock.currentTimeMillis,
             },
           },
           30_000,
@@ -405,6 +413,9 @@ const makeSession = (
       });
 
     const disposeEffect = Effect.gen(function* () {
+      for (const disposer of listenerDisposers.splice(0)) {
+        yield* Effect.orElseSucceed(disposer, () => undefined);
+      }
       const channel = yield* Ref.get(channelRef);
       if (Option.isSome(channel)) yield* channel.value.close();
       yield* ScopeType.close(scope, Exit.succeed(undefined)).pipe(Effect.orElseSucceed(() => undefined));
@@ -475,7 +486,7 @@ const CreateSessionShape = Schema.Struct({
                 ),
                 label: Schema.optional(Schema.String),
                 providerLabel: Schema.optional(Schema.String),
-                contextWindow: Schema.optional(Schema.Number),
+                contextWindow: Schema.optional(Schema.Finite),
                 reasoning: Schema.optional(
                   Schema.Struct({
                     levels: Schema.optional(

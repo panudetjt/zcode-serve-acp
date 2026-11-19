@@ -109,24 +109,23 @@ export class ChannelClient {
 
   private dispatchFrame(frame: Uint8Array): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
-      let decoded: ReturnType<typeof decodeRpcMessage>;
-      try {
-        decoded = decodeRpcMessage(frame);
-      } catch (cause) {
-        yield* this.log.warn(`[channel] undecodable frame ignored: ${text(cause)}`);
+      const decoded = yield* Effect.try(() => decodeRpcMessage(frame)).pipe(Effect.result);
+      if (!Result.isSuccess(decoded)) {
+        yield* this.log.warn(`[channel] undecodable frame ignored: ${text(decoded.failure)}`);
         return;
       }
-      const type = decoded.header[0];
+      const msg = decoded.success;
+      const type = msg.header[0];
       if (type === MSG.Initialize) {
         Deferred.doneUnsafe(this.initDeferred, Effect.void);
         return;
       }
-      const id = decoded.header[1] as number;
+      const id = msg.header[1] as number;
       if (type === MSG.PromiseSuccess) {
         const deferred = this.pending.get(id);
         if (deferred !== undefined) {
           this.pending.delete(id);
-          Deferred.doneUnsafe(deferred, Effect.succeed(decoded.body));
+          Deferred.doneUnsafe(deferred, Effect.succeed(msg.body));
         }
         return;
       }
@@ -134,7 +133,7 @@ export class ChannelClient {
         const deferred = this.pending.get(id);
         if (deferred !== undefined) {
           this.pending.delete(id);
-          const payload = decoded.body as { message?: string } | undefined;
+          const payload = msg.body as { message?: string } | undefined;
           Deferred.doneUnsafe(
             deferred,
             Effect.fail(
@@ -154,23 +153,23 @@ export class ChannelClient {
           // Inline (not forked): frame handlers drive a sequential state
           // machine, so event order must be preserved — same as the
           // pre-rewrite synchronous listener dispatch.
-          yield* tolerate(handler(decoded.body), (cause) =>
+          yield* tolerate(handler(msg.body), (cause) =>
             this.log.warn(`[channel] event handler failed: ${text(cause)}`),
           );
         }
         return;
       }
       if (type === MSG.EventError) {
-        yield* this.log.debug(`[channel] event error id=${id}`, decoded.body);
+        yield* this.log.debug(`[channel] event error id=${id}`, msg.body);
         return;
       }
       if (type === MSG.Promise) {
         // server→client request (e.g. interaction requests): [100, id, channelName, name]
-        const [, , channelName, name] = decoded.header as [number, number, string, string];
-        yield* Effect.forkDetach(this.handleServerRequest(id, channelName, name, decoded.body));
+        const [, , channelName, name] = msg.header as [number, number, string, string];
+        yield* Effect.forkDetach(this.handleServerRequest(id, channelName, name, msg.body));
         return;
       }
-      yield* this.log.debug(`[channel] unhandled frame type ${type}`, decoded.header);
+      yield* this.log.debug(`[channel] unhandled frame type ${type}`, msg.header);
     });
   }
 
@@ -240,8 +239,10 @@ export class ChannelClient {
         }),
       );
       return yield* Deferred.await(deferred).pipe(
-        Effect.timeout(timeoutMs),
-        Effect.catchTag("TimeoutError", () => Effect.fail(new RpcTimeout({ channel: channelName, method, timeoutMs }))),
+        Effect.timeoutOrElse({
+          duration: timeoutMs,
+          orElse: () => Effect.fail(new RpcTimeout({ channel: channelName, method, timeoutMs })),
+        }),
         Effect.ensuring(
           Effect.gen({ self: this }, function* () {
             const stillPending = this.pending.get(id) === deferred;
@@ -262,19 +263,23 @@ export class ChannelClient {
     arg: unknown,
     handler: ChannelEventListener,
   ): Effect.Effect<Effect.Effect<void, unknown>> {
-    return Effect.gen({ self: this }, function* () {
-      const id = this.nextId++;
-      this.listeners.set(id, handler);
-      this.eventByKey.set(`${channelName}:${event}`, { id, handler });
-      yield* this.write(encodeRpcMessage([MSG.EventListen, id, channelName, event], arg ?? undefined)).pipe(
-        Effect.orElseSucceed(() => undefined),
-      );
-      return Effect.gen({ self: this }, function* () {
-        this.listeners.delete(id);
-        this.eventByKey.delete(`${channelName}:${event}`);
-        yield* this.write(encodeRpcMessage([MSG.EventDispose, id])).pipe(Effect.orElseSucceed(() => undefined));
-      });
-    });
+    return Effect.map(
+      Effect.gen({ self: this }, function* () {
+        const id = this.nextId++;
+        this.listeners.set(id, handler);
+        this.eventByKey.set(`${channelName}:${event}`, { id, handler });
+        yield* this.write(encodeRpcMessage([MSG.EventListen, id, channelName, event], arg ?? undefined)).pipe(
+          Effect.orElseSucceed(() => undefined),
+        );
+        return id;
+      }),
+      (id) =>
+        Effect.gen({ self: this }, function* () {
+          this.listeners.delete(id);
+          this.eventByKey.delete(`${channelName}:${event}`);
+          yield* this.write(encodeRpcMessage([MSG.EventDispose, id])).pipe(Effect.orElseSucceed(() => undefined));
+        }),
+    );
   }
 
   close(): Effect.Effect<void, unknown> {
