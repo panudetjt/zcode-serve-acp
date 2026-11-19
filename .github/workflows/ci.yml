@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mise-org/action@v1
+        with:
+          version: 2026.11.2
+
+      - name: Unit tests (includes the golden-replay parity gate)
+        run: mise run test
+
+      - name: Format check
+        run: mise run fmt-check
+
+      - name: Lint
+        run: mise run lint
+
+      - name: Compile single binary
+        run: mise run compile
+      # smoke is not part of CI: it needs a real local zcode daemon.

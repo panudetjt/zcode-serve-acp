@@ -1,25 +1,27 @@
 {
   "name": "zcode-serve-acp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Standalone Agent Client Protocol (ACP) bridge that attaches a coding-agent client (e.g. T3 Code Local ACP command) to the `zcode serve` daemon — the daemon owns ZCode credentials; the bridge never reads the credential store.",
-  "type": "module",
+  "license": "MIT",
   "bin": {
     "zcode-serve-acp": "./src/bin.ts"
   },
+  "type": "module",
   "scripts": {
     "test": "bun test ./test",
     "compile": "bun build --compile --target=bun-linux-x64 --outfile dist/zcode-serve-acp src/bin.ts",
     "smoke": "bun scripts/smoke.mjs"
   },
-  "engines": {
-    "bun": ">=1.4.0"
-  },
-  "license": "MIT",
   "dependencies": {
     "@effect/platform-bun": "^4.1.4",
     "effect": "^4.1.4"
   },
   "devDependencies": {
-    "bun-types": "^1.4.5"
+    "bun-types": "^1.4.5",
+    "oxfmt": "^0.79.0",
+    "oxlint": "^1.94.0"
+  },
+  "engines": {
+    "bun": ">=1.4.0"
   }
 }
