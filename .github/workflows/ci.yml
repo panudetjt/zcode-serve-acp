@@ -15,6 +15,9 @@ jobs:
         with:
           version: 2026.11.2
 
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
       - name: Unit tests (includes the golden-replay parity gate)
         run: mise run test
 
