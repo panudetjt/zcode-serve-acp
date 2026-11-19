@@ -17,6 +17,7 @@ import { Effect, Layer, Deferred, Result, Stream } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { Stdio } from "effect/Stdio";
 import { FileSystem } from "effect/FileSystem";
+import type { PlatformError } from "effect/PlatformError";
 import { AcpServer } from "./acp/server.ts";
 import { ClientRequestError } from "./errors.ts";
 import {
@@ -79,7 +80,12 @@ const Main = Effect.gen(function* () {
     fallbackModels: fallbackModels.pipe(Effect.provideService(FileSystem, fs)),
   });
 
-  const handleLine = (line: string): Effect.Effect<void, unknown> =>
+  // Line-level failures never escape this loop: decode errors become a
+  // stderr note (Malformed) or a JSON-RPC error response / warn log
+  // (handle failures), per the pre-rewrite wire contract. The only channel
+  // left is PlatformError from the stdin stream and stdout writes, which
+  // genuinely ends the process (runMain logs it and exits non-zero).
+  const handleLine = (line: string): Effect.Effect<void, PlatformError> =>
     Effect.gen(function* () {
       const trimmed = line.trim();
       if (trimmed === "") return;
@@ -136,7 +142,7 @@ const Main = Effect.gen(function* () {
 
 const AppLayer = ServeSessionFactory.layerNoDeps.pipe(Layer.provide(Daemon.layer), Layer.provide(PlatformLayer));
 
-const program: Effect.Effect<void, unknown, never> = Effect.provide(
+const program: Effect.Effect<void, PlatformError, never> = Effect.provide(
   Main,
   Layer.merge(AppLayer, PlatformLayer) as Layer.Layer<Stdio | ServeSessionFactory | Log | FileSystem>,
 );
