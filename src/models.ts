@@ -134,9 +134,11 @@ export const fallbackModels: Effect.Effect<AvailableModel[], never, FileSystem> 
   ]);
   if (settingRaw === undefined || credsRaw === undefined || tableRaw === undefined) return [];
 
-  const setting = decodeSetting(settingRaw);
-  const creds = decodeCreds(credsRaw);
-  const table = decodeTable(tableRaw);
+  // decodeUnknownSync throws on wrong shapes — route the throw through the
+  // typed error channel so the best-effort pipe below can swallow it.
+  const setting = yield* Effect.try(() => decodeSetting(settingRaw));
+  const creds = yield* Effect.try(() => decodeCreds(credsRaw));
+  const table = yield* Effect.try(() => decodeTable(tableRaw));
 
   const families: string[] = [];
   for (const [family, selection] of Object.entries(setting.providerFamilyConnectionSelections ?? {})) {

@@ -1,9 +1,27 @@
 # bun runner config (mise.toml = task SSOT — thamrules mise-single-source)
-# coverageThreshold red-proofed 19-20 พ.ย. 2026 (guard ต้องแดงได้กับ regression จริง):
-# 1.0 / 0.95 / 0.90 / 0.85 / 0.80 / 0.78 / 0.77 / 0.76 ล้วน exit 1, 0.75 ผ่าน — bun วัด
-# aggregate ของตัวเอง (เข้มกว่าคอลัมน์ Lines ในตาราง: All files lines 91.21%) — ตัวถ่วง =
-# server.ts quiet-fiber/interaction branches + daemon spawn/deadline (ต้อง integration test
-# จริง) — ตาม 98% ต้องทำ test harness เพิ่มเป็นงานแยก
+#
+# coverageSkipTestFiles: test files are not shipped code — only src/ is gated.
+#
+# coverageThreshold semantics (bun 1.4.4, probe-verified 20 พ.ย. 2026):
+#   1. The number applies to EVERY FILE's funcs AND lines — the binding
+#      constraint is the WORST file×metric, not the "All files" row.
+#      (Boundary proofs: at the 19 พ.ย. state 0.75-pass/0.76-fail sat exactly
+#      on errors.ts funcs 75.00%; today 0.92-pass/0.93-fail sits on
+#      session.ts funcs 92.31%.)
+#   2. Exactly 1.0 is a silent NO-OP: it exited 0 while lines were 98.95% on
+#      the same run where 0.999 exited 1. A 1.0 gate never bites — do not
+#      "upgrade" to 1.0 for optics.
+#   3. 0.92 = the worst-file boundary today; red-proofed both directions:
+#      hiding test/acp-server.edges.test.ts drops lines to 99.36% → exit 1;
+#      0.93 → exit 1; 0.92 → exit 0 with everything green.
+#
+# Lines are 100.00% on every src file. Residual sub-100 funcs% (server/
+# daemon/session) is a bun instrumentation artifact: every remaining unhit
+# function was mutation-tested ALIVE (a `throw` injected into its body fails
+# the suite), yet bun still counts unattributed function slots per file
+# (~+2..+5 per file, only in files using effect combinators; config.ts and
+# toolKind.ts count exactly). Re-measure after bun upgrades — the gate rides
+# the worst file.
 [test]
 coverageSkipTestFiles = true
-coverageThreshold = 0.75
+coverageThreshold = 0.92

@@ -41,6 +41,13 @@ describe("Errors & tolerate helper", () => {
     expect(res).toBeUndefined();
   });
 
+  test("tolerate stays best-effort when the onFail handler itself fails", async () => {
+    // The orElseSucceed fallback in tolerate only runs when the onFail effect
+    // fails — a best-effort hook must never break the surrounding flow.
+    const res = await Effect.runPromise(tolerate(Effect.fail("boom"), () => Effect.fail("onFail failed too")));
+    expect(res).toBeUndefined();
+  });
+
   test("renderError renders errors and strings", () => {
     expect(renderError(new Error("err message"))).toBe("err message");
     expect(renderError("simple string")).toBe("simple string");

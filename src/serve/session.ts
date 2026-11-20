@@ -133,7 +133,11 @@ const makeSession = (
     const connectionRef = Ref.makeUnsafe<Option.Option<DaemonConnection>>(Option.none());
     const channelRef = Ref.makeUnsafe<Option.Option<ChannelClient>>(Option.none());
     const workspaceRef = Ref.makeUnsafe<Option.Option<WorkspaceInfo>>(Option.none());
-    const daemonSessionRef = Ref.makeUnsafe<Option.Option<string>>(Option.none());
+    // One invariant, one ref: a daemon session always rides with the workspace
+    // it was created against (both are set together by createSession).
+    const sessionRef = Ref.makeUnsafe<Option.Option<{ daemonSessionId: string; workspace: WorkspaceInfo }>>(
+      Option.none(),
+    );
     const subscribedRef = Ref.makeUnsafe(false);
 
     const ensureConnection: Effect.Effect<DaemonConnection, SessionError> = Effect.gen(function* () {
@@ -264,20 +268,14 @@ const makeSession = (
         );
       });
 
-    const requireDaemonSession: Effect.Effect<string, SessionError> = Effect.gen(function* () {
-      const id = yield* Ref.get(daemonSessionRef);
-      if (Option.isNone(id)) {
-        return yield* new SessionError({ message: "no daemon session — call createSession first" });
-      }
-      return id.value;
-    });
-
-    const workspaceIdentifiers = Effect.gen(function* () {
-      const ws = yield* Ref.get(workspaceRef);
-      return Option.isSome(ws)
-        ? { workspacePath: ws.value.workspacePath, workspaceIdentity: ws.value.workspaceIdentity }
-        : { workspacePath: cwd, workspaceIdentity: cwd };
-    });
+    const requireDaemonSession: Effect.Effect<{ daemonSessionId: string; workspace: WorkspaceInfo }, SessionError> =
+      Effect.gen(function* () {
+        const session = yield* Ref.get(sessionRef);
+        if (Option.isNone(session)) {
+          return yield* new SessionError({ message: "no daemon session — call createSession first" });
+        }
+        return session.value;
+      });
 
     const createSession = (modelSelection?: unknown): Effect.Effect<CreateSessionResult, ServeError> =>
       Effect.gen(function* () {
@@ -295,7 +293,7 @@ const makeSession = (
             message: `createSession returned no sessionId: ${JSON.stringify(result).slice(0, 400)}`,
           });
         }
-        yield* Ref.set(daemonSessionRef, Option.some(decoded.daemonSessionId));
+        yield* Ref.set(sessionRef, Option.some({ daemonSessionId: decoded.daemonSessionId, workspace }));
         yield* Effect.forkDetach(
           tolerate(subscribeConversation(decoded.daemonSessionId, workspace), (cause) =>
             log.debug(`[session] subscribeConversationV4 failed: ${renderError(cause)}`),
@@ -332,8 +330,7 @@ const makeSession = (
 
     const sendPrompt: ServeSession["sendPrompt"] = (text, modelSelection, attachments) =>
       Effect.gen(function* () {
-        const daemonSessionId = yield* requireDaemonSession;
-        const ws = yield* workspaceIdentifiers;
+        const { daemonSessionId, workspace } = yield* requireDaemonSession;
         const inputId = crypto.randomUUID();
         yield* call(
           "sendPrompt",
@@ -341,8 +338,8 @@ const makeSession = (
             sessionId: daemonSessionId,
             inputId,
             content: text,
-            workspacePath: ws.workspacePath,
-            workspaceIdentity: ws.workspaceIdentity,
+            workspacePath: workspace.workspacePath,
+            workspaceIdentity: workspace.workspaceIdentity,
             ...(attachments !== undefined && attachments.length > 0 ? { attachments } : {}),
             ...(modelSelection !== undefined && modelSelection.modelId !== "" ? { modelSelection } : {}),
           },
@@ -353,13 +350,12 @@ const makeSession = (
 
     const resolveInteraction: ServeSession["resolveInteraction"] = (interactionId, answer) =>
       Effect.gen(function* () {
-        const daemonSessionId = yield* requireDaemonSession;
-        const ws = yield* workspaceIdentifiers;
+        const { daemonSessionId, workspace } = yield* requireDaemonSession;
         return yield* call(
           "sendConversationCommandV4",
           {
-            workspacePath: ws.workspacePath,
-            workspaceIdentity: ws.workspaceIdentity,
+            workspacePath: workspace.workspacePath,
+            workspaceIdentity: workspace.workspaceIdentity,
             envelope: {
               commandId: crypto.randomUUID(),
               clientId: CLIENT_ID,
@@ -375,15 +371,14 @@ const makeSession = (
 
     const setMode: ServeSession["setMode"] = (mode) =>
       Effect.gen(function* () {
-        const daemonSessionId = yield* requireDaemonSession;
-        const ws = yield* workspaceIdentifiers;
+        const { daemonSessionId, workspace } = yield* requireDaemonSession;
         yield* call(
           "setMode",
           {
             sessionId: daemonSessionId,
             mode,
-            workspacePath: ws.workspacePath,
-            workspaceIdentity: ws.workspaceIdentity,
+            workspacePath: workspace.workspacePath,
+            workspaceIdentity: workspace.workspaceIdentity,
           },
           30_000,
         );
@@ -391,13 +386,12 @@ const makeSession = (
 
     const sendCommand: ServeSession["sendCommand"] = (type, payload, expectedForegroundExecutionId) =>
       Effect.gen(function* () {
-        const daemonSessionId = yield* requireDaemonSession;
-        const ws = yield* workspaceIdentifiers;
+        const { daemonSessionId, workspace } = yield* requireDaemonSession;
         return yield* call(
           "sendConversationCommandV4",
           {
-            workspacePath: ws.workspacePath,
-            workspaceIdentity: ws.workspaceIdentity,
+            workspacePath: workspace.workspacePath,
+            workspaceIdentity: workspace.workspaceIdentity,
             envelope: {
               commandId: crypto.randomUUID(),
               clientId: CLIENT_ID,
@@ -418,7 +412,8 @@ const makeSession = (
       }
       const channel = yield* Ref.get(channelRef);
       if (Option.isSome(channel)) yield* channel.value.close();
-      yield* ScopeType.close(scope, Exit.succeed(undefined)).pipe(Effect.orElseSucceed(() => undefined));
+      // Scope.close never fails typed (Effect<void>) — no fallback needed.
+      yield* ScopeType.close(scope, Exit.succeed(undefined));
     });
     const dispose = () => disposeEffect;
 

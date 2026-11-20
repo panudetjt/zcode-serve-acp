@@ -145,6 +145,19 @@ describe("fallbackModels", () => {
     expect(res).toEqual([]);
   });
 
+  it("yields no fallback models when a file decodes to the wrong shape", async () => {
+    // decodeUnknownSync throws on a structurally wrong document — the
+    // best-effort pipe must swallow it into an empty list.
+    const fakeFs = {
+      readFileString: (path: string) => {
+        if (path.includes("setting.json")) return Effect.succeed("[1, 2, 3]");
+        return Effect.succeed("{}");
+      },
+    } as unknown as FileSystem;
+    const res = await Effect.runPromise(fallbackModels.pipe(Effect.provideService(FileSystem, fakeFs)));
+    expect(res).toEqual([]);
+  });
+
   it("decodes fallback models when files are present and match individual-coding-plan", async () => {
     const settingJson = JSON.stringify({
       providerFamilyConnectionSelections: {
