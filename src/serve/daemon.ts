@@ -2,7 +2,9 @@
  * `zcode serve` daemon discovery + startup (Daemon service).
  *
  * Contract (ground-truthed against server-core.js 3.18.2 + the owner's PR
- * #34713): status at `~/.zcode/server/run/status.json` (trust `state ===
+ * #34713; re-verified unchanged against 3.19.0 on 2026-11-20 via the
+ * server-core.js endpoint diff and a live smoke): status at
+ * `~/.zcode/server/run/status.json` (trust `state ===
  * "ready"` + probe `GET /api/server-info`), ingress token at
  * `~/.zcode/server/run/ingress-token`, host capability via
  * `POST /api/rpc-host-capability` (Bearer token; 30s TTL, single use — fetch

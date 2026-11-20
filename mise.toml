@@ -11,8 +11,8 @@ description = "Typecheck TypeScript with bun check"
 run = "bun check"
 
 [tasks.compile]
-description = "Single-binary build → dist/zcode-serve-acp"
-run = "bun build --compile --target=bun-linux-x64 --outfile dist/zcode-serve-acp src/bin.ts"
+description = "Single-binary build → dist/zcode-serve-acp (OUTFILE overrides the target)"
+run = "bun build --compile --target=bun-linux-x64 --outfile \"${OUTFILE:-dist/zcode-serve-acp}\" src/bin.ts"
 
 [tasks.smoke]
 description = "ACP handshake + session/new (models) + short prompt against the real daemon"

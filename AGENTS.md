@@ -54,6 +54,7 @@ truth for what compiles (see docs/adr/0001).
 | Unit tests (with coverage) | `mise run test` (= `bun test --coverage ./test`) |
 | Typecheck | `mise run check` (= `bun check`) |
 | Compile single binary | `mise run compile` |
+| Binary install / backup / restore | `scripts/install.sh` (flags: `--help`) |
 | E2E smoke (needs a real local daemon) | `mise run smoke` |
 | All tasks | `mise run ci` |
 | Format | `mise run fmt` |
@@ -71,8 +72,10 @@ Bun version is pinned via `mise.toml` (1.4.4).
   decrypts credentials (token *presence* checks are allowed, decryption is
   not).
 - Protocol knowledge is reverse-engineered from `server-core.js` (runtime
-  3.18.2) and recorded in provenance comments. Keep those comments when you
-  move code; they are the only protocol documentation.
+  3.18.2, re-verified unchanged against 3.19.0 via the endpoint/constant diff
+  and `scripts/probe-tools-load.mjs`) and recorded in provenance comments.
+  Keep those comments when you move code; they are the only protocol
+  documentation.
 - Wire codec (`src/serve/wire.ts`) is intentionally hand-rolled (13-byte frame
   header, VQL varints) — do not try to express it in `Schema`. JSON boundaries
   (daemon frames, RPC results, ACP messages, config files) all go through
@@ -96,6 +99,9 @@ Bun version is pinned via `mise.toml` (1.4.4).
   for the required scenarios and sanitization rules).
 - `scripts/smoke.mjs` and the `probe-*.mjs` scripts run against a real daemon;
   they are not part of CI.
+- `test/install-script.test.ts` exercises `scripts/install.sh` (install /
+  restore / list dispatch, restore selection, process cutover, `--bin`
+  validation) against temp dirs — no build and no daemon involved.
 
 ## Repo hygiene
 
