@@ -93,7 +93,7 @@ const makeFixture = (script: SessionScript = {}, depsOverride: Partial<AcpServer
           }) as never),
     setMode: () => Effect.void,
     sendCommand: () => Effect.succeed({}),
-    dispose: () => Effect.void,
+    dispose: Effect.void,
   } as ServeSession;
 
   const server = AcpServer.make({
@@ -445,7 +445,7 @@ describe("AcpServer edge branches", () => {
             resolveInteraction: () => Effect.succeed({}) as never,
             setMode: () => Effect.void,
             sendCommand: () => Effect.succeed({}),
-            dispose: () => Effect.void,
+            dispose: Effect.void,
           }) as never;
         },
       } as unknown as ServeSessionFactory["Service"],
@@ -629,7 +629,7 @@ describe("AcpServer edge branches", () => {
           resolveInteraction: () => Effect.succeed({}) as never,
           setMode: () => Effect.void,
           sendCommand: () => Effect.succeed({}),
-          dispose: () => Effect.void,
+          dispose: Effect.void,
         }) as never;
       },
     } as unknown as ServeSessionFactory["Service"];

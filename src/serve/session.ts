@@ -12,7 +12,7 @@
  * now a detached fiber whose failure is logged, and `saveProject` /
  * `createSession` results are decoded with tolerant Schemas instead of
  * four-shape `as` probing. Each session owns an internal Scope holding its
- * WS channel; `dispose()` closes it (used by session/unload).
+ * WS channel; `dispose` closes it (used by session/unload).
  */
 import { Clock, Context, Effect, Exit, Layer, Option, Ref, Schema } from "effect";
 import * as ScopeType from "effect/Scope";
@@ -59,11 +59,19 @@ export interface CreateSessionResult {
   raw: unknown;
 }
 
-export interface SessionHandlers {
-  onConversationFrame: (payload: unknown) => Effect.Effect<void, unknown>;
-  onLifecycle: (payload: unknown) => Effect.Effect<void, unknown>;
-  onRequest: ServerRequestHandler;
-  onClosed: (reason: string) => Effect.Effect<void, unknown>;
+/**
+ * Handler callbacks the host app wires into a session. `E` is the app's own
+ * handler failure channel, threaded through to the channel client (where event
+ * dispatch tolerates it and `onClose` may surface it); it is inferred from the
+ * handlers passed to `ServeSessionFactory.create`, so the ACP server's typed
+ * channels flow down without a cast. Defaults to `never` — a session whose
+ * handlers cannot fail.
+ */
+export interface SessionHandlers<E = never> {
+  onConversationFrame: (payload: unknown) => Effect.Effect<void, E>;
+  onLifecycle: (payload: unknown) => Effect.Effect<void, E>;
+  onRequest: ServerRequestHandler<E>;
+  onClosed: (reason: string) => Effect.Effect<void, E>;
 }
 
 export interface ServeSession {
@@ -85,8 +93,14 @@ export interface ServeSession {
     payload: unknown,
     expectedForegroundExecutionId?: string,
   ) => Effect.Effect<unknown, SessionError | RpcError | RpcTimeout | ChannelClosed>;
-  /** Close the channel scope — used by session/unload. */
-  readonly dispose: () => Effect.Effect<void, unknown>;
+  /**
+   * Best-effort teardown of the session's channel scope — used by
+   * session/unload. Effect-valued property (Effect is already lazy; a
+   * zero-arg method adds indirection): every step — listener disposal,
+   * channel close, scope close — swallows its own failure, so dispose never
+   * fails.
+   */
+  readonly dispose: Effect.Effect<void>;
 }
 
 export class ServeSessionFactory extends Context.Service<
@@ -94,7 +108,7 @@ export class ServeSessionFactory extends Context.Service<
   {
     /** Create one daemon-backed session. Services are captured at layer build
      *  time; the WS channel lives in the session's internal Scope. */
-    create(cwd: string, handlers: SessionHandlers): Effect.Effect<ServeSession>;
+    create<E>(cwd: string, handlers: SessionHandlers<E>): Effect.Effect<ServeSession>;
   }
 >()("zcode-serve-acp/ServeSessionFactory") {
   /** Compose with a WebSocketConstructor layer in bin.ts; tests provide fakes. */
@@ -120,17 +134,17 @@ interface WorkspaceInfo {
   projectId: string;
 }
 
-const makeSession = (
+const makeSession = <E>(
   daemon: Daemon["Service"],
   log: Log["Service"],
   wsConstructor: Socket.WebSocketConstructor["Service"],
   cwd: string,
-  handlers: SessionHandlers,
+  handlers: SessionHandlers<E>,
 ): Effect.Effect<ServeSession> =>
   Effect.sync(() => {
     const scope: ScopeType.Closeable = ScopeType.makeUnsafe();
     const connectionRef = Ref.makeUnsafe<Option.Option<DaemonConnection>>(Option.none());
-    const channelRef = Ref.makeUnsafe<Option.Option<ChannelClient>>(Option.none());
+    const channelRef = Ref.makeUnsafe<Option.Option<ChannelClient<E>>>(Option.none());
     const workspaceRef = Ref.makeUnsafe<Option.Option<WorkspaceInfo>>(Option.none());
     // One invariant, one ref: a daemon session always rides with the workspace
     // it was created against (both are set together by createSession).
@@ -142,14 +156,14 @@ const makeSession = (
     const ensureConnection: Effect.Effect<DaemonConnection, SessionError> = Effect.gen(function* () {
       const existing = yield* Ref.get(connectionRef);
       if (Option.isSome(existing)) return existing.value;
-      const connection = yield* daemon
-        .connect()
-        .pipe(Effect.mapError((cause) => new SessionError({ message: cause.message })));
+      const connection = yield* daemon.connect.pipe(
+        Effect.mapError((cause) => new SessionError({ message: cause.message })),
+      );
       yield* Ref.set(connectionRef, Option.some(connection));
       return connection;
     });
 
-    const getChannel: Effect.Effect<ChannelClient, ServeError> = Effect.gen(function* () {
+    const getChannel: Effect.Effect<ChannelClient<E>, ServeError> = Effect.gen(function* () {
       const existing = yield* Ref.get(channelRef);
       if (Option.isSome(existing)) return existing.value;
       const connection = yield* ensureConnection;
@@ -207,10 +221,15 @@ const makeSession = (
       return workspace;
     });
 
-    // listener disposers (from channel.listen) drained by dispose() on session/unload
-    const listenerDisposers: Array<Effect.Effect<void, unknown>> = [];
+    // Listener disposers (from channel.listen). The disposer never fails — the
+    // channel swallows its own write failures inside it — so dispose drains
+    // them bare, with no per-disposer error handling.
+    const listenerDisposers: Array<Effect.Effect<void>> = [];
 
-    const subscribeConversation = (daemonSessionId: string, workspace: WorkspaceInfo): Effect.Effect<void, unknown> =>
+    const subscribeConversation = (
+      daemonSessionId: string,
+      workspace: WorkspaceInfo,
+    ): Effect.Effect<void, ServeError> =>
       Effect.gen(function* () {
         if ((yield* Ref.get(subscribedRef)) === true) return;
         yield* Ref.set(subscribedRef, true);
@@ -227,43 +246,48 @@ const makeSession = (
           30_000,
         );
         yield* log.debug(`[session] subscribed conversation ${daemonSessionId}`);
+
+        // Both subscriptions share the same daemon arg and the same
+        // register-on-subscribe / drain-on-dispose lifecycle; only the event
+        // name, the workspace-wide filter, and the handler differ.
+        const registerListener = (
+          event: string,
+          keep: (payload: unknown) => boolean,
+          onEvent: (payload: unknown) => Effect.Effect<void, E>,
+        ): Effect.Effect<void, ServeError> =>
+          Effect.gen(function* () {
+            const disposer = yield* channel.listen(
+              "zcode-agent",
+              event,
+              {
+                sessionId: daemonSessionId,
+                workspacePath: workspace.workspacePath,
+                workspaceIdentity: workspace.workspaceIdentity,
+              },
+              (payload) => (keep(payload) ? onEvent(payload) : Effect.void),
+            );
+            listenerDisposers.push(disposer);
+          });
+
         const topic = `conversation/${daemonSessionId}`;
-        listenerDisposers.push(
-          yield* channel.listen(
-            "zcode-agent",
-            "onDynamicConversationFrame",
-            {
-              sessionId: daemonSessionId,
-              workspacePath: workspace.workspacePath,
-              workspaceIdentity: workspace.workspaceIdentity,
-            },
-            (payload) =>
-              Effect.gen(function* () {
-                // The daemon pushes workspace-wide frames — filter to OUR conversation
-                // (client-side filtering, same as the upstream adapter).
-                const p = payload as { topic?: string; frame?: { topic?: string } } | undefined;
-                const frameTopic = p?.frame?.topic ?? p?.topic;
-                if (frameTopic !== undefined && frameTopic !== topic) return;
-                yield* handlers.onConversationFrame(payload);
-              }),
-          ),
+        // The daemon pushes workspace-wide frames — filter to OUR conversation
+        // (client-side filtering, same as the upstream adapter).
+        yield* registerListener(
+          "onDynamicConversationFrame",
+          (payload) => {
+            const p = payload as { topic?: string; frame?: { topic?: string } } | undefined;
+            const frameTopic = p?.frame?.topic ?? p?.topic;
+            return frameTopic === undefined || frameTopic === topic;
+          },
+          handlers.onConversationFrame,
         );
-        listenerDisposers.push(
-          yield* channel.listen(
-            "zcode-agent",
-            "onDynamicSessionLifecycle",
-            {
-              sessionId: daemonSessionId,
-              workspacePath: workspace.workspacePath,
-              workspaceIdentity: workspace.workspaceIdentity,
-            },
-            (payload) =>
-              Effect.gen(function* () {
-                const lifecycleSessionId = (payload as { sessionId?: string } | undefined)?.sessionId;
-                if (lifecycleSessionId !== undefined && lifecycleSessionId !== daemonSessionId) return;
-                yield* handlers.onLifecycle(payload);
-              }),
-          ),
+        yield* registerListener(
+          "onDynamicSessionLifecycle",
+          (payload) => {
+            const lifecycleSessionId = (payload as { sessionId?: string } | undefined)?.sessionId;
+            return lifecycleSessionId === undefined || lifecycleSessionId === daemonSessionId;
+          },
+          handlers.onLifecycle,
         );
       });
 
@@ -405,16 +429,25 @@ const makeSession = (
         );
       });
 
-    const disposeEffect = Effect.gen(function* () {
+    // Best-effort teardown, run by the `dispose` property on session/unload.
+    // Every step swallows its own failure — listener disposers never fail (the
+    // channel's writes inside them are already tolerated), the channel close
+    // can fail only with the app-supplied `onClose` channel `E` (warned here,
+    // not propagated), and the scope close is total — so dispose's error
+    // channel is `never` for every instantiation of `E`.
+    const dispose: Effect.Effect<void> = Effect.gen(function* () {
       for (const disposer of listenerDisposers.splice(0)) {
-        yield* Effect.orElseSucceed(disposer, () => undefined);
+        yield* disposer;
       }
       const channel = yield* Ref.get(channelRef);
-      if (Option.isSome(channel)) yield* channel.value.close();
+      if (Option.isSome(channel)) {
+        yield* tolerate(channel.value.close(), (cause) =>
+          log.warn(`[session] channel close failed during dispose: ${renderError(cause)}`),
+        );
+      }
       // Scope.close never fails typed (Effect<void>) — no fallback needed.
       yield* ScopeType.close(scope, Exit.succeed(undefined));
     });
-    const dispose = () => disposeEffect;
 
     return {
       createSession,

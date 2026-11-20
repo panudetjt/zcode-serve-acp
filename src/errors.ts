@@ -17,14 +17,16 @@ import { Effect, Result, Schema } from "effect";
  * skills listing, interaction fallbacks, …). Best-effort steps must stay
  * best-effort: a failure here never aborts the surrounding flow.
  */
-export const tolerate = <A, E>(
+export const tolerate = <A, E, E2 = never>(
   effect: Effect.Effect<A, E>,
-  onFail?: (cause: E) => Effect.Effect<void, unknown>,
+  onFail?: (cause: E) => Effect.Effect<void, E2>,
 ): Effect.Effect<A | undefined> =>
   Effect.gen(function* () {
     const result = yield* Effect.result(effect);
     if (!Result.isSuccess(result)) {
       if (onFail !== undefined) {
+        // orElseSucceed swallows whatever onFail fails with (E2), so the
+        // surrounding flow still sees a `never` error channel.
         yield* Effect.orElseSucceed(onFail(result.failure), () => undefined);
       }
       return undefined;

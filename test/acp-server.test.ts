@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Effect, Fiber } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { AcpServer } from "../src/acp/server.ts";
+import { ClientRequestError } from "../src/errors.ts";
 import { Log } from "../src/log.ts";
 import { ServeSessionFactory, type AvailableModel, type ServeSession } from "../src/serve/session.ts";
 
@@ -33,7 +34,7 @@ const mockSessionInstance = {
   sendPrompt: () => Effect.succeed({ inputId: "mock-inp" }),
   setMode: () => Effect.void,
   sendCommand: () => Effect.void,
-  dispose: () => Effect.void,
+  dispose: Effect.void,
 } as unknown as ServeSession;
 
 let createCalls = 0;
@@ -185,7 +186,7 @@ describe("AcpServer Effect handler", () => {
       setMode: () => Effect.void,
       sendCommand: () => Effect.void,
       resolveInteraction: () => Effect.succeed({ resolved: true }),
-      dispose: () => Effect.void,
+      dispose: Effect.void,
     } as unknown as ServeSession;
 
     const testServer = AcpServer.make({
@@ -402,7 +403,7 @@ describe("AcpServer Effect handler", () => {
         }),
       setMode: () => Effect.void,
       sendCommand: () => Effect.void,
-      dispose: () => Effect.void,
+      dispose: Effect.void,
     } as unknown as ServeSession;
 
     const fallbackServer = AcpServer.make({
@@ -450,7 +451,7 @@ describe("AcpServer Effect handler", () => {
         }),
       setMode: () => Effect.fail(new Error("setMode rejected")),
       sendCommand: () => Effect.fail(new Error("stop rejected")),
-      dispose: () => Effect.void,
+      dispose: Effect.void,
     } as unknown as ServeSession;
 
     const s = AcpServer.make({
@@ -512,7 +513,7 @@ describe("AcpServer Effect handler", () => {
         Effect.sync(() => {
           resolvedInteractions.push({ id, resolve });
         }),
-      dispose: () => Effect.void,
+      dispose: Effect.void,
     } as unknown as ServeSession;
 
     const testServer = AcpServer.make({
@@ -524,7 +525,7 @@ describe("AcpServer Effect handler", () => {
       } as unknown as ServeSessionFactory["Service"],
       log: mockLog,
       emitNotification: () => Effect.void,
-      clientRequest: () => Effect.fail(new Error("Client rejected request")),
+      clientRequest: () => Effect.fail(new ClientRequestError({ message: "Client rejected request" })),
       fallbackModels: Effect.succeed(sampleModels),
     });
 

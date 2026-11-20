@@ -3,7 +3,7 @@ import * as BunSocket from "@effect/platform-bun/BunSocket";
 import * as Socket from "effect/socket/Socket";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import { Log } from "../src/log.ts";
-import { ChannelClient } from "../src/serve/channel.ts";
+import { ChannelClient, type ChannelHandlers } from "../src/serve/channel.ts";
 import { decodeRpcMessage, encodeRpcMessage, FRAME_KIND_REGULAR, MSG, writeProtocolFrame } from "../src/serve/wire.ts";
 
 describe("ChannelClient over WebSocket", () => {
@@ -362,7 +362,7 @@ describe("dial and write failure fallbacks", () => {
 
   test("writes after the channel settled fall back silently (request reply, dispose)", async () => {
     let serverWs: any;
-    let clientRef: ChannelClient | undefined;
+    let clientRef: ChannelClient<Error> | undefined;
 
     const server = Bun.serve({
       port: 0,
@@ -540,12 +540,13 @@ describe("dispatchFrame edge branches", () => {
 
     const prog = Effect.gen(function* () {
       const log = yield* Log;
-      const client = yield* ChannelClient.connect(
-        `ws://localhost:${server.port}`,
-        {},
-        { onRequest: () => Effect.succeed(undefined), onClose: () => Effect.void },
-        log,
-      );
+      // `E = string`: this test registers a deliberately failing handler and
+      // proves the channel survives it (dispatch tolerates listener failures).
+      const handlers: ChannelHandlers<string> = {
+        onRequest: () => Effect.succeed(undefined),
+        onClose: () => Effect.void,
+      };
+      const client = yield* ChannelClient.connect(`ws://localhost:${server.port}`, {}, handlers, log);
       const disposeBoom = yield* client.listen("zcode-agent", "boom", undefined, () =>
         Effect.fail("handler failed on purpose"),
       );
@@ -553,9 +554,9 @@ describe("dispatchFrame edge branches", () => {
       yield* Effect.sleep(120);
       const dispose = yield* client.listen("zcode-agent", "second", undefined, () => Effect.void);
       expect(typeof dispose).toBe("object");
-      yield* disposeBoom.pipe(Effect.orElseSucceed(() => undefined));
-      yield* dispose.pipe(Effect.orElseSucceed(() => undefined));
-      yield* client.close();
+      yield* disposeBoom;
+      yield* dispose;
+      yield* client.close().pipe(Effect.orElseSucceed(() => undefined));
     }).pipe(Effect.provide(BunSocket.layerWebSocketConstructor), Effect.provide(Log.layerQuiet), Effect.scoped);
 
     try {

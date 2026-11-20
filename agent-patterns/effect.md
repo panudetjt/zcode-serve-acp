@@ -27,11 +27,11 @@ v4 default (from `ai-docs/src/01_effect/03_services/`):
 
 ```ts
 export class Daemon extends Context.Service<Daemon, {
-  attach(): Effect.Effect<Channel, DaemonError>
+  readonly attach: Effect.Effect<Channel, DaemonError>
 }>()("zcode-serve-acp/Daemon") {
   static readonly layerNoDeps = Layer.effect(Daemon, Effect.gen(function*() {
     const fs = yield* /* other services */ ...
-    const attach = Effect.fn("Daemon.attach")(function*() { ... })
+    const attach = Effect.suspend(Effect.fn("Daemon.attach")(function*() { ... }))
     return Daemon.of({ attach })
   }))
   // layerNoDeps declares R in its Layer type; `layer` provides the deps:
@@ -46,6 +46,15 @@ export class Daemon extends Context.Service<Daemon, {
   `Layer.provide` / `Layer.provideMerge`; build the final app layer in `bin.ts`
   and run with `BunRuntime.runMain(Layer.launch(app))` (or `Effect.runPromise`
   where a ManagedRuntime is simpler).
+- **Zero-arg operations are Effect values, not methods.** An `Effect` is already
+  lazy, so a zero-arg method that only returns one adds indirection and trips
+  the `lazy-effect` diagnostic. Expose the value instead: `readonly dispose:
+  Effect.Effect<void>`, `readonly connect: Effect.Effect<DaemonConnection,
+  DiscoveryError | SpawnError>`, and call it as `yield* service.dispose`. When
+  the body must be rebuilt per run (a `Effect.fn` span, fresh discovery), wrap
+  the callable with `Effect.suspend(Effect.fn("Name.op")(function*() {...}))` —
+  `Effect.suspend` invokes the callable on every run, so each run gets a fresh
+  span and generator, exactly like the old call-per-use method.
 
 ## Errors: `Schema.TaggedError` + `catchTag`
 
@@ -65,6 +74,12 @@ export class DecodeError extends Schema.TaggedError<DecodeError>()("DecodeError"
   string.
 - Keep the error channel precise: it is the rewrite's replacement for the old
   "throw generic Error + hardcoded JSON-RPC -32000".
+- Callbacks that cross a module boundary carry their failure channel as a type
+  parameter (channel.ts `ChannelHandlers<E>` → session.ts `SessionHandlers<E>`),
+  so the app's concrete errors flow down from the entry point without widening
+  to `unknown` and without a cast. `tolerate` takes the same second parameter
+  (`E2`) and absorbs it, so a best-effort wrapper is `never`-failing by
+  construction.
 
 ## Schema at every JSON boundary
 

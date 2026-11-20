@@ -16,17 +16,36 @@
 import { Deferred, Effect, Result } from "effect";
 import * as ScopeNS from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
-import { ChannelClosed, ChannelOpenError, RpcError, RpcTimeout, renderError, tolerate } from "../errors.ts";
+import {
+  ChannelClosed,
+  ChannelOpenError,
+  DecodeError,
+  RpcError,
+  RpcTimeout,
+  renderError,
+  tolerate,
+} from "../errors.ts";
 import type { Log } from "../log.ts";
 import { decodeRpcMessage, encodeRpcMessage, FrameSplitter, MSG } from "./wire.ts";
 
-export type ChannelEventListener = (data: unknown) => Effect.Effect<void, unknown>;
-export type ServerRequestHandler = (channelName: string, name: string, arg: unknown) => Effect.Effect<unknown, unknown>;
+/**
+ * Handler callbacks carry the app's own failure channel `E`, threaded from the
+ * session layer (SessionHandlers) down from the ACP server — the channel layer
+ * never widens it. Event dispatch tolerates `E` inline (a handler failure is a
+ * warning, never a channel failure), so only `onClose` can surface `E` through
+ * `failAll`/`close` to their caller.
+ */
+export type ChannelEventListener<E = never> = (data: unknown) => Effect.Effect<void, E>;
+export type ServerRequestHandler<E = never> = (
+  channelName: string,
+  name: string,
+  arg: unknown,
+) => Effect.Effect<unknown, E>;
 
-export interface ChannelHandlers {
+export interface ChannelHandlers<E = never> {
   /** daemon → client request (e.g. interaction requests) */
-  readonly onRequest: ServerRequestHandler;
-  readonly onClose: (reason: string) => Effect.Effect<void, unknown>;
+  readonly onRequest: ServerRequestHandler<E>;
+  readonly onClose: (reason: string) => Effect.Effect<void, E>;
 }
 
 export { ChannelOpenError };
@@ -39,23 +58,24 @@ const toBytes = (chunk: Uint8Array | string): Uint8Array =>
 
 const text = (cause: unknown): string => renderError(cause);
 
-export class ChannelClient {
+export class ChannelClient<E = never> {
   private nextId = 1_000;
   private readonly pending = new Map<number, Deferred.Deferred<unknown, RpcError | ChannelClosed>>();
-  private readonly listeners = new Map<number, ChannelEventListener>();
-  private readonly eventByKey = new Map<string, { id: number; handler: ChannelEventListener }>();
+  private readonly listeners = new Map<number, ChannelEventListener<E>>();
+  private readonly eventByKey = new Map<string, { id: number; handler: ChannelEventListener<E> }>();
   private readonly splitter = new FrameSplitter();
-  private readonly initDeferred: Deferred.Deferred<void, unknown>;
+  /** Settled on [200] handshake or failed with ChannelClosed when the pump dies. */
+  private readonly initDeferred: Deferred.Deferred<void, ChannelClosed>;
   readonly closed: Deferred.Deferred<string, never>;
   private settled = false;
 
   private constructor(
     private readonly socket: Socket.Socket,
     private readonly writer: Socket.Writer,
-    private readonly handlers: ChannelHandlers,
+    private readonly handlers: ChannelHandlers<E>,
     private readonly log: Log["Service"],
   ) {
-    this.initDeferred = Deferred.makeUnsafe<void, unknown>();
+    this.initDeferred = Deferred.makeUnsafe<void, ChannelClosed>();
     this.closed = Deferred.makeUnsafe<string, never>();
   }
 
@@ -70,12 +90,12 @@ export class ChannelClient {
    * ChannelOpenError. (A pre-rewrite "dial failed" mapError here was dead —
    * removed when coverage proved nothing could reach it.)
    */
-  static readonly connect = (
+  static readonly connect = <E = never>(
     url: string,
     headers: Record<string, string>,
-    handlers: ChannelHandlers,
+    handlers: ChannelHandlers<E>,
     log: Log["Service"],
-  ): Effect.Effect<ChannelClient, ChannelOpenError, ScopeNS.Scope | Socket.WebSocketConstructor> =>
+  ): Effect.Effect<ChannelClient<E>, ChannelOpenError, ScopeNS.Scope | Socket.WebSocketConstructor> =>
     Effect.gen(function* () {
       yield* log.debug(`[channel] connecting ${url.replace(/token=[^&]*/, "token=…")}`);
       const socket = yield* Socket.makeWebSocket(url, { headers });
@@ -95,12 +115,12 @@ export class ChannelClient {
    * after the dial, exposed for tests to inject fake readers/writers. The
    * pump runs in the CALLER's Scope (provide one with `Scope.provide`).
    */
-  static readonly forSocket = (
+  static readonly forSocket = <E = never>(
     socket: Socket.Socket,
     writer: Socket.Writer,
-    handlers: ChannelHandlers,
+    handlers: ChannelHandlers<E>,
     log: Log["Service"],
-  ): Effect.Effect<ChannelClient, never, ScopeNS.Scope> =>
+  ): Effect.Effect<ChannelClient<E>, never, ScopeNS.Scope> =>
     Effect.gen(function* () {
       const client = new ChannelClient(socket, writer, handlers, log);
       yield* client.pumpReader().pipe(
@@ -110,8 +130,13 @@ export class ChannelClient {
       return client;
     });
 
-  /** Continuous read loop; fails with the socket error when the channel dies. */
-  private pumpReader(): Effect.Effect<void, unknown, ScopeNS.Scope> {
+  /**
+   * Continuous read loop; fails with the socket error when the channel dies
+   * (`Reader.pull` surfaces every termination — clean close included — as a
+   * `SocketError`). Frame decode failures do not escape: `dispatchFrame`
+   * swallows them into a warning log.
+   */
+  private pumpReader(): Effect.Effect<void, Socket.SocketError, ScopeNS.Scope> {
     return Effect.gen({ self: this }, function* () {
       const reader = yield* this.socket.reader;
       for (;;) {
@@ -127,9 +152,14 @@ export class ChannelClient {
 
   private dispatchFrame(frame: Uint8Array): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
-      const decoded = yield* Effect.try({ try: () => decodeRpcMessage(frame), catch: (cause) => cause }).pipe(
-        Effect.result,
-      );
+      // The wire codec throws DecodeError on malformed frames (13-byte header,
+      // VQL varints — see wire.ts); an undecodable frame is never fatal for the
+      // channel, so this is captured into a warning log below. The catch types
+      // the thrown value into the taxonomy instead of surfacing it bare.
+      const decoded = yield* Effect.try({
+        try: () => decodeRpcMessage(frame),
+        catch: (cause) => new DecodeError({ location: "channel/frame", message: renderError(cause), cause }),
+      }).pipe(Effect.result);
       if (!Result.isSuccess(decoded)) {
         yield* this.log.warn(`[channel] undecodable frame ignored: ${text(decoded.failure)}`);
         return;
@@ -193,12 +223,13 @@ export class ChannelClient {
     });
   }
 
-  private handleServerRequest(
-    id: number,
-    channelName: string,
-    name: string,
-    arg: unknown,
-  ): Effect.Effect<void, unknown> {
+  /**
+   * Server→client request handling never fails: the handler outcome (success
+   * or failure) is rendered back to the daemon as a [202]/[203] frame, and any
+   * write failure is swallowed — a dead channel is already reported by the
+   * pump through `failAll`.
+   */
+  private handleServerRequest(id: number, channelName: string, name: string, arg: unknown): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       const outcome = yield* Effect.result(this.handlers.onRequest(channelName, name, arg));
       if (Result.isFailure(outcome)) {
@@ -217,7 +248,7 @@ export class ChannelClient {
     });
   }
 
-  private failAll(reason: string): Effect.Effect<void, unknown> {
+  private failAll(reason: string): Effect.Effect<void, E> {
     return Effect.gen({ self: this }, function* () {
       if (this.settled) return;
       this.settled = true;
@@ -276,13 +307,17 @@ export class ChannelClient {
     });
   }
 
-  /** `channel.listen("zcode-agent", event, arg, handler)` equivalent. Returns dispose. */
+  /**
+   * `channel.listen("zcode-agent", event, arg, handler)` equivalent. Returns a
+   * disposer; the write failures inside it are already swallowed, so the
+   * disposer never fails and callers can drain it bare.
+   */
   listen(
     channelName: string,
     event: string,
     arg: unknown,
-    handler: ChannelEventListener,
-  ): Effect.Effect<Effect.Effect<void, unknown>> {
+    handler: ChannelEventListener<E>,
+  ): Effect.Effect<Effect.Effect<void>> {
     return Effect.map(
       Effect.gen({ self: this }, function* () {
         const id = this.nextId++;
@@ -302,7 +337,12 @@ export class ChannelClient {
     );
   }
 
-  close(): Effect.Effect<void, unknown> {
+  /**
+   * Close the channel on the client's side. Any failure comes from the
+   * app-supplied `onClose` handler (`E`); the channel's own state is already
+   * settled before the handler runs, so callers may tolerate this.
+   */
+  close(): Effect.Effect<void, E> {
     return Effect.gen({ self: this }, function* () {
       yield* this.failAll("zcode server channel closed by client");
     });

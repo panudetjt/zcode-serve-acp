@@ -55,7 +55,7 @@ const httpAlways = (status: number) =>
 const runConnect = (fakeClock: Clock.Clock, client: HttpClient.HttpClient = httpAlways(500)) =>
   Effect.gen(function* () {
     const daemon = yield* Daemon;
-    return yield* daemon.connect();
+    return yield* daemon.connect;
   }).pipe(
     Effect.provideService(Clock.Clock, fakeClock),
     Effect.provide(Daemon.layer),
@@ -124,7 +124,7 @@ describe("Daemon readiness loop (fake clock)", () => {
       const conn = await Effect.runPromise(
         Effect.gen(function* () {
           const daemon = yield* Daemon;
-          return yield* daemon.connect();
+          return yield* daemon.connect;
         }).pipe(
           Effect.provideService(Clock.Clock, makeFakeClock()),
           Effect.provide(Daemon.layer),
@@ -160,7 +160,7 @@ describe("Daemon readiness loop (fake clock)", () => {
       const conn = await Effect.runPromise(
         Effect.gen(function* () {
           const daemon = yield* Daemon;
-          return yield* daemon.connect();
+          return yield* daemon.connect;
         }).pipe(
           Effect.provideService(Clock.Clock, makeFakeClock()),
           Effect.provide(Daemon.layer),
@@ -184,7 +184,7 @@ describe("Daemon readiness loop (fake clock)", () => {
         Effect.flip(
           Effect.gen(function* () {
             const daemon = yield* Daemon;
-            return yield* daemon.connect();
+            return yield* daemon.connect;
           }).pipe(
             Effect.provideService(Clock.Clock, makeFakeClock()),
             Effect.provide(Daemon.layer),

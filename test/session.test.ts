@@ -120,12 +120,12 @@ describe("ServeSession lifecycle and operations", () => {
     });
 
     const mockDaemon: Daemon["Service"] = {
-      connect: () =>
-        Effect.succeed({
-          status: { host: "localhost", port: server.port ?? 12345, state: "ready", version: "3.18.2", pid: 123 },
-          token: "daemon-token",
-          wsPath: "/ws/host",
-        }),
+      // connect is an Effect-valued property (lazy-effect fix), not a method.
+      connect: Effect.succeed({
+        status: { host: "localhost", port: server.port ?? 12345, state: "ready", version: "3.18.2", pid: 123 },
+        token: "daemon-token",
+        wsPath: "/ws/host",
+      }),
       getCapability: () => Effect.succeed("mock-cap-token"),
     };
 
@@ -193,7 +193,7 @@ describe("ServeSession lifecycle and operations", () => {
       expect(cmdRes).toEqual({ commandResult: "done" });
 
       // 7. dispose
-      yield* session.dispose();
+      yield* session.dispose;
     }).pipe(
       Effect.provide(ServeSessionFactory.layerNoDeps),
       Effect.provide(Layer.succeed(Daemon, mockDaemon)),
@@ -283,12 +283,12 @@ describe("ServeSession lifecycle and operations", () => {
     });
 
     const mockDaemon: Daemon["Service"] = {
-      connect: () =>
-        Effect.succeed({
-          status: { host: "localhost", port: server.port ?? 12345, state: "ready", version: "3.18.2", pid: 123 },
-          token: "tok",
-          wsPath: "/ws/host",
-        }),
+      // connect is an Effect-valued property (lazy-effect fix), not a method.
+      connect: Effect.succeed({
+        status: { host: "localhost", port: server.port ?? 12345, state: "ready", version: "3.18.2", pid: 123 },
+        token: "tok",
+        wsPath: "/ws/host",
+      }),
       getCapability: () => Effect.succeed("cap"),
     };
 
@@ -306,7 +306,7 @@ describe("ServeSession lifecycle and operations", () => {
       const errSave = yield* Effect.flip(session1.createSession());
       expect(errSave._tag).toBe("SessionError");
       expect(errSave.message).toContain("cannot resolve a zcode server project");
-      yield* session1.dispose();
+      yield* session1.dispose;
 
       // 2. createSession fails to return sessionId
       saveFails = false;
@@ -320,7 +320,7 @@ describe("ServeSession lifecycle and operations", () => {
       const errCreate = yield* Effect.flip(session2.createSession());
       expect(errCreate._tag).toBe("SessionError");
       expect(errCreate.message).toContain("createSession returned no sessionId");
-      yield* session2.dispose();
+      yield* session2.dispose;
 
       // 3. saveProject RPC rejected with error
       saveFails = "reject";
@@ -333,7 +333,7 @@ describe("ServeSession lifecycle and operations", () => {
       });
       const errSaveReject = yield* Effect.flip(session3.createSession());
       expect(errSaveReject._tag).toBe("SessionError");
-      yield* session3.dispose();
+      yield* session3.dispose;
 
       // 4. createSession returning malformed shape (throws in decodeCreateSessionShape)
       saveFails = false;
@@ -346,7 +346,7 @@ describe("ServeSession lifecycle and operations", () => {
       });
       const errCreateThrow = yield* Effect.flip(session4.createSession());
       expect(errCreateThrow._tag).toBe("SessionError");
-      yield* session4.dispose();
+      yield* session4.dispose;
 
       // 5. tolerated failures: initFails, subFails, skillsFails, and bare modelId
       saveFails = false;
@@ -363,12 +363,89 @@ describe("ServeSession lifecycle and operations", () => {
       const successRes = yield* session5.createSession();
       expect(successRes.daemonSessionId).toBe("s1");
       expect(successRes.currentModel).toBe("bare-model-id");
-      yield* session5.dispose();
+      yield* session5.dispose;
     }).pipe(
       Effect.provide(ServeSessionFactory.layerNoDeps),
       Effect.provide(Layer.succeed(Daemon, mockDaemon)),
       Effect.provide(BunSocket.layerWebSocketConstructor),
       Effect.provide(Log.layerQuiet),
+      Effect.scoped,
+    );
+
+    try {
+      await Effect.runPromise(prog);
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("dispose stays total when the app's onClosed handler fails", async () => {
+    const warnings: string[] = [];
+
+    const server = Bun.serve({
+      port: 0,
+      fetch(req, server) {
+        if (server.upgrade(req)) return;
+        return new Response("Not found", { status: 404 });
+      },
+      websocket: {
+        open(ws) {
+          ws.send(encodeRpcMessage([MSG.Initialize]));
+        },
+        message(ws, msg) {
+          const raw = typeof msg === "string" ? Buffer.from(msg) : new Uint8Array(msg);
+          const decoded = decodeRpcMessage(raw);
+          if (decoded.header[0] !== MSG.Promise) return;
+          const id = decoded.header[1] as number;
+          const channel = decoded.header[2] as string;
+          const method = decoded.header[3] as string;
+          const body =
+            channel === "project" && method === "saveProject"
+              ? { project: { id: "p-1" } }
+              : channel === "zcode-session" && method === "createSession"
+                ? { sessionId: "sess-1" }
+                : {};
+          ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], body));
+        },
+      },
+    });
+
+    const mockDaemon: Daemon["Service"] = {
+      connect: Effect.succeed({
+        status: { host: "localhost", port: server.port ?? 12345, state: "ready", version: "3.18.2", pid: 1 },
+        token: "tok",
+        wsPath: "/ws/host",
+      }),
+      getCapability: () => Effect.succeed("cap"),
+    };
+
+    const prog = Effect.gen(function* () {
+      const factory = yield* ServeSessionFactory;
+      const session = yield* factory.create("/test/workspace", {
+        onConversationFrame: () => Effect.void,
+        onLifecycle: () => Effect.void,
+        onRequest: () => Effect.succeed({}),
+        // The channel close surfaces this failure through `onClose`; dispose
+        // must warn and still complete (never propagate it).
+        onClosed: () => Effect.fail(new Error("onClose failed on purpose")),
+      });
+      yield* session.createSession();
+      yield* session.dispose;
+      expect(warnings.some((w) => w.includes("channel close failed during dispose"))).toBe(true);
+    }).pipe(
+      Effect.provide(ServeSessionFactory.layerNoDeps),
+      Effect.provide(Layer.succeed(Daemon, mockDaemon)),
+      Effect.provide(BunSocket.layerWebSocketConstructor),
+      Effect.provide(
+        Layer.succeed(
+          Log,
+          Log.of({
+            debug: () => Effect.void,
+            debugSync: () => undefined,
+            warn: (...parts) => Effect.sync(() => void warnings.push(parts.map(String).join(" "))),
+          }),
+        ),
+      ),
       Effect.scoped,
     );
 
@@ -414,12 +491,11 @@ describe("ServeSession teardown edge", () => {
     closeServer = () => server.stop(true);
 
     const mockDaemon: Daemon["Service"] = {
-      connect: () =>
-        Effect.succeed({
-          status: { host: "localhost", port: server.port ?? 0, state: "ready" },
-          token: "tok",
-          wsPath: "/ws/host",
-        }),
+      connect: Effect.succeed({
+        status: { host: "localhost", port: server.port ?? 0, state: "ready" },
+        token: "tok",
+        wsPath: "/ws/host",
+      }),
       getCapability: () => Effect.succeed("cap"),
     };
 
@@ -435,9 +511,9 @@ describe("ServeSession teardown edge", () => {
       // Kill the socket out from under the channel, let the pump settle it.
       closeServer!();
       yield* Effect.promise(() => new Promise((r) => setTimeout(r, 150)));
-      // Disposers now write into a settled channel → their writes fail →
-      // dispose()'s per-disposer orElseSucceed fallback must absorb it.
-      yield* session.dispose();
+      // Disposers now write into a settled channel → their writes fail and are
+      // swallowed inside the disposer itself; dispose must still complete.
+      yield* session.dispose;
     }).pipe(
       Effect.provide(ServeSessionFactory.layerNoDeps),
       Effect.provide(Layer.succeed(Daemon, mockDaemon)),

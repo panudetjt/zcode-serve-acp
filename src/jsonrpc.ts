@@ -62,7 +62,14 @@ const decodeMessage = Schema.decodeUnknownEffect(JsonRpcMessage, {
 
 export const parseLine = (line: string): Effect.Effect<ParseOutcome, DecodeError> =>
   Effect.gen(function* () {
-    const parsed = yield* Effect.try({ try: () => JSON.parse(line), catch: (cause) => cause }).pipe(Effect.result);
+    // The caught value is discarded by the `Malformed` outcome below (the
+    // pre-rewrite bin.ts noted it on stderr and ignored it). The DecodeError
+    // exists only to keep the catch typed instead of `unknown` — rendering it
+    // here would be dead work.
+    const parsed = yield* Effect.try({
+      try: () => JSON.parse(line),
+      catch: () => new DecodeError({ location: "jsonrpc/inbound", message: "malformed JSON on stdin" }),
+    }).pipe(Effect.result);
     if (!Result.isSuccess(parsed)) return { _tag: "Malformed" };
     const raw: unknown = parsed.success;
     const msg = yield* decodeMessage(raw).pipe(

@@ -120,7 +120,7 @@ describe("Daemon service operations", () => {
 
     const prog = Effect.gen(function* () {
       const daemon = yield* Daemon;
-      const conn = yield* daemon.connect();
+      const conn = yield* daemon.connect;
       expect(conn.status.host).toBe("127.0.0.1");
       expect(conn.token).toBe("secret-token");
       expect(conn.wsPath).toBe("/ws/host");
@@ -246,7 +246,7 @@ describe("Daemon service operations", () => {
 
       const prog = Effect.gen(function* () {
         const daemon = yield* Daemon;
-        const conn = yield* daemon.connect();
+        const conn = yield* daemon.connect;
         expect(conn.status.host).toBe("127.0.0.1");
         expect(conn.token).toBe("");
       }).pipe(

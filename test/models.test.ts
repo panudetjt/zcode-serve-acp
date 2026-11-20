@@ -10,6 +10,7 @@ import {
   rewriteSkillMention,
 } from "../src/acp/protocol.ts";
 import { AcpServer } from "../src/acp/server.ts";
+import { ClientRequestError } from "../src/errors.ts";
 import { Log } from "../src/log.ts";
 import type { AvailableModel } from "../src/serve/session.ts";
 
@@ -74,7 +75,7 @@ describe("initialize agentCapabilities", () => {
       sessions: { create: () => Effect.die("not used") } as never,
       log: Log.of({ debug: () => Effect.void, warn: () => Effect.void, debugSync: () => {} }),
       emitNotification: () => Effect.void,
-      clientRequest: () => Effect.fail(new Error("not used")),
+      clientRequest: () => Effect.fail(new ClientRequestError({ message: "not used" })),
       fallbackModels: Effect.succeed([]),
     });
     const init = (await Effect.runPromise(acp.handle("initialize", {}))) as ReturnType<typeof buildInitializeResult>;
