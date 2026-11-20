@@ -47,6 +47,28 @@ The clone tracks upstream `main`, which can run ahead of the npm release —
 when the two disagree, the installed npm package (`effect` 4.1.4) is ground
 truth for what compiles (see docs/adr/0001).
 
+## T3 Code reference clone — read-only, gitignored
+
+`.repos/t3code/` is a gitignored local clone of the T3 Code client
+(pingdotgg/t3code) — the ACP client on the other side of this bridge. Same
+rules as the effect clone: read-only, never committed, never imported. It
+exists so the client side of the protocol (what T3 does with our
+`session/update` output, and what a native per-agent shim must look like) is
+checked against real source, not memory. If it is missing, create it on
+demand:
+
+```sh
+mkdir -p .repos && git clone --depth 1 https://github.com/pingdotgg/t3code.git .repos/t3code
+```
+
+**Before touching anything subagent/T3-client related, read
+[`agent-patterns/t3code.md`](./agent-patterns/t3code.md)** — the distilled
+facts (adapter-v2 subagent hooks, `_t3_unknown` channel, per-agent shim
+layout) extracted from `.repos/t3code/packages/provider-acp-registry/src/server/claudeAcp.ts`
+and `packages/provider-acp/src/server/adapter.ts`.
+
+**Updating the clone** (rare, do only when asked): `git -C .repos/t3code pull`.
+
 ## Commands
 
 | Task | Command |
