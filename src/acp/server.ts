@@ -68,8 +68,6 @@ interface TurnState {
   initialGuard?: Fiber.Fiber<void, never>;
 }
 
-const DUMP_FRAMES = envDump();
-
 export interface AcpServerDeps {
   readonly sessions: ServeSessionFactory["Service"];
   readonly log: Log["Service"];
@@ -82,6 +80,11 @@ export interface AcpServerDeps {
   ) => Effect.Effect<unknown, ClientRequestError | PlatformError>;
   /** R-closed fallback model discovery (daemon advertised none) */
   readonly fallbackModels: Effect.Effect<AvailableModel[]>;
+  /**
+   * Initial-response guard budget in ms — fail the turn if no daemon frame
+   * arrived within it. Injectable so tests don't wait out the real 180s.
+   */
+  readonly turnTimeoutMs?: number;
 }
 
 export class AcpServer extends Context.Service<
@@ -113,6 +116,9 @@ export class AcpServer extends Context.Service<
 const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
   const bridgeSessions = new Map<string, BridgeSession>();
   const { log, emitNotification, clientRequest } = deps;
+  // Read at construction (not import) time so tests can flip the env per server.
+  const dumpFrames = envDump();
+  const turnTimeoutMs = deps.turnTimeoutMs ?? 180_000;
 
   const getSession = (sessionId: string): Effect.Effect<BridgeSession, AcpMethodError> =>
     Effect.gen(function* () {
@@ -132,10 +138,11 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
     Effect.gen(function* () {
       const quiet = yield* Ref.getAndSet(bridge.quietFiber, Option.none());
       if (Option.isSome(quiet)) {
-        yield* Fiber.interrupt(quiet.value).pipe(Effect.orElseSucceed(() => undefined));
+        // Fiber.interrupt never fails typed (Effect<void>) — no fallback needed.
+        yield* Fiber.interrupt(quiet.value);
       }
       if (state.initialGuard !== undefined) {
-        yield* Fiber.interrupt(state.initialGuard).pipe(Effect.orElseSucceed(() => undefined));
+        yield* Fiber.interrupt(state.initialGuard);
       }
     });
 
@@ -163,7 +170,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
     Effect.gen(function* () {
       const current = yield* Ref.getAndSet(bridge.quietFiber, Option.none());
       if (Option.isSome(current)) {
-        yield* Fiber.interrupt(current.value).pipe(Effect.orElseSucceed(() => undefined));
+        yield* Fiber.interrupt(current.value); // never fails typed — see stopFibers
       }
     });
 
@@ -183,7 +190,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
     (payload: unknown): Effect.Effect<void, PlatformError> =>
       Effect.gen(function* () {
         yield* log.debug(`[frame] in: ${JSON.stringify(payload).slice(0, 160)}`);
-        if (DUMP_FRAMES) {
+        if (dumpFrames) {
           const dumped = yield* Ref.get(bridge.dumpRef);
           if (!dumped) {
             yield* Ref.set(bridge.dumpRef, true);
@@ -204,8 +211,11 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
         }
         for (const interaction of result.pendingInteractions ?? []) {
           yield* Effect.forkDetach(
-            tolerate(handlePendingInteraction(bridge, interaction), (cause) =>
-              log.warn(`[interaction] failed: ${renderError(cause)}`),
+            handlePendingInteraction(bridge, interaction).pipe(
+              // catchCause, not tolerate: a defect escaping an interaction's
+              // fallback path must still land in the log, not vanish with the
+              // detached fiber (pre-rewrite logged every fire-and-forget failure).
+              Effect.catchCause((cause) => log.warn(`[interaction] failed: ${renderError(cause)}`)),
             ),
           );
         }
@@ -382,7 +392,10 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       const bridge: BridgeSession = {
         id: sessionId,
         serve: undefined as never,
-        translator: new FrameTranslator((...parts) => void log.debug(...parts)),
+        // debugSync, not debug: the translator folds synchronously, so it needs
+        // a sink that writes now — `void log.debug(...)` would only build the
+        // Effect and drop the line. Same gate and stderr sink.
+        translator: new FrameTranslator((...parts) => log.debugSync(...parts)),
         models: [],
         skills: [],
         handledInteractions: new Set<string>(),
@@ -566,9 +579,28 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
           yield* Ref.set(bridge.turn, Option.some(state));
           state.initialGuard = yield* Effect.forkScoped(
             Effect.gen(function* () {
-              yield* Effect.sleep("180 seconds");
+              yield* Effect.sleep(turnTimeoutMs);
               if (!state.sawUpdate) {
-                yield* failTurn(bridge, "Turn timed out: no response received from daemon within 180 seconds");
+                // NOT failTurn(): it runs stopFibers, which interrupts
+                // state.initialGuard — this very fiber — and a fiber awaiting
+                // its own interruption deadlocks, so the deferred would never
+                // resolve (the pre-rewrite version cleared its own timer with
+                // clearTimeout, which is self-safe in JS). Take the turn and
+                // complete the deferred directly; sawUpdate=false implies the
+                // quiet fiber was never armed, so there is nothing else to stop.
+                const taken = yield* takeTurn(bridge);
+                if (Option.isSome(taken)) {
+                  yield* log.debug(`[acp] turn failed: no daemon response within ${turnTimeoutMs}ms`);
+                  Deferred.doneUnsafe(
+                    state.deferred,
+                    Effect.fail(
+                      new AcpMethodError({
+                        method,
+                        message: `Turn timed out: no response received from daemon within ${turnTimeoutMs}ms`,
+                      }),
+                    ),
+                  );
+                }
               }
             }),
           );

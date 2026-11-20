@@ -63,6 +63,15 @@ describe("JSON-RPC stdio parsing & framing", () => {
     expect(ignored._tag).toBe("Ignored");
   });
 
+  test("parseLine fails with DecodeError for JSON that parses but fails the message schema", async () => {
+    // id must be a number or string — a boolean parses fine but decodes wrong.
+    const err = await Effect.runPromise(
+      Effect.flip(parseLine(JSON.stringify({ jsonrpc: "2.0", id: true, method: "initialize" }))),
+    );
+    expect(err._tag).toBe("DecodeError");
+    expect(err.location).toBe("jsonrpc/inbound");
+  });
+
   test("envelope helpers serialize correctly", () => {
     const req = clientRequest(10, "session/request_permission", { foo: "bar" });
     expect(req).toEqual({ jsonrpc: "2.0", id: 10, method: "session/request_permission", params: { foo: "bar" } });

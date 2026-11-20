@@ -50,7 +50,7 @@ export interface DaemonConnection {
   readonly wsPath: string;
 }
 
-export class DaemonDeps extends Context.Service<
+class DaemonDeps extends Context.Service<
   DaemonDeps,
   {
     readonly client: HttpClient.HttpClient;
@@ -116,12 +116,7 @@ export class Daemon extends Context.Service<
     getCapability(connection: DaemonConnection): Effect.Effect<string, CapabilityError>;
   }
 >()("zcode-serve-acp/Daemon") {
-  /**
-   * Test seam: the service built against an injected `DaemonDeps` (fake spawn,
-   * fs, http), so the discovery/spawn branches can be driven deterministically.
-   * Production wiring is `layer` below.
-   */
-  static readonly layerFromDeps: Layer.Layer<Daemon, never, DaemonDeps | Log> = Layer.effect(
+  static readonly layer: Layer.Layer<Daemon, never, HttpClient.HttpClient | FileSystem | Log> = Layer.effect(
     Daemon,
     Effect.gen(function* () {
       const deps = yield* DaemonDeps;
@@ -167,7 +162,7 @@ export class Daemon extends Context.Service<
         { status: ServerStatus; token: string },
         DiscoveryError | SpawnError
       > {
-        const rootDir = serverRoot()!;
+        const rootDir = serverRoot();
         const deadline = (yield* Clock.currentTimeMillis) + 30_000;
         for (;;) {
           const status = yield* readStatus(rootDir);
@@ -197,10 +192,8 @@ export class Daemon extends Context.Service<
       // and fresh connection discovery.
       const connect: Effect.Effect<DaemonConnection, DiscoveryError | SpawnError> = Effect.suspend(
         Effect.fn("Daemon.connect")(function* (): Effect.fn.Return<DaemonConnection, DiscoveryError | SpawnError> {
+          // serverRoot() is always defined: env overrides or os.homedir() fallback.
           const rootDir = serverRoot();
-          if (rootDir === undefined) {
-            return yield* new DiscoveryError({ message: "cannot resolve zcode server root (no HOME?)" });
-          }
           let status = yield* readStatus(rootDir);
           const token = yield* readToken(rootDir);
           const ready = status !== undefined && (yield* probeServerInfo(status.host, status.port, token));
@@ -250,11 +243,7 @@ export class Daemon extends Context.Service<
 
       return Daemon.of({ connect, getCapability });
     }),
-  );
-
-  /** Production wiring: real spawn + FS + HTTP behind `DaemonDeps`. */
-  static readonly layer: Layer.Layer<Daemon, never, HttpClient.HttpClient | FileSystem | Log> =
-    Daemon.layerFromDeps.pipe(Layer.provide(DaemonDeps.layer));
+  ).pipe(Layer.provide(DaemonDeps.layer));
 }
 
 const rec = (value: unknown): Record<string, unknown> | undefined =>
@@ -268,11 +257,10 @@ export function dataRoot(): string {
   return envHome() ?? os.homedir();
 }
 
-export function serverRoot(): string | undefined {
+export function serverRoot(): string {
   const override = envServerRoot();
   if (override) return override;
-  const root = dataRoot();
-  return root === undefined ? undefined : path.join(root, ".zcode", "server");
+  return path.join(dataRoot(), ".zcode", "server");
 }
 
 export const resolveServeBinary = (fs: FileSystem): Effect.Effect<string> =>

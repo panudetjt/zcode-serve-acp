@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import * as BunSocket from "@effect/platform-bun/BunSocket";
+import * as Socket from "effect/socket/Socket";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import { Log } from "../src/log.ts";
 import { ChannelClient, type ChannelHandlers } from "../src/serve/channel.ts";
@@ -342,6 +343,119 @@ describe("ChannelClient over WebSocket", () => {
   });
 });
 
+describe("dial and write failure fallbacks", () => {
+  test("dial failure still surfaces as typed ChannelOpenError via the pump", async () => {
+    const prog = Effect.gen(function* () {
+      const log = yield* Log;
+      return yield* ChannelClient.connect(
+        "ws://127.0.0.1:59998",
+        {},
+        { onRequest: () => Effect.succeed(undefined), onClose: () => Effect.void },
+        log,
+      );
+    }).pipe(Effect.provide(BunSocket.layerWebSocketConstructor), Effect.provide(Log.layerQuiet), Effect.scoped);
+
+    const err = await Effect.runPromise(Effect.flip(prog));
+    expect(err._tag).toBe("ChannelOpenError");
+    expect(err.message).toContain("zcode server channel");
+  });
+
+  test("writes after the channel settled fall back silently (request reply, dispose)", async () => {
+    let serverWs: any;
+    let clientRef: ChannelClient<Error> | undefined;
+
+    const server = Bun.serve({
+      port: 0,
+      fetch(req, server) {
+        if (server.upgrade(req)) return;
+        return new Response("Not found", { status: 404 });
+      },
+      websocket: {
+        open(ws) {
+          serverWs = ws;
+          ws.send(encodeRpcMessage([MSG.Initialize]));
+        },
+        message() {},
+      },
+    });
+
+    const prog = Effect.gen(function* () {
+      const log = yield* Log;
+      const client = yield* ChannelClient.connect(
+        `ws://localhost:${server.port}`,
+        {},
+        {
+          // Settling the channel inside the handler makes the reply write land
+          // on the closed path — the fallback must swallow it, not throw.
+          onRequest: (channelName, name) => {
+            const answer =
+              name === "boom" ? Effect.fail(new Error("forced handler failure")) : Effect.succeed({ ok: 1 });
+            return (clientRef?.close() ?? Effect.void).pipe(Effect.andThen(answer));
+          },
+          onClose: () => Effect.void,
+        },
+        log,
+      );
+      clientRef = client;
+
+      // success reply write lands on the settled channel
+      serverWs.send(encodeRpcMessage([MSG.Promise, 601, "zcode", "ask"], { q: 1 }));
+      yield* Effect.sleep(80);
+      // error reply write lands on the settled channel too
+      serverWs.send(encodeRpcMessage([MSG.Promise, 602, "zcode", "boom"], {}));
+      yield* Effect.sleep(80);
+
+      // dispose of a listener after close sends EventDispose on a settled channel
+      const dispose = yield* client.listen("zcode-agent", "topic", undefined, () => Effect.void);
+      yield* dispose;
+
+      // The close really happened, and every write after it was swallowed:
+      // awaiting the closed deferred resolves instead of hanging, and a late
+      // call still gets the typed ChannelClosed rather than a defect.
+      expect(yield* Deferred.await(client.closed)).toBe("zcode server channel closed by client");
+      const late = yield* Effect.flip(client.call("zcode-agent", "x", undefined, 200));
+      expect(late._tag).toBe("ChannelClosed");
+    }).pipe(Effect.provide(BunSocket.layerWebSocketConstructor), Effect.provide(Log.layerQuiet), Effect.scoped);
+
+    try {
+      await Effect.runPromise(prog);
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("a writer fault maps to ChannelClosed via the write fallback", async () => {
+    // Bun's WS writer never errors in practice (closed-socket sends resolve
+    // silently), so inject a broken writer through the forSocket seam to pin
+    // the write-error → ChannelClosed mapping.
+    const brokenWriter = {
+      write: () => Effect.fail(new Error("writer fault")),
+    } as unknown as Socket.Writer;
+    const neverReader = { pull: Effect.never } as unknown as Socket.Reader;
+    const socket = {
+      reader: Effect.succeed(neverReader),
+      writer: Effect.succeed(brokenWriter),
+    } as unknown as Socket.Socket;
+
+    const prog = Effect.gen(function* () {
+      const log = yield* Log;
+      const client = yield* ChannelClient.forSocket(
+        socket,
+        brokenWriter,
+        { onRequest: () => Effect.succeed(undefined), onClose: () => Effect.void },
+        log,
+      );
+      const err = yield* Effect.flip(client.call("zcode-agent", "x", undefined, 200));
+      expect(err._tag).toBe("ChannelClosed");
+      if (err._tag !== "ChannelClosed") return; // narrow the error union for the assertions below
+      expect(err.reason).toContain("zcode server channel write failed");
+      expect(err.reason).toContain("writer fault");
+    }).pipe(Effect.provide(Log.layerQuiet), Effect.scoped);
+
+    await Effect.runPromise(prog);
+  });
+});
+
 describe("dispatchFrame edge branches", () => {
   test("undecodable frame is logged and ignored, channel stays usable", async () => {
     const server = Bun.serve({
@@ -367,6 +481,9 @@ describe("dispatchFrame edge branches", () => {
 
     const captured: string[] = [];
     const captureLog = Log.of({
+      debugSync: (...parts: unknown[]) => {
+        captured.push(parts.map((x) => String(x)).join(" "));
+      },
       debug: (...parts: unknown[]) => Effect.sync(() => captured.push(parts.map((x) => String(x)).join(" "))),
       warn: (...parts: unknown[]) => Effect.sync(() => captured.push("WARN " + parts.map((x) => String(x)).join(" "))),
     });

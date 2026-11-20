@@ -9,6 +9,7 @@ import { ServeSessionFactory, type AvailableModel, type ServeSession } from "../
 const mockLog: Log["Service"] = {
   debug: () => Effect.void,
   warn: () => Effect.void,
+  debugSync: () => {},
 };
 
 const sampleModels: AvailableModel[] = [
