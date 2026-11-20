@@ -7,6 +7,13 @@
       "icon": "configure",
       "runOnWorktreeCreate": true,
       "async": false
+    },
+    {
+      "name": "Setup Worktree (t3code vendor)",
+      "command": "[ -d .repos/t3code/.git ] || { rm -rf .repos/t3code; mkdir -p .repos && git clone --depth 1 https://github.com/pingdotgg/t3code.git .repos/t3code; }",
+      "icon": "configure",
+      "runOnWorktreeCreate": true,
+      "async": false
     }
   ]
 }
