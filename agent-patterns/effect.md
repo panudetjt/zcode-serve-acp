@@ -27,11 +27,11 @@ v4 default (from `ai-docs/src/01_effect/03_services/`):
 
 ```ts
 export class Daemon extends Context.Service<Daemon, {
-  attach(): Effect.Effect<Channel, DaemonError>
+  readonly attach: Effect.Effect<Channel, DaemonError>
 }>()("zcode-serve-acp/Daemon") {
   static readonly layerNoDeps = Layer.effect(Daemon, Effect.gen(function*() {
     const fs = yield* /* other services */ ...
-    const attach = Effect.fn("Daemon.attach")(function*() { ... })
+    const attach = Effect.suspend(Effect.fn("Daemon.attach")(function*() { ... }))
     return Daemon.of({ attach })
   }))
   // layerNoDeps declares R in its Layer type; `layer` provides the deps:

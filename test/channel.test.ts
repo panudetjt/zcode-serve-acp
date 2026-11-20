@@ -437,9 +437,9 @@ describe("dispatchFrame edge branches", () => {
       yield* Effect.sleep(120);
       const dispose = yield* client.listen("zcode-agent", "second", undefined, () => Effect.void);
       expect(typeof dispose).toBe("object");
-      yield* disposeBoom.pipe(Effect.orElseSucceed(() => undefined));
-      yield* dispose.pipe(Effect.orElseSucceed(() => undefined));
-      yield* client.close();
+      yield* disposeBoom;
+      yield* dispose;
+      yield* client.close().pipe(Effect.orElseSucceed(() => undefined));
     }).pipe(Effect.provide(BunSocket.layerWebSocketConstructor), Effect.provide(Log.layerQuiet), Effect.scoped);
 
     try {
