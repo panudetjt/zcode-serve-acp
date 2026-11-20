@@ -201,6 +201,13 @@ const runScenario = (
           }
           return {};
         }),
+      onChildFrame: (childSessionId: string, payload: unknown): Effect.Effect<void, unknown, never> =>
+        // Child frames (subagent drill-down) are not part of the parity oracle
+        // — fold them so the translator sees the same stream a live session
+        // would, but record nothing.
+        Effect.sync(() => {
+          translator.foldChild(childSessionId, payload);
+        }),
       onClosed: (reason: string): Effect.Effect<void, unknown, never> =>
         Effect.sync(() => settle("channel closed", "error", `connection closed: ${reason}`)),
     };

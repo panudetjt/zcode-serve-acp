@@ -60,6 +60,37 @@ export interface CreateSessionResult {
 }
 
 /**
+ * One entry of a `session/subagents` result. Ground truth (server-core.js
+ * 3.19.0): method id `sessionSubagents: "session/subagents"` (:13209), host
+ * handler `listSessionSubagents` forwarding `{ sessionId, endedCursor,
+ * endedLimit ?? 20 }` (:64180), entry schema :11705 — childSessionId, agentId?,
+ * toolCallId? (the spawning Agent/Task tool call), subagentType, title,
+ * summary?, startedAt?, endedAt?; running statuses `running|waiting|blocked`
+ * (:11715), ended statuses `success|failed|cancelled|lost` (:11718).
+ */
+export interface SubagentEntry {
+  childSessionId: string;
+  toolCallId?: string;
+  subagentType: string;
+  title?: string;
+  summary?: string;
+  status: string;
+}
+
+/**
+ * `session/subagents` result shape (zcodeSessionSubagentsResultSchema,
+ * server-core.js 3.19.0:11721): revision, childSessionIds, running[], and a
+ * paged ended{total, items, nextCursor?}. This bridge reads it while a turn
+ * runs — for the batch overview the client sees and to bind child sessions
+ * onto cards when subagent rows arrived without childSessionId.
+ */
+export interface SubagentsSnapshot {
+  revision: number;
+  running: SubagentEntry[];
+  ended: { total: number; items: SubagentEntry[] };
+}
+
+/**
  * Handler callbacks the host app wires into a session. `E` is the app's own
  * handler failure channel, threaded through to the channel client (where event
  * dispatch tolerates it and `onClose` may surface it); it is inferred from the
@@ -69,6 +100,8 @@ export interface CreateSessionResult {
  */
 export interface SessionHandlers<E = never> {
   onConversationFrame: (payload: unknown) => Effect.Effect<void, E>;
+  /** Frames of child conversations this session subscribed via subscribeChild. */
+  onChildFrame: (childSessionId: string, payload: unknown) => Effect.Effect<void, E>;
   onLifecycle: (payload: unknown) => Effect.Effect<void, E>;
   onRequest: ServerRequestHandler<E>;
   onClosed: (reason: string) => Effect.Effect<void, E>;
@@ -93,6 +126,28 @@ export interface ServeSession {
     payload: unknown,
     expectedForegroundExecutionId?: string,
   ) => Effect.Effect<unknown, SessionError | RpcError | RpcTimeout | ChannelClosed>;
+  /**
+   * List the session's subagent children (`session/subagents` RPC). Fired
+   * while a turn runs: the ACP layer turns the snapshot into a batch overview
+   * and binds child sessions onto cards that rows arrived without a
+   * childSessionId for. `endedLimit` defaults to the daemon default (20).
+   */
+  readonly listSubagents: (
+    endedLimit?: number,
+  ) => Effect.Effect<SubagentsSnapshot, SessionError | RpcError | RpcTimeout | ChannelClosed>;
+  /**
+   * Subscribe a child conversation so its frames flow to `onChildFrame`. The
+   * daemon does not inline child rows — subagentRowSchema.childSessionId
+   * documents the drill-down contract: "存在 → UI 可下钻订阅
+   * conversation/<childSessionId>（不内嵌 child rows）" (server-core.js
+   * 3.19.0:7436). Subscribes with visibility "background", the host's own
+   * pattern for non-foreground consumers (:66895). Idempotent per child.
+   */
+  readonly subscribeChild: (
+    childSessionId: string,
+  ) => Effect.Effect<void, SessionError | RpcError | RpcTimeout | ChannelClosed>;
+  /** Best-effort unsubscribe once the child settles. Never fails. */
+  readonly unsubscribeChild: (childSessionId: string) => Effect.Effect<void>;
   /**
    * Best-effort teardown of the session's channel scope — used by
    * session/unload. Effect-valued property (Effect is already lazy; a
@@ -152,6 +207,9 @@ const makeSession = <E>(
       Option.none(),
     );
     const subscribedRef = Ref.makeUnsafe(false);
+    // Child conversation topics subscribed for live subagent drill-down — also
+    // the routing table for the frame listener below.
+    const childTopics = new Set<string>();
 
     const ensureConnection: Effect.Effect<DaemonConnection, SessionError> = Effect.gen(function* () {
       const existing = yield* Ref.get(connectionRef);
@@ -270,16 +328,38 @@ const makeSession = <E>(
           });
 
         const topic = `conversation/${daemonSessionId}`;
-        // The daemon pushes workspace-wide frames — filter to OUR conversation
-        // (client-side filtering, same as the upstream adapter).
+        // The daemon pushes workspace-wide frames: every v4/conversation/frame
+        // notification it receives is fired into the per-workspace emitter
+        // (server-core.js 3.19.0:62503-62539), so frames of child conversations
+        // arrive on this same listener once their topic is subscribed (see
+        // subscribeChild below; host pattern — subscribe visibility
+        // "background" + topic filter — :66885). Route here: parent (or
+        // topic-less) → onConversationFrame, subscribed child → onChildFrame,
+        // everything else dropped (same client-side filter as the upstream
+        // adapter).
         yield* registerListener(
           "onDynamicConversationFrame",
           (payload) => {
             const p = payload as { topic?: string; frame?: { topic?: string } } | undefined;
             const frameTopic = p?.frame?.topic ?? p?.topic;
-            return frameTopic === undefined || frameTopic === topic;
+            if (frameTopic === undefined || frameTopic === topic) return true;
+            return (
+              typeof frameTopic === "string" &&
+              frameTopic.startsWith("conversation/") &&
+              childTopics.has(frameTopic.slice("conversation/".length))
+            );
           },
-          handlers.onConversationFrame,
+          (payload) => {
+            const p = payload as { topic?: string; frame?: { topic?: string } } | undefined;
+            const frameTopic = p?.frame?.topic ?? p?.topic;
+            if (frameTopic === undefined || frameTopic === topic) return handlers.onConversationFrame(payload);
+            const childId =
+              typeof frameTopic === "string" && frameTopic.startsWith("conversation/")
+                ? frameTopic.slice("conversation/".length)
+                : undefined;
+            if (childId !== undefined && childTopics.has(childId)) return handlers.onChildFrame(childId, payload);
+            return Effect.void;
+          },
         );
         yield* registerListener(
           "onDynamicSessionLifecycle",
@@ -429,6 +509,76 @@ const makeSession = <E>(
         );
       });
 
+    const listSubagents = (endedLimit = 20): Effect.Effect<SubagentsSnapshot, ServeError> =>
+      Effect.gen(function* () {
+        const { daemonSessionId, workspace } = yield* requireDaemonSession;
+        const result = yield* call(
+          "listSessionSubagents",
+          {
+            sessionId: daemonSessionId,
+            workspacePath: workspace.workspacePath,
+            workspaceIdentity: workspace.workspaceIdentity,
+            endedLimit,
+          },
+          15_000,
+        );
+        const decoded = decodeSubagents(result);
+        if (decoded === undefined) {
+          return yield* new SessionError({
+            message: `listSessionSubagents returned no snapshot: ${JSON.stringify(result).slice(0, 400)}`,
+          });
+        }
+        return decoded;
+      });
+
+    const subscribeChild = (childSessionId: string): Effect.Effect<void, ServeError> =>
+      Effect.gen(function* () {
+        if (childTopics.has(childSessionId)) return;
+        const { workspace } = yield* requireDaemonSession;
+        const channel = yield* getChannel;
+        yield* channel.call(
+          "zcode-agent",
+          "subscribeConversationV4",
+          {
+            sessionId: childSessionId,
+            workspacePath: workspace.workspacePath,
+            workspaceIdentity: workspace.workspaceIdentity,
+            visibility: "background",
+          },
+          30_000,
+        );
+        // Routed into childTopics only on success — a failed subscribe leaves
+        // the child retryable on the next row/RPC sighting.
+        childTopics.add(childSessionId);
+        yield* log.debug(`[session] subscribed child conversation ${childSessionId}`);
+      });
+
+    const unsubscribeChild = (childSessionId: string): Effect.Effect<void> =>
+      tolerate(
+        Effect.gen(function* () {
+          if (!childTopics.has(childSessionId)) return;
+          childTopics.delete(childSessionId);
+          const { workspace } = yield* requireDaemonSession;
+          // unsubscribeConversationV4 resolves the remembered route from the
+          // sessionId/workspace args (server-core.js 3.19.0:62069) — no
+          // subscriptionId to carry.
+          yield* Effect.flatMap(getChannel, (channel) =>
+            channel.call(
+              "zcode-agent",
+              "unsubscribeConversationV4",
+              {
+                sessionId: childSessionId,
+                workspacePath: workspace.workspacePath,
+                workspaceIdentity: workspace.workspaceIdentity,
+              },
+              15_000,
+            ),
+          );
+          yield* log.debug(`[session] unsubscribed child conversation ${childSessionId}`);
+        }),
+        (cause) => log.debug(`[session] unsubscribe child ${childSessionId} skipped: ${renderError(cause)}`),
+      );
+
     // Best-effort teardown, run by the `dispose` property on session/unload.
     // Every step swallows its own failure — listener disposers never fail (the
     // channel's writes inside them are already tolerated), the channel close
@@ -436,6 +586,9 @@ const makeSession = <E>(
     // not propagated), and the scope close is total — so dispose's error
     // channel is `never` for every instantiation of `E`.
     const dispose: Effect.Effect<void> = Effect.gen(function* () {
+      for (const childId of [...childTopics]) {
+        yield* unsubscribeChild(childId);
+      }
       for (const disposer of listenerDisposers.splice(0)) {
         yield* disposer;
       }
@@ -455,6 +608,9 @@ const makeSession = <E>(
       resolveInteraction,
       setMode,
       sendCommand,
+      listSubagents,
+      subscribeChild,
+      unsubscribeChild,
       dispose,
     } satisfies ServeSession;
   });
@@ -613,4 +769,50 @@ const decodeSkills = (result: unknown): DiscoveredSkill[] => {
         ...(path !== undefined ? { path } : {}),
       };
     });
+};
+
+/**
+ * Tolerant `session/subagents` decode — the result arrives as
+ * `{ revision, childSessionIds, running[], ended: { total, items, nextCursor? }
+ * }` (see SubagentsSnapshot provenance). Entries missing any of childSessionId
+ * / subagentType / status are dropped; everything else is taken when it has
+ * the right primitive type, mirroring the pre-rewrite shape probing style.
+ */
+const decodeSubagents = (result: unknown): SubagentsSnapshot | undefined => {
+  const r = rec(result);
+  if (r === undefined) return undefined;
+  const readEntries = (value: unknown): SubagentEntry[] => {
+    if (!Array.isArray(value)) return [];
+    const entries: SubagentEntry[] = [];
+    for (const item of value) {
+      const e = rec(item);
+      if (e === undefined) continue;
+      const childSessionId = typeof e["childSessionId"] === "string" ? e["childSessionId"] : undefined;
+      const subagentType = typeof e["subagentType"] === "string" ? e["subagentType"] : undefined;
+      const status = typeof e["status"] === "string" ? e["status"] : undefined;
+      if (childSessionId === undefined || subagentType === undefined || status === undefined) continue;
+      const toolCallId = typeof e["toolCallId"] === "string" ? e["toolCallId"] : undefined;
+      const title = typeof e["title"] === "string" ? e["title"] : undefined;
+      const summary = typeof e["summary"] === "string" ? e["summary"] : undefined;
+      entries.push({
+        childSessionId,
+        subagentType,
+        status,
+        ...(toolCallId !== undefined ? { toolCallId } : {}),
+        ...(title !== undefined ? { title } : {}),
+        ...(summary !== undefined ? { summary } : {}),
+      });
+    }
+    return entries;
+  };
+  const running = readEntries(r["running"]);
+  const endedRaw = rec(r["ended"]);
+  return {
+    revision: typeof r["revision"] === "number" ? r["revision"] : 0,
+    running,
+    ended: {
+      total: endedRaw !== undefined && typeof endedRaw["total"] === "number" ? endedRaw["total"] : 0,
+      items: endedRaw !== undefined ? readEntries(endedRaw["items"]) : [],
+    },
+  };
 };

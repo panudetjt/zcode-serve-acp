@@ -697,4 +697,427 @@ describe("AcpServer Effect handler", () => {
     const quietResult = (await Effect.runPromise(Fiber.join(quietFiber))) as { stopReason: string };
     expect(quietResult.stopReason).toBe("end_turn");
   });
+
+  test("subagent drill-down: child subscription, batch summary, and settle unsubscribe", async () => {
+    let capturedHandlers: any;
+    const notifications: Array<{ method: string; params: any }> = [];
+    const subscribedChildren: string[] = [];
+    const unsubscribedChildren: string[] = [];
+    let listSubagentsCalls = 0;
+
+    const mockSession = {
+      createSession: () => Effect.succeed({ models: sampleModels, skills: [], raw: undefined }),
+      sendPrompt: () => Effect.succeed({ inputId: "inp-sub" }),
+      setMode: () => Effect.void,
+      sendCommand: () => Effect.void,
+      resolveInteraction: () => Effect.succeed({ resolved: true }),
+      listSubagents: () => {
+        listSubagentsCalls += 1;
+        return Effect.succeed({
+          revision: 2,
+          running: [
+            {
+              childSessionId: "child-x",
+              toolCallId: "agent-tc-1",
+              subagentType: "Explore",
+              title: "Scan",
+              status: "running",
+            },
+          ],
+          ended: {
+            total: 1,
+            items: [{ childSessionId: "child-0", subagentType: "general", title: "Old", status: "success" }],
+          },
+        });
+      },
+      subscribeChild: (childSessionId: string) =>
+        Effect.sync(() => {
+          subscribedChildren.push(childSessionId);
+        }),
+      unsubscribeChild: (childSessionId: string) =>
+        Effect.sync(() => {
+          unsubscribedChildren.push(childSessionId);
+        }),
+      dispose: Effect.void,
+    } as unknown as ServeSession;
+
+    const testServer = AcpServer.make({
+      sessions: {
+        create: (_cwd: string, handlers: any) => {
+          capturedHandlers = handlers;
+          return Effect.succeed(mockSession);
+        },
+      } as unknown as ServeSessionFactory["Service"],
+      log: mockLog,
+      emitNotification: (method: string, params: unknown) =>
+        Effect.sync(() => {
+          notifications.push({ method, params });
+        }),
+      clientRequest: () => Effect.fail(new ClientRequestError({ message: "no client" })),
+      fallbackModels: Effect.succeed(sampleModels),
+    });
+
+    await Effect.runPromise(testServer.handle("session/new", { sessionId: "sub-sess" }));
+
+    const promptFiber = await Effect.runPromise(
+      Effect.forkDetach(
+        testServer.handle("session/prompt", { sessionId: "sub-sess", prompt: [{ type: "text", text: "go" }] }),
+      ),
+    );
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Subagent row with a childSessionId → subscribeChild + armed summary.
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.appended",
+              row: {
+                rowId: 10,
+                kind: "subagent",
+                subagentType: "Explore",
+                status: "running",
+                summaryText: "Scanning",
+                parentToolCallId: "agent-tc-1",
+                childSessionId: "child-x",
+              },
+            },
+          ],
+        },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 40));
+    expect(subscribedChildren).toEqual(["child-x"]);
+
+    // Debounce window (1.5s) → listSubagents → one batch-summary content chunk.
+    await new Promise((r) => setTimeout(r, 1800));
+    expect(listSubagentsCalls).toBe(1);
+    const summaries = notifications.filter(
+      (n) => n.method === "session/update" && n.params?.update?.sessionUpdate === "agent_message_chunk",
+    );
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]!.params.update.content.text).toContain("Subagents — 1 running, 1 done");
+    expect(summaries[0]!.params.update.content.text).toContain("▸ Explore: Scan");
+
+    // Settle the child → unsubscribe (and a second summary refresh armed).
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.upserted",
+              row: {
+                rowId: 10,
+                kind: "subagent",
+                subagentType: "Explore",
+                status: "success",
+                summaryText: "Scanning done",
+                parentToolCallId: "agent-tc-1",
+                childSessionId: "child-x",
+              },
+            },
+          ],
+        },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 40));
+    expect(unsubscribedChildren).toEqual(["child-x"]);
+
+    // End the turn.
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [{ op: "row.upserted", row: { rowId: 0, kind: "turnHeader", state: "completedSuccess" } }],
+        },
+      }),
+    );
+    const promptResult = (await Effect.runPromise(Fiber.join(promptFiber))) as { stopReason: string };
+    expect(promptResult.stopReason).toBe("end_turn");
+  });
+
+  test("subagent summary skips when the turn ended during the debounce window", async () => {
+    let capturedHandlers: any;
+    const notifications: Array<{ method: string; params: any }> = [];
+    const subscribed: string[] = [];
+    let listSubagentsCalls = 0;
+
+    const mockSession = {
+      createSession: () => Effect.succeed({ models: sampleModels, skills: [], raw: undefined }),
+      sendPrompt: () => Effect.succeed({ inputId: "inp-e1" }),
+      setMode: () => Effect.void,
+      sendCommand: () => Effect.void,
+      resolveInteraction: () => Effect.succeed({ resolved: true }),
+      listSubagents: () => {
+        listSubagentsCalls += 1;
+        return Effect.succeed({ revision: 0, running: [], ended: { total: 0, items: [] } });
+      },
+      subscribeChild: (childSessionId: string) =>
+        childSessionId === "child-bad"
+          ? Effect.fail(new Error("subscribe refused"))
+          : Effect.sync(() => subscribed.push(childSessionId)),
+      unsubscribeChild: () => Effect.void,
+      dispose: Effect.void,
+    } as unknown as ServeSession;
+
+    const testServer = AcpServer.make({
+      sessions: {
+        create: (_cwd: string, handlers: any) => {
+          capturedHandlers = handlers;
+          return Effect.succeed(mockSession);
+        },
+      } as unknown as ServeSessionFactory["Service"],
+      log: mockLog,
+      emitNotification: (method: string, params: unknown) =>
+        Effect.sync(() => {
+          notifications.push({ method, params });
+        }),
+      clientRequest: () => Effect.fail(new ClientRequestError({ message: "no client" })),
+      fallbackModels: Effect.succeed(sampleModels),
+    });
+
+    await Effect.runPromise(testServer.handle("session/new", { sessionId: "sub-edge-1" }));
+    const promptFiber = await Effect.runPromise(
+      Effect.forkDetach(
+        testServer.handle("session/prompt", { sessionId: "sub-edge-1", prompt: [{ type: "text", text: "go" }] }),
+      ),
+    );
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Two children in one sighting: the second arm hits the debounce guard;
+    // the failing subscribe lands in tolerate's logged onFail.
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.appended",
+              row: {
+                rowId: 11,
+                kind: "subagent",
+                subagentType: "Explore",
+                status: "running",
+                summaryText: "A",
+                parentToolCallId: "tc-a",
+                childSessionId: "child-y",
+              },
+            },
+            {
+              op: "row.appended",
+              row: {
+                rowId: 12,
+                kind: "subagent",
+                subagentType: "general",
+                status: "running",
+                summaryText: "B",
+                parentToolCallId: "tc-b",
+                childSessionId: "child-bad",
+              },
+            },
+          ],
+        },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 40));
+    expect(subscribed).toEqual(["child-y"]);
+
+    // Turn ends while the summary debounce is pending → the fiber wakes, sees
+    // no turn, and skips the RPC entirely.
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [{ op: "row.upserted", row: { rowId: 0, kind: "turnHeader", state: "completedSuccess" } }],
+        },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 1700));
+    expect(listSubagentsCalls).toBe(0);
+    expect(
+      notifications.filter(
+        (n) => n.method === "session/update" && n.params?.update?.sessionUpdate === "agent_message_chunk",
+      ),
+    ).toEqual([]);
+    const promptResult = (await Effect.runPromise(Fiber.join(promptFiber))) as { stopReason: string };
+    expect(promptResult.stopReason).toBe("end_turn");
+  }, 20_000);
+
+  test("summary tolerates listSubagents failure, cross-fills bindings, and onChildFrame emits card updates", async () => {
+    let capturedHandlers: any;
+    const notifications: Array<{ method: string; params: any }> = [];
+    const subscribed: string[] = [];
+    let listSubagentsCalls = 0;
+    let listMode: "fail" | "bindable" = "fail";
+
+    const mockSession = {
+      createSession: () => Effect.succeed({ models: sampleModels, skills: [], raw: undefined }),
+      sendPrompt: () => Effect.succeed({ inputId: "inp-e2" }),
+      setMode: () => Effect.void,
+      sendCommand: () => Effect.void,
+      resolveInteraction: () => Effect.succeed({ resolved: true }),
+      listSubagents: () => {
+        listSubagentsCalls += 1;
+        if (listMode === "fail") return Effect.fail(new Error("rpc down"));
+        return Effect.succeed({
+          revision: 1,
+          running: [
+            {
+              childSessionId: "child-bind",
+              toolCallId: "tc-x",
+              subagentType: "general",
+              title: "Bind me",
+              status: "running",
+            },
+          ],
+          ended: { total: 0, items: [] },
+        });
+      },
+      subscribeChild: (childSessionId: string) =>
+        Effect.sync(() => {
+          subscribed.push(childSessionId);
+        }),
+      unsubscribeChild: () => Effect.void,
+      dispose: Effect.void,
+    } as unknown as ServeSession;
+
+    const testServer = AcpServer.make({
+      sessions: {
+        create: (_cwd: string, handlers: any) => {
+          capturedHandlers = handlers;
+          return Effect.succeed(mockSession);
+        },
+      } as unknown as ServeSessionFactory["Service"],
+      log: mockLog,
+      emitNotification: (method: string, params: unknown) =>
+        Effect.sync(() => {
+          notifications.push({ method, params });
+        }),
+      clientRequest: () => Effect.fail(new ClientRequestError({ message: "no client" })),
+      fallbackModels: Effect.succeed(sampleModels),
+    });
+
+    await Effect.runPromise(testServer.handle("session/new", { sessionId: "sub-edge-2" }));
+    const promptFiber = await Effect.runPromise(
+      Effect.forkDetach(
+        testServer.handle("session/prompt", { sessionId: "sub-edge-2", prompt: [{ type: "text", text: "go" }] }),
+      ),
+    );
+    await new Promise((r) => setTimeout(r, 20));
+
+    // A card the RPC can bind to, plus a child sighting → armed summary that
+    // will hit the failing listSubagents.
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            { op: "row.appended", row: { rowId: 20, kind: "toolCall", toolCallId: "tc-x", title: "Task" } },
+            {
+              op: "row.appended",
+              row: {
+                rowId: 21,
+                kind: "subagent",
+                subagentType: "general",
+                status: "running",
+                summaryText: "Z",
+                parentToolCallId: "tc-y",
+                childSessionId: "child-z",
+              },
+            },
+          ],
+        },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 1700));
+    expect(listSubagentsCalls).toBe(1);
+    expect(
+      notifications.filter(
+        (n) => n.method === "session/update" && n.params?.update?.sessionUpdate === "agent_message_chunk",
+      ),
+    ).toEqual([]);
+
+    // Close turn 1 — one turn at a time, like a real client.
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [{ op: "row.upserted", row: { rowId: 0, kind: "turnHeader", state: "completedSuccess" } }],
+        },
+      }),
+    );
+    const promptResult1 = (await Effect.runPromise(Fiber.join(promptFiber))) as { stopReason: string };
+    expect(promptResult1.stopReason).toBe("end_turn");
+
+    // Second turn + sighting with a succeeding RPC → cross-fill binds the
+    // child onto the tc-x card and emits the batch overview.
+    const promptFiber2 = await Effect.runPromise(
+      Effect.forkDetach(
+        testServer.handle("session/prompt", { sessionId: "sub-edge-2", prompt: [{ type: "text", text: "go 2" }] }),
+      ),
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    listMode = "bindable";
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.appended",
+              row: {
+                rowId: 22,
+                kind: "subagent",
+                subagentType: "general",
+                status: "running",
+                summaryText: "W",
+                parentToolCallId: "tc-w",
+                childSessionId: "child-w",
+              },
+            },
+          ],
+        },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 1700));
+    expect(listSubagentsCalls).toBe(2);
+    expect(subscribed).toContain("child-bind");
+    const summaries = notifications.filter(
+      (n) => n.method === "session/update" && n.params?.update?.sessionUpdate === "agent_message_chunk",
+    );
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]!.params.update.content.text).toContain("Subagents — 1 running, 0 done");
+
+    // onChildFrame: bound child frame → card update; unknown child → nothing.
+    await Effect.runPromise(
+      capturedHandlers.onChildFrame("child-bind", {
+        payload: {
+          kind: "deltas",
+          deltas: [{ op: "row.appended", row: { rowId: 1, kind: "assistantText", text: "hello" } }],
+        },
+      }),
+    );
+    const cardUpdates = notifications.filter(
+      (n) => n.method === "session/update" && n.params?.update?.sessionUpdate === "tool_call_update",
+    );
+    expect(cardUpdates).toHaveLength(1);
+    expect(cardUpdates[0]!.params.update.toolCallId).toBe("tc-x");
+    const before = notifications.length;
+    await Effect.runPromise(capturedHandlers.onChildFrame("ghost", { payload: { kind: "deltas", deltas: [] } }));
+    expect(notifications.length).toBe(before);
+
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [{ op: "row.upserted", row: { rowId: 0, kind: "turnHeader", state: "completedSuccess" } }],
+        },
+      }),
+    );
+    const promptResult2 = (await Effect.runPromise(Fiber.join(promptFiber2))) as { stopReason: string };
+    expect(promptResult2.stopReason).toBe("end_turn");
+  }, 20_000);
 });

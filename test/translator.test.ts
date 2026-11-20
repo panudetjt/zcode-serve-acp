@@ -1165,3 +1165,222 @@ describe("FrameTranslator uncovered-edge coverage", () => {
     }
   });
 });
+
+describe("FrameTranslator child-session drill-down (subagent cards)", () => {
+  const spawnSubagentRow = (overrides: Record<string, unknown> = {}) => ({
+    op: "row.appended",
+    row: {
+      rowId: 10,
+      kind: "subagent",
+      subagentType: "Explore",
+      status: "running",
+      summaryText: "Investigating repo dependencies",
+      parentToolCallId: "agent-tc-1",
+      childSessionId: "child-1",
+      ...overrides,
+    },
+  });
+
+  it("surfaces childSessionId rows as newChildren bound to the card", () => {
+    const translator = new FrameTranslator(() => {});
+    const res = translator.fold({
+      payload: { kind: "deltas", deltas: [spawnSubagentRow()] },
+    });
+    expect(res.updates[0]!.sessionUpdate).toBe("tool_call");
+    expect(res.updates[0]!.toolCallId).toBe("agent-tc-1");
+    expect(res.newChildren).toEqual(["child-1"]);
+    expect(res.settledChildren).toBeUndefined();
+    // Repeated sightings of the same child are not re-surfaced
+    const res2 = translator.fold({
+      payload: {
+        kind: "deltas",
+        deltas: [{ ...spawnSubagentRow(), op: "row.upserted" }],
+      },
+    });
+    expect(res2.newChildren).toBeUndefined();
+  });
+
+  it("foldChild streams child activity into the parent card's rawOutput", () => {
+    const translator = new FrameTranslator(() => {});
+    translator.fold({ payload: { kind: "deltas", deltas: [spawnSubagentRow()] } });
+
+    // Child assistant text (accumulated upsert)
+    const res1 = translator.foldChild("child-1", {
+      payload: {
+        kind: "deltas",
+        deltas: [{ op: "row.appended", row: { rowId: 1, kind: "assistantText", text: "Scanning files" } }],
+      },
+    });
+    expect(res1.updates).toHaveLength(1);
+    expect(res1.updates[0]!.sessionUpdate).toBe("tool_call_update");
+    expect(res1.updates[0]!.toolCallId).toBe("agent-tc-1");
+    expect(res1.updates[0]!.rawOutput).toEqual({ text: "Scanning files" });
+    expect(res1.updates[0]!.content).toEqual([{ type: "content", content: { type: "text", text: "Scanning files" } }]);
+
+    // Child row.delta append + first-seen tool row
+    const res2 = translator.foldChild("child-1", {
+      payload: {
+        kind: "deltas",
+        deltas: [
+          { op: "row.delta", rowId: 1, path: "text", append: " — done" },
+          { op: "row.appended", row: { rowId: 2, kind: "toolCall", toolName: "Bash", title: "bun test" } },
+        ],
+      },
+    });
+    expect(res2.updates).toHaveLength(1);
+    expect(res2.updates[0]!.rawOutput).toEqual({
+      text: "Scanning files — done\n⏺ Bash: bun test",
+    });
+
+    // Child tool failure line drawn once
+    const res3 = translator.foldChild("child-1", {
+      payload: {
+        kind: "deltas",
+        deltas: [
+          {
+            op: "row.upserted",
+            row: {
+              rowId: 2,
+              kind: "toolCall",
+              toolName: "Bash",
+              title: "bun test",
+              status: "failed",
+              error: { message: "boom" },
+            },
+          },
+          {
+            op: "row.upserted",
+            row: {
+              rowId: 2,
+              kind: "toolCall",
+              toolName: "Bash",
+              title: "bun test",
+              status: "failed",
+              error: { message: "boom" },
+            },
+          },
+        ],
+      },
+    });
+    expect(res3.updates).toHaveLength(1);
+    expect((res3.updates[0]!.rawOutput as { text: string }).text.endsWith("\n  ⎿ boom")).toBe(true);
+  });
+
+  it("foldChild ignores unknown and settled children, and never touches turn state", () => {
+    const translator = new FrameTranslator(() => {});
+    expect(
+      translator.foldChild("ghost", {
+        payload: {
+          kind: "deltas",
+          deltas: [{ op: "row.appended", row: { rowId: 1, kind: "assistantText", text: "x" } }],
+        },
+      }).updates,
+    ).toEqual([]);
+
+    translator.fold({ payload: { kind: "deltas", deltas: [spawnSubagentRow()] } });
+    const settle = translator.fold({
+      payload: {
+        kind: "deltas",
+        deltas: [spawnSubagentRow({ op: "row.upserted", status: "success" })],
+      },
+    });
+    expect(settle.settledChildren).toEqual(["child-1"]);
+    expect(
+      translator.foldChild("child-1", {
+        payload: {
+          kind: "deltas",
+          deltas: [{ op: "row.appended", row: { rowId: 3, kind: "assistantText", text: "late" } }],
+        },
+      }).updates,
+    ).toEqual([]);
+    expect(settle.turnComplete).toBe(false);
+    expect(settle.hasActiveWork).toBe(false);
+  });
+
+  it("bindChildSession cross-fills from the session/subagents RPC result", () => {
+    const translator = new FrameTranslator(() => {});
+    // A known card: a plain tool call with toolCallId
+    translator.fold({
+      payload: {
+        kind: "deltas",
+        deltas: [{ op: "row.appended", row: { rowId: 4, kind: "toolCall", toolCallId: "agent-tc-2", title: "Task" } }],
+      },
+    });
+    expect(translator.bindChildSession("child-2", "agent-tc-2")).toBe(true);
+    expect(translator.bindChildSession("child-2", "agent-tc-2")).toBe(false); // already bound
+    expect(translator.bindChildSession("child-3", "no-such-card")).toBe(false);
+    expect(translator.bindChildSession("", "agent-tc-2")).toBe(false);
+
+    // The bound child folds into the card it was bound to
+    const res = translator.foldChild("child-2", {
+      payload: {
+        kind: "deltas",
+        deltas: [{ op: "row.appended", row: { rowId: 9, kind: "assistantText", text: "hi" } }],
+      },
+    });
+    expect(res.updates[0]!.toolCallId).toBe("agent-tc-2");
+  });
+
+  it("streams summaryText deltas onto the subagent card as they arrive", () => {
+    const translator = new FrameTranslator(() => {});
+    translator.fold({
+      payload: { kind: "deltas", deltas: [spawnSubagentRow()] },
+    });
+    const res = translator.fold({
+      payload: {
+        kind: "deltas",
+        deltas: [{ op: "row.delta", rowId: 10, path: "summaryText", append: " — deeper" }],
+      },
+    });
+    expect(res.updates).toHaveLength(1);
+    expect(res.updates[0]!.sessionUpdate).toBe("tool_call_update");
+    expect(res.updates[0]!.toolCallId).toBe("agent-tc-1");
+    expect(res.updates[0]!.content).toEqual([
+      { type: "content", content: { type: "text", text: "Investigating repo dependencies — deeper" } },
+    ]);
+  });
+
+  it("caps per-child output at the tail with a truncation marker", () => {
+    const translator = new FrameTranslator(() => {});
+    translator.fold({ payload: { kind: "deltas", deltas: [spawnSubagentRow()] } });
+    const res = translator.foldChild("child-1", {
+      payload: {
+        kind: "deltas",
+        deltas: [{ op: "row.appended", row: { rowId: 5, kind: "assistantText", text: "x".repeat(20_000) } }],
+      },
+    });
+    const text = (res.updates[0]!.rawOutput as { text: string }).text;
+    expect(text.startsWith("…[truncated]\n")).toBe(true);
+    expect(text.length).toBeLessThan(20_000);
+  });
+
+  it("formats a session/subagents snapshot as a compact batch overview", () => {
+    const translator = new FrameTranslator(() => {});
+    expect(
+      translator.formatSubagentsSummary({ revision: 1, running: [], ended: { total: 0, items: [] } }),
+    ).toBeUndefined();
+    const text = translator.formatSubagentsSummary({
+      revision: 3,
+      running: [
+        { childSessionId: "c1", subagentType: "Explore", title: "Scan repo", status: "running" },
+        { childSessionId: "c2", subagentType: "general", title: "Write tests", status: "waiting" },
+      ],
+      ended: {
+        total: 2,
+        items: [
+          { childSessionId: "c0", subagentType: "general", title: "Old task", status: "success" },
+          { childSessionId: "c0b", subagentType: "general", title: "Bad task", status: "failed" },
+        ],
+      },
+    });
+    expect(text).toBe(
+      [
+        "Subagents — 2 running, 2 done",
+        "▸ Explore: Scan repo",
+        "▸ general: Write tests (waiting)",
+        "✓ general: Old task",
+        "✗ general: Bad task",
+      ].join("\n"),
+    );
+  });
+});

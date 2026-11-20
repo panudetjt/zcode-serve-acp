@@ -25,6 +25,10 @@
  */
 import { classifyToolKind, normalizeStatus } from "./toolKind.ts";
 import { envDebug } from "../config.ts";
+import type { SubagentsSnapshot } from "../serve/session.ts";
+
+/** Cap for the per-child activity text folded into a subagent card — a live tail, not an archive. */
+const CHILD_OUTPUT_CAP = 16_000;
 
 export interface ToolCallContentItem {
   type: "content" | "diff" | "terminal";
@@ -110,6 +114,10 @@ export interface FoldResult {
   errorMessage?: string;
   usage?: TurnUsage;
   pendingInteractions?: PendingInteraction[];
+  /** Child session ids newly seen on subagent rows — the caller subscribes `conversation/<id>`. */
+  newChildren?: string[];
+  /** Child session ids whose subagent row reached a terminal status — the caller unsubscribes. */
+  settledChildren?: string[];
 }
 
 // ---------- typed unknown access (replaces `as Record<string, unknown>`) ----------
@@ -296,6 +304,20 @@ export class FrameTranslator {
   private activeWorksCount = 0;
   private pendingInteractionsCount = 0;
 
+  // Child-session drill-down (feature: live subagent cards). The daemon does
+  // NOT inline child rows — subagentRowSchema.childSessionId documents the
+  // contract: "存在 → UI 可下钻订阅 conversation/<childSessionId>（不内嵌
+  // child rows）" (server-core.js 3.19.0). This bridge subscribes the child
+  // topic itself and folds child frames via foldChild into the parent card.
+  private childTool = new Map<string, string>(); // childSessionId → parent card toolCallId
+  private childTitle = new Map<string, string>(); // childSessionId → parent card title
+  private childSettled = new Set<string>();
+  private childOutput = new Map<string, string>(); // childSessionId → accumulated activity text
+  private childRowKind = new Map<string, string>(); // `${childId}#${rowId}` → kind
+  private childRowText = new Map<string, string>(); // `${childId}#${rowId}` → accumulated text
+  private childToolLineDrawn = new Set<string>(); // `${childId}#${rowId}` tool rows already rendered
+  private childFailLineDrawn = new Set<string>(); // `${childId}#${rowId}` tool rows whose failure line was rendered
+
   constructor(private readonly log: (...parts: unknown[]) => void) {}
 
   startTurn(): void {
@@ -333,6 +355,167 @@ export class FrameTranslator {
     }`;
   }
 
+  /**
+   * Fold one CHILD conversation frame (topic `conversation/<childSessionId>`)
+   * into the parent's subagent card. The daemon does not inline child rows —
+   * subagentRowSchema.childSessionId documents the drill-down contract ("UI
+   * 可下钻订阅 conversation/<childSessionId>", server-core.js 3.19.0) — so the
+   * bridge subscribes the child topic itself and streams the child's activity
+   * into the card's rawOutput/content, the same way parent tool rows stream
+   * `output.text` deltas.
+   *
+   * Child rows live in the child conversation's own rowId space; all state is
+   * keyed `${childSessionId}#${rowId}` so it can never collide with parent
+   * rows. Frames for unbound (never seen on a subagent row / RPC) or settled
+   * children are ignored, and this method never touches turn lifecycle state —
+   * the parent conversation owns the turn.
+   */
+  foldChild(childSessionId: string, payload: unknown): { updates: AcpUpdate[] } {
+    const updates: AcpUpdate[] = [];
+    const toolCallId = this.childTool.get(childSessionId);
+    if (toolCallId === undefined || this.childSettled.has(childSessionId)) return { updates };
+
+    const envelope = unwrapEnvelope(payload);
+    const deltas = envelope?.deltas ?? [];
+    if (deltas.length === 0) return { updates };
+
+    let appended = false;
+    for (const delta of deltas) {
+      const op = str(rec(delta), "op");
+
+      if (op === "row.delta") {
+        const d = rec(delta);
+        const rowId = num(d, "rowId") ?? -1;
+        const appendText = str(d, "append") ?? "";
+        const path = str(d, "path") ?? "text";
+        const key = `${childSessionId}#${rowId}`;
+        const rowKind = this.childRowKind.get(key) ?? "";
+        const isTool = rowKind === "toolCall" || rowKind.includes("tool");
+        if (appendText.length === 0 || isTool || path.includes("output")) continue;
+        const prev = this.childRowText.get(key) ?? "";
+        this.childRowText.set(key, prev + appendText);
+        this.appendChildText(childSessionId, appendText);
+        appended = true;
+        continue;
+      }
+
+      if (op !== "row.appended" && op !== "row.upserted" && op !== "row.updated") continue;
+      const row = readRow(recAt(rec(delta), "row"));
+      if (row === undefined) continue;
+      const key = `${childSessionId}#${row.rowId}`;
+      this.childRowKind.set(key, row.kind);
+      const lower = row.kind.toLowerCase();
+
+      if (lower.includes("assistant") || lower.includes("reasoning") || lower.includes("thought")) {
+        const text = str(row.raw, "text") ?? "";
+        const prev = this.childRowText.get(key) ?? "";
+        if (text.length > prev.length) {
+          this.childRowText.set(key, text);
+          this.appendChildText(childSessionId, text.slice(prev.length));
+          appended = true;
+        }
+        continue;
+      }
+
+      if (lower.includes("tool")) {
+        if (!this.childToolLineDrawn.has(key)) {
+          this.childToolLineDrawn.add(key);
+          const toolName = str(row.raw, "toolName") ?? str(row.raw, "name");
+          const rowTitle = str(row.raw, "title");
+          const label =
+            toolName !== undefined
+              ? `${toolName}${rowTitle !== undefined ? `: ${rowTitle}` : ""}`
+              : (rowTitle ?? row.kind);
+          this.appendChildText(childSessionId, `⏺ ${label}`, { asLine: true });
+          appended = true;
+        }
+        const status = normalizeStatus(str(row.raw, "status") ?? str(row.raw, "state"));
+        if (status === "failed" && !this.childFailLineDrawn.has(key)) {
+          this.childFailLineDrawn.add(key);
+          const message = str(recAt(row.raw, "error"), "message") ?? "failed";
+          this.appendChildText(childSessionId, `  ⎿ ${message}`, { asLine: true });
+          appended = true;
+        }
+        continue;
+      }
+      // turnHeader / userInput / meta / usage / error rows — not card activity.
+    }
+
+    if (appended) {
+      const text = this.childOutput.get(childSessionId);
+      const title = this.childTitle.get(childSessionId);
+      if (text !== undefined && text.length > 0) {
+        updates.push({
+          sessionUpdate: "tool_call_update",
+          toolCallId,
+          ...(title !== undefined ? { title } : {}),
+          name: "subagent",
+          kind: "other",
+          status: "in_progress",
+          rawOutput: { text },
+          content: [{ type: "content", content: { type: "text", text } }],
+        });
+      }
+    }
+    return { updates };
+  }
+
+  private appendChildText(childSessionId: string, text: string, opts?: { asLine?: boolean }): void {
+    const prev = this.childOutput.get(childSessionId) ?? "";
+    const boundary = opts?.asLine === true && prev.length > 0 && !prev.endsWith("\n") ? "\n" : "";
+    let next = prev + boundary + text;
+    if (next.length > CHILD_OUTPUT_CAP) {
+      next = `…[truncated]\n${next.slice(next.length - CHILD_OUTPUT_CAP)}`;
+    }
+    this.childOutput.set(childSessionId, next);
+  }
+
+  /**
+   * Bind a child session id onto an existing card from the `session/subagents`
+   * result (sessionSubagents, server-core.js 3.19.0:64180, whose entries carry
+   * childSessionId + the parent toolCallId) — used when subagent rows arrived
+   * without childSessionId. Returns true only when a NEW bindable mapping was
+   * made (the caller then subscribes `conversation/<childSessionId>`).
+   */
+  bindChildSession(childSessionId: string, toolCallId: string | undefined): boolean {
+    if (childSessionId === "" || toolCallId === undefined || toolCallId === "") return false;
+    if (this.childTool.has(childSessionId) || this.childSettled.has(childSessionId)) return false;
+    for (const info of this.rowTool.values()) {
+      if (info.toolCallId === toolCallId) {
+        this.childTool.set(childSessionId, toolCallId);
+        this.childTitle.set(childSessionId, info.title);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Render a `session/subagents` snapshot as a compact batch overview, emitted
+   * as agent text while the turn runs so the client sees the whole batch even
+   * before any card goes live. Returns undefined when the session has no
+   * subagents at all (nothing worth a content line).
+   */
+  formatSubagentsSummary(snapshot: SubagentsSnapshot): string | undefined {
+    if (snapshot.running.length === 0 && snapshot.ended.total === 0) return undefined;
+    const line = (text: string): string => text.replace(/\s+/g, " ").trim().slice(0, 120);
+    const rows: string[] = [];
+    for (const entry of snapshot.running) {
+      const title = line(entry.title !== undefined && entry.title !== "" ? entry.title : entry.subagentType);
+      rows.push(`▸ ${entry.subagentType}: ${title}${entry.status === "running" ? "" : ` (${entry.status})`}`);
+    }
+    for (const entry of snapshot.ended.items) {
+      const mark = entry.status === "success" ? "✓" : "✗";
+      rows.push(
+        `${mark} ${entry.subagentType}: ${line(entry.title !== undefined && entry.title !== "" ? entry.title : entry.subagentType)}`,
+      );
+    }
+    const shown = rows.slice(0, 12);
+    const overflow = rows.length - shown.length;
+    const header = `Subagents — ${snapshot.running.length} running, ${snapshot.ended.total} done`;
+    return [header, ...shown, ...(overflow > 0 ? [`… and ${overflow} more`] : [])].join("\n");
+  }
+
   /** Fold one daemon frame payload; returns ACP updates + turn lifecycle flags. */
   fold(payload: unknown): FoldResult {
     let turnComplete = false;
@@ -343,6 +526,8 @@ export class FrameTranslator {
     let usage: TurnUsage | undefined;
     const updates: AcpUpdate[] = [];
     const pendingInteractions: PendingInteraction[] = [];
+    const newChildren: string[] = [];
+    const settledChildren: string[] = [];
 
     const envelope = unwrapEnvelope(payload);
     if (envelope !== undefined) {
@@ -371,6 +556,8 @@ export class FrameTranslator {
         errorMessage,
         usage,
         pendingInteractions,
+        newChildren,
+        settledChildren,
       });
     }
 
@@ -515,6 +702,22 @@ export class FrameTranslator {
                 sessionUpdate: isThought ? "agent_thought_chunk" : "agent_message_chunk",
                 content: { type: "text", text: appendText },
               });
+            } else {
+              // summaryText streams as a row path (streamablePathSchema,
+              // server-core.js 3.19.0:4377) — surface it on the card as it
+              // arrives instead of waiting for the next full row upsert.
+              const toolInfo = this.rowTool.get(rowId);
+              if (toolInfo !== undefined) {
+                updates.push({
+                  sessionUpdate: "tool_call_update",
+                  toolCallId: toolInfo.toolCallId,
+                  title: toolInfo.title,
+                  name: "subagent",
+                  kind: "other",
+                  status: "in_progress",
+                  content: [{ type: "content", content: { type: "text", text: prev + appendText } }],
+                });
+              }
             }
           }
         }
@@ -620,6 +823,11 @@ export class FrameTranslator {
         const subType = str(row.raw, "subagentType") ?? "general";
         const title = str(row.raw, "title") ?? `Subagent: ${subType}`;
         const summary = str(row.raw, "summaryText")?.trim();
+        // Seed the summary buffer so streaming summaryText deltas (see the
+        // row.delta handler) append onto the latest known summary instead of
+        // starting from an empty string.
+        const rawSummary = str(row.raw, "summaryText");
+        if (rawSummary !== undefined) this.rowText.set(rowId, rawSummary);
         const content: ToolCallContentItem[] | undefined = summary
           ? [{ type: "content", content: { type: "text", text: summary } }]
           : undefined;
@@ -629,9 +837,34 @@ export class FrameTranslator {
             ? { backgrounded: true, ...(workId !== undefined ? { workId } : {}) }
             : undefined;
 
+        const parentToolCallId = str(row.raw, "parentToolCallId");
+        const toolCallId =
+          existing?.toolCallId ?? parentToolCallId ?? (workId !== undefined ? `sub_${workId}` : `sub_${rowId}`);
+
+        // Drill-down contract (see child fields above): the row carries the
+        // child conversation id once the daemon knows it — surface it so the
+        // caller subscribes conversation/<childSessionId> and folds child
+        // frames into this card.
+        const childSessionId = str(row.raw, "childSessionId");
+        if (childSessionId !== undefined && childSessionId !== "") {
+          if (!this.childTool.has(childSessionId)) {
+            this.childTool.set(childSessionId, toolCallId);
+            this.childTitle.set(childSessionId, title);
+            if (!this.childSettled.has(childSessionId)) newChildren.push(childSessionId);
+          }
+        }
+        if (
+          (status === "completed" || status === "failed") &&
+          childSessionId !== undefined &&
+          this.childTool.has(childSessionId) &&
+          !this.childSettled.has(childSessionId)
+        ) {
+          this.childSettled.add(childSessionId);
+          this.childOutput.delete(childSessionId);
+          settledChildren.push(childSessionId);
+        }
+
         if (existing === undefined) {
-          const parentToolCallId = str(row.raw, "parentToolCallId");
-          const toolCallId = parentToolCallId ?? (workId !== undefined ? `sub_${workId}` : `sub_${rowId}`);
           this.rowTool.set(rowId, { toolCallId, title, name: "subagent", kind: "other" });
           updates.push({
             sessionUpdate: "tool_call",
@@ -828,6 +1061,8 @@ export class FrameTranslator {
       errorMessage,
       usage,
       pendingInteractions,
+      newChildren,
+      settledChildren,
     });
   }
 
@@ -841,6 +1076,8 @@ export class FrameTranslator {
       errorMessage?: string;
       usage?: TurnUsage;
       pendingInteractions: PendingInteraction[];
+      newChildren?: string[];
+      settledChildren?: string[];
     },
   ): FoldResult {
     return {
@@ -853,6 +1090,8 @@ export class FrameTranslator {
       ...(parts.errorMessage !== undefined ? { errorMessage: parts.errorMessage } : {}),
       ...(parts.usage !== undefined ? { usage: parts.usage } : {}),
       ...(parts.pendingInteractions.length > 0 ? { pendingInteractions: parts.pendingInteractions } : {}),
+      ...((parts.newChildren?.length ?? 0) > 0 ? { newChildren: parts.newChildren } : {}),
+      ...((parts.settledChildren?.length ?? 0) > 0 ? { settledChildren: parts.settledChildren } : {}),
     };
   }
 }
