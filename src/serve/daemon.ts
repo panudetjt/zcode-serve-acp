@@ -70,8 +70,10 @@ class DaemonDeps extends Context.Service<
       const serveBin = yield* resolveServeBinary(fs);
       let spawnError: string | undefined;
 
-      // Effect-valued property (not a zero-arg function): the Effect is already
-      // lazy, so `spawnServe` runs the wrapped `Effect.fn` fresh on each run.
+      // Effect-valued property (the `lazy-effect` fix): an Effect is already
+      // lazy, so one value serves every run. `Effect.suspend` re-invokes the
+      // wrapped `Effect.fn` per run (fresh span + generator body) — the same
+      // call-per-use semantics the old zero-arg function had.
       const spawnServe: Effect.Effect<void, SpawnError> = Effect.suspend(
         Effect.fn("DaemonDeps.spawnServe")(function* () {
           yield* Effect.try({
@@ -126,13 +128,12 @@ export class Daemon extends Context.Service<
       const readStatus = Effect.fn("Daemon.readStatus")(function* (rootDir: string) {
         const text = yield* readFile(path.join(rootDir, "run", "status.json"));
         if (text === undefined) return undefined;
-        // Typed catch (DecodeError) per the error taxonomy; the failure is
-        // swallowed via Effect.result right after — malformed status stays
-        // tolerated as "not ready" (pre-rewrite behavior).
+        // Typed catch per the taxonomy: the failure is swallowed into
+        // "not ready" below, so the DecodeError is never rendered — it exists
+        // to keep the channel typed instead of `unknown`.
         const parsed = yield* Effect.try({
           try: () => JSON.parse(text) as unknown,
-          catch: (cause) =>
-            new DecodeError({ location: "daemon/status.json", message: "malformed daemon status JSON", cause }),
+          catch: () => new DecodeError({ location: "daemon/status.json", message: "malformed daemon status JSON" }),
         }).pipe(Effect.result);
         if (!Result.isSuccess(parsed)) return undefined;
         const result = yield* Effect.result(Schema.decodeUnknownEffect(ServerStatusSchema)(parsed.success));
@@ -186,8 +187,9 @@ export class Daemon extends Context.Service<
         }
       });
 
-      // Effect-valued property (not a zero-arg method): see the `Effect.fn`
-      // note on `spawnServe` — each run gets a fresh span + generator body.
+      // Effect-valued property, same shape as `spawnServe`: `Effect.suspend`
+      // rebuilds the `Effect.fn` body per run, so repeated runs get fresh spans
+      // and fresh connection discovery.
       const connect: Effect.Effect<DaemonConnection, DiscoveryError | SpawnError> = Effect.suspend(
         Effect.fn("Daemon.connect")(function* (): Effect.fn.Return<DaemonConnection, DiscoveryError | SpawnError> {
           const rootDir = serverRoot();

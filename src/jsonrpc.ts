@@ -7,7 +7,7 @@
  * through the Stdio sink, so writes get the platform's backpressure handling.
  */
 import { Effect, Result, Schema } from "effect";
-import { DecodeError, renderError } from "./errors.ts";
+import { DecodeError } from "./errors.ts";
 
 export const JsonRpcId = Schema.Union([Schema.Finite, Schema.String]);
 export type JsonRpcId = typeof JsonRpcId.Type;
@@ -62,13 +62,13 @@ const decodeMessage = Schema.decodeUnknownEffect(JsonRpcMessage, {
 
 export const parseLine = (line: string): Effect.Effect<ParseOutcome, DecodeError> =>
   Effect.gen(function* () {
-    // JSON.parse failure carries the thrown value as DecodeError.cause — the
-    // caller below turns it into `Malformed` immediately (pre-rewrite bin.ts
-    // noted it on stderr and ignored it), so the typed catch changes no
-    // behavior, only the error channel.
+    // The caught value is discarded by the `Malformed` outcome below (the
+    // pre-rewrite bin.ts noted it on stderr and ignored it). The DecodeError
+    // exists only to keep the catch typed instead of `unknown` — rendering it
+    // here would be dead work.
     const parsed = yield* Effect.try({
       try: () => JSON.parse(line),
-      catch: (cause) => new DecodeError({ location: "jsonrpc/inbound", message: renderError(cause), cause }),
+      catch: () => new DecodeError({ location: "jsonrpc/inbound", message: "malformed JSON on stdin" }),
     }).pipe(Effect.result);
     if (!Result.isSuccess(parsed)) return { _tag: "Malformed" };
     const raw: unknown = parsed.success;

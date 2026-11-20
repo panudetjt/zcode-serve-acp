@@ -217,7 +217,7 @@ const runScenario = (
       yield* Effect.sleep(250);
     }
     if (!outcome.done) settle("timeout", "error", "capture turn exceeded 180s");
-    yield* session.dispose.pipe(Effect.orElseSucceed(() => undefined));
+    yield* session.dispose;
 
     const sanitizeValue = (value: unknown): unknown => JSON.parse(sanitize(JSON.stringify(value), secrets));
     return {
