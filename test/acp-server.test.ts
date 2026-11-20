@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Effect, Fiber } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { AcpServer } from "../src/acp/server.ts";
+import { ClientRequestError } from "../src/errors.ts";
 import { Log } from "../src/log.ts";
 import { ServeSessionFactory, type AvailableModel, type ServeSession } from "../src/serve/session.ts";
 
@@ -523,7 +524,7 @@ describe("AcpServer Effect handler", () => {
       } as unknown as ServeSessionFactory["Service"],
       log: mockLog,
       emitNotification: () => Effect.void,
-      clientRequest: () => Effect.fail(new Error("Client rejected request")),
+      clientRequest: () => Effect.fail(new ClientRequestError({ message: "Client rejected request" })),
       fallbackModels: Effect.succeed(sampleModels),
     });
 

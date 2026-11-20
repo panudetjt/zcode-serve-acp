@@ -14,6 +14,7 @@
  */
 import { Context, Deferred, Effect, Fiber, Layer, Option, Ref } from "effect";
 import { FileSystem } from "effect/FileSystem";
+import type { PlatformError } from "effect/PlatformError";
 import type { DiscoveredSkill } from "../serve/session.ts";
 import { envDump } from "../config.ts";
 import {
@@ -57,14 +58,14 @@ interface BridgeSession {
   lastUsage?: TurnUsage;
   readonly handledInteractions: Set<string>;
   readonly turn: Ref.Ref<Option.Option<TurnState>>;
-  readonly quietFiber: Ref.Ref<Option.Option<Fiber.Fiber<void, unknown>>>;
+  readonly quietFiber: Ref.Ref<Option.Option<Fiber.Fiber<void, never>>>;
   readonly dumpRef: Ref.Ref<boolean>;
 }
 
 interface TurnState {
   readonly deferred: Deferred.Deferred<string, AcpMethodError>;
   sawUpdate: boolean;
-  initialGuard?: Fiber.Fiber<void, unknown>;
+  initialGuard?: Fiber.Fiber<void, never>;
 }
 
 const DUMP_FRAMES = envDump();
@@ -72,9 +73,13 @@ const DUMP_FRAMES = envDump();
 export interface AcpServerDeps {
   readonly sessions: ServeSessionFactory["Service"];
   readonly log: Log["Service"];
-  readonly emitNotification: (method: string, params: unknown) => Effect.Effect<void, unknown>;
+  /** JSON-RPC notification to the client over stdout — the only genuine failure escape. */
+  readonly emitNotification: (method: string, params: unknown) => Effect.Effect<void, PlatformError>;
   /** request TO the ACP client (elicitation/create, session/request_permission) */
-  readonly clientRequest: (method: string, params: unknown) => Effect.Effect<unknown, unknown>;
+  readonly clientRequest: (
+    method: string,
+    params: unknown,
+  ) => Effect.Effect<unknown, ClientRequestError | PlatformError>;
   /** R-closed fallback model discovery (daemon advertised none) */
   readonly fallbackModels: Effect.Effect<AvailableModel[]>;
 }
@@ -123,7 +128,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
   const takeTurn = (bridge: BridgeSession): Effect.Effect<Option.Option<TurnState>> =>
     Ref.modify(bridge.turn, (current) => [current, Option.none()]);
 
-  const stopFibers = (state: TurnState, bridge: BridgeSession): Effect.Effect<void, unknown> =>
+  const stopFibers = (state: TurnState, bridge: BridgeSession): Effect.Effect<void> =>
     Effect.gen(function* () {
       const quiet = yield* Ref.getAndSet(bridge.quietFiber, Option.none());
       if (Option.isSome(quiet)) {
@@ -134,7 +139,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       }
     });
 
-  const endTurn = (bridge: BridgeSession, stopReason: string): Effect.Effect<void, unknown> =>
+  const endTurn = (bridge: BridgeSession, stopReason: string): Effect.Effect<void> =>
     Effect.gen(function* () {
       const taken = yield* takeTurn(bridge);
       if (Option.isNone(taken)) return;
@@ -144,7 +149,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       Deferred.doneUnsafe(state.deferred, Effect.succeed(stopReason));
     });
 
-  const failTurn = (bridge: BridgeSession, message: string): Effect.Effect<void, unknown> =>
+  const failTurn = (bridge: BridgeSession, message: string): Effect.Effect<void> =>
     Effect.gen(function* () {
       const taken = yield* takeTurn(bridge);
       if (Option.isNone(taken)) return;
@@ -154,7 +159,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       Deferred.doneUnsafe(state.deferred, Effect.fail(new AcpMethodError({ method: "session/prompt", message })));
     });
 
-  const clearQuiet = (bridge: BridgeSession): Effect.Effect<void, unknown> =>
+  const clearQuiet = (bridge: BridgeSession): Effect.Effect<void> =>
     Effect.gen(function* () {
       const current = yield* Ref.getAndSet(bridge.quietFiber, Option.none());
       if (Option.isSome(current)) {
@@ -162,7 +167,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       }
     });
 
-  const armQuietWindow = (bridge: BridgeSession): Effect.Effect<void, unknown> =>
+  const armQuietWindow = (bridge: BridgeSession): Effect.Effect<void> =>
     Effect.gen(function* () {
       yield* clearQuiet(bridge);
       const quiet = yield* Effect.forkDetach(
@@ -175,7 +180,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
 
   const onConversationFrame =
     (bridge: BridgeSession) =>
-    (payload: unknown): Effect.Effect<void, unknown> =>
+    (payload: unknown): Effect.Effect<void, PlatformError> =>
       Effect.gen(function* () {
         yield* log.debug(`[frame] in: ${JSON.stringify(payload).slice(0, 160)}`);
         if (DUMP_FRAMES) {
@@ -231,7 +236,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
 
   const onLifecycle =
     (bridge: BridgeSession) =>
-    (payload: unknown): Effect.Effect<void, unknown> =>
+    (payload: unknown): Effect.Effect<void> =>
       Effect.gen(function* () {
         const raw = JSON.stringify(payload);
         yield* log.debug(`[lifecycle] ${raw.slice(0, 300)}`);
@@ -248,7 +253,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
 
   const onClosed =
     (bridge: BridgeSession) =>
-    (reason: string): Effect.Effect<void, unknown> =>
+    (reason: string): Effect.Effect<void> =>
       Effect.gen(function* () {
         const turnNow = yield* Ref.get(bridge.turn);
         if (Option.isSome(turnNow) && !turnNow.value.sawUpdate) {
@@ -260,7 +265,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
 
   const onRequest =
     (bridge: BridgeSession) =>
-    (channelName: string, name: string, arg: unknown): Effect.Effect<unknown, unknown> =>
+    (channelName: string, name: string, arg: unknown): Effect.Effect<unknown> =>
       Effect.gen(function* () {
         yield* log.debug(`[server-request] ${channelName}.${name}: ${JSON.stringify(arg)?.slice(0, 500)}`);
         if (name.toLowerCase().includes("permission")) {
@@ -297,10 +302,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
 
   // ---- interactions ----
 
-  const handlePendingInteraction = (
-    bridge: BridgeSession,
-    interaction: PendingInteraction,
-  ): Effect.Effect<void, unknown> =>
+  const handlePendingInteraction = (bridge: BridgeSession, interaction: PendingInteraction): Effect.Effect<void> =>
     Effect.gen(function* () {
       if (bridge.handledInteractions.has(interaction.interactionId)) return;
       bridge.handledInteractions.add(interaction.interactionId);
@@ -317,7 +319,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
     bridge: BridgeSession,
     interactionId: string,
     rawPayload: Record<string, unknown>,
-  ): Effect.Effect<void, unknown> =>
+  ): Effect.Effect<void> =>
     Effect.gen(function* () {
       yield* log.debug(`[interaction] routing to elicitation/create for ${interactionId}`);
       const questions = extractElicitationQuestions({ interactionId, kind: "userInput", payload: rawPayload });
@@ -346,7 +348,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
     bridge: BridgeSession,
     interactionId: string,
     rawPayload: Record<string, unknown>,
-  ): Effect.Effect<void, unknown> =>
+  ): Effect.Effect<void> =>
     Effect.gen(function* () {
       const rawOptions = (rawPayload.options as Array<Record<string, unknown>> | undefined) ?? [];
       const params = buildPermissionParams(bridge.id, rawPayload, bridge.translator.getLatestActiveToolCallId());
@@ -399,7 +401,10 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       return bridge;
     });
 
-  const initializeNewSession = (method: string, bridge: BridgeSession): Effect.Effect<unknown, unknown> =>
+  const initializeNewSession = (
+    method: string,
+    bridge: BridgeSession,
+  ): Effect.Effect<unknown, AcpMethodError | PlatformError> =>
     Effect.gen(function* () {
       const created = yield* bridge.serve
         .createSession()
@@ -453,7 +458,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       };
     });
 
-  const selectModel = (bridge: BridgeSession, value: string): Effect.Effect<void, unknown> =>
+  const selectModel = (bridge: BridgeSession, value: string): Effect.Effect<void, PlatformError> =>
     Effect.gen(function* () {
       const slash = Math.max(value.lastIndexOf("/"), value.lastIndexOf("\\"));
       bridge.modelSelection =
@@ -484,7 +489,10 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
 
   // ---- method dispatch ----
 
-  const dispatch = (method: string, params: Record<string, unknown>): Effect.Effect<unknown, unknown> =>
+  const dispatch = (
+    method: string,
+    params: Record<string, unknown>,
+  ): Effect.Effect<unknown, AcpMethodError | PlatformError> =>
     Effect.gen(function* () {
       switch (method) {
         case "initialize": {

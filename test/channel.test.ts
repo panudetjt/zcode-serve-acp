@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import * as BunSocket from "@effect/platform-bun/BunSocket";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import { Log } from "../src/log.ts";
-import { ChannelClient } from "../src/serve/channel.ts";
+import { ChannelClient, type ChannelHandlers } from "../src/serve/channel.ts";
 import { decodeRpcMessage, encodeRpcMessage, FRAME_KIND_REGULAR, MSG, writeProtocolFrame } from "../src/serve/wire.ts";
 
 describe("ChannelClient over WebSocket", () => {
@@ -423,12 +423,13 @@ describe("dispatchFrame edge branches", () => {
 
     const prog = Effect.gen(function* () {
       const log = yield* Log;
-      const client = yield* ChannelClient.connect(
-        `ws://localhost:${server.port}`,
-        {},
-        { onRequest: () => Effect.succeed(undefined), onClose: () => Effect.void },
-        log,
-      );
+      // `E = string`: this test registers a deliberately failing handler and
+      // proves the channel survives it (dispatch tolerates listener failures).
+      const handlers: ChannelHandlers<string> = {
+        onRequest: () => Effect.succeed(undefined),
+        onClose: () => Effect.void,
+      };
+      const client = yield* ChannelClient.connect(`ws://localhost:${server.port}`, {}, handlers, log);
       const disposeBoom = yield* client.listen("zcode-agent", "boom", undefined, () =>
         Effect.fail("handler failed on purpose"),
       );
