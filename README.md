@@ -4,7 +4,7 @@ Standalone **Agent Client Protocol (ACP) bridge** that attaches a coding-agent c
 
 Why: the community bridge (`zcode-acp-server`) reads the CLI's credential store from outside and dies on `enc:v2:env:`-encrypted stores (headless/WSL server CLI). This bridge takes a different door — the daemon **owns all credentials itself** (the CLI reads its own store, signs its own requests), so the bridge never touches secrets, and the **model picker advertises the daemon's own models** (`session/create` → `settings.model.available`).
 
-Derived from the owner's closed t3code PRs #33684/#34713 (`pingdotgg/t3code`) — protocol reverse-engineered and ground-truthed against `server-core.js` runtime 3.18.2, re-verified against 3.19.0 (endpoint/constant diff + `scripts/probe-tools-resume.mjs`).
+Derived from the owner's closed t3code PRs #33684/#34713 (`pingdotgg/t3code`) — protocol reverse-engineered and ground-truthed against `server-core.js` runtime 3.18.2, re-verified against 3.19.0 (endpoint/constant diff + `scripts/probe-tools-load.mjs`).
 
 ## Build (single binary)
 
@@ -13,7 +13,7 @@ mise run compile      # → dist/zcode-serve-acp (OUTFILE=… overrides the targ
 mise run test         # codec + install-script tests
 mise run smoke        # ACP handshake + session/new + real prompt vs the daemon
 scripts/install.sh    # build + backup + atomic install/restore (flags: --help)
-bun scripts/probe-tools-resume.mjs   # tool-call + session/load resume probe
+bun scripts/probe-tools-load.mjs --bin dist/zcode-serve-acp   # tool-call + load probe
 ```
 
 ## Use in T3 Code
@@ -29,6 +29,7 @@ The bridge discovers the daemon (`~/.zcode/server/run/status.json` → probe `/a
 
 - ZCode CLI ≥ 0.17.1 with server runtime (`~/.zcode/server/bin/zcode`) and `zcode login` done once
 - Bun ≥ 1.4 to build (the binary embeds the runtime — clients need nothing)
+- **Linux x64** for `scripts/install.sh` (GNU coreutils + `/proc`, matching the linux-x64 build); backups land in `dist/backups/` at roughly binary size each and are not pruned automatically
 
 ## MVP surface
 

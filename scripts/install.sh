@@ -33,6 +33,7 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+readonly repo
 dest="$repo/dist/zcode-serve-acp"
 mode=install
 restore_name=""
@@ -56,7 +57,7 @@ pids_found=()
 #   0
 #######################################
 usage() {
-  sed -n '2,/^set -euo/{/^set -euo/d;s/^# \{0,1\}//;p}' "$0"
+  sed -n '2,/^set -euo/{/^set -euo/d;s/^# \{0,1\}//;p}' "${BASH_SOURCE[0]}"
 }
 
 #######################################
@@ -157,7 +158,7 @@ init_paths() {
 list_backups() {
   local f first=1
   if [[ ! -d $bakdir ]]; then
-    echo "install: no backups directory at $bakdir"
+    echo "install: no backups directory at $bakdir" >&2
     return 0
   fi
   for f in "$bakdir"/*; do
@@ -170,7 +171,7 @@ list_backups() {
       "$(du -h "$f" | cut -f1)" "$(date -r "$f" '+%Y-%m-%d %H:%M')"
   done
   if ((first)); then
-    echo "install: no backups in $bakdir"
+    echo "install: no backups in $bakdir" >&2
   fi
 }
 
@@ -275,7 +276,7 @@ wait_gone() {
 # Arguments:
 #   Optional filename suffix (e.g. ".safety").
 # Outputs:
-#   Backup path on stdout.
+#   Writes a "backup -> path" line to stdout.
 # Returns:
 #   0 (also when there is nothing to back up).
 #######################################
@@ -391,7 +392,7 @@ run_verify() {
 #######################################
 # Entry point.
 # Globals:
-#   mode, dest, do_verify, tmp_file
+#   mode, dest, do_verify, tmp_file, restore_src
 # Arguments:
 #   Script arguments.
 # Outputs:

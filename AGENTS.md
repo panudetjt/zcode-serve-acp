@@ -73,7 +73,7 @@ Bun version is pinned via `mise.toml` (1.4.4).
   not).
 - Protocol knowledge is reverse-engineered from `server-core.js` (runtime
   3.18.2, re-verified unchanged against 3.19.0 via the endpoint/constant diff
-  and `scripts/probe-tools-resume.mjs`) and recorded in provenance comments.
+  and `scripts/probe-tools-load.mjs`) and recorded in provenance comments.
   Keep those comments when you move code; they are the only protocol
   documentation.
 - Wire codec (`src/serve/wire.ts`) is intentionally hand-rolled (13-byte frame
@@ -99,9 +99,9 @@ Bun version is pinned via `mise.toml` (1.4.4).
   for the required scenarios and sanitization rules).
 - `scripts/smoke.mjs` and the `probe-*.mjs` scripts run against a real daemon;
   they are not part of CI.
-- `test/install-script.test.ts` exercises `scripts/install.sh` (argument
-  parsing, restore selection, process cutover) against temp dirs — no build and
-  no daemon involved.
+- `test/install-script.test.ts` exercises `scripts/install.sh` (install /
+  restore / list dispatch, restore selection, process cutover, `--bin`
+  validation) against temp dirs — no build and no daemon involved.
 
 ## Repo hygiene
 

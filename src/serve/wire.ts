@@ -4,7 +4,7 @@
  * (ZCode Server runtime 3.18.2, read 2026-11-18; re-verified unchanged
  * against 3.19.0 on 2026-11-20 — same frame header, RPC tags, message ids —
  * via the server-core.js endpoint/constant diff, a live smoke, and
- * scripts/probe-tools-resume.mjs):
+ * scripts/probe-tools-load.mjs):
  *
  *   - SocketProtocol frame: [type u8][id u32BE][ack u32BE][len u32BE][body],
  *     only type 1 (Regular) carries an RPC body.

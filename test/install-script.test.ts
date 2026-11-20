@@ -36,6 +36,16 @@ function run(args: string[], cwd = repo) {
   return { code: proc.exitCode ?? -1, out: proc.stdout.toString(), err: proc.stderr.toString() };
 }
 
+function runEnv(args: string[], env: Record<string, string>, cwd = repo) {
+  const proc = Bun.spawnSync([script, ...args], {
+    cwd,
+    env: { ...process.env, ...env },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  return { code: proc.exitCode ?? -1, out: proc.stdout.toString(), err: proc.stderr.toString() };
+}
+
 // Run the script in a shell whose kill/sleep are no-ops, simulating signals
 // that do not reach the target (EPERM / uninterruptible sleep). Sourcing keeps
 // the overrides in the same shell; BASH_ENV is not reliable across runners.
@@ -261,6 +271,69 @@ describe("install.sh", () => {
     } finally {
       child.kill();
     }
+  });
+
+  test("install mode builds through mise, backs up, then replaces", () => {
+    const dir = scratch();
+    const dest = path.join(dir, "zcode-serve-acp");
+    const backups = path.join(dir, "backups");
+    const binDir = path.join(dir, "bin");
+    mkdirSync(binDir, { recursive: true });
+    writeFileSync(dest, "old-binary");
+
+    // Fake mise: the compile task writes OUTFILE instead of building 105 MB.
+    const mise = path.join(binDir, "mise");
+    writeFileSync(
+      mise,
+      `#!/bin/sh
+[ "$1" = run ] && [ "$2" = compile ] || exit 1
+printf fake-binary > "$OUTFILE"
+chmod +x "$OUTFILE"
+`,
+    );
+    chmodSync(mise, 0o755);
+
+    const result = runEnv(["--dest", dest], {
+      PATH: `${binDir}:${process.env.PATH ?? ""}`,
+    });
+    expect(result.code).toBe(0);
+    expect(readFileSync(dest, "utf8")).toBe("fake-binary");
+    const saved = readdirSync(backups);
+    expect(saved).toHaveLength(1);
+    expect(readFileSync(path.join(backups, saved[0]!), "utf8")).toBe("old-binary");
+    expect(result.out).toContain("backup ->");
+    expect(result.out).toContain("installed ->");
+  });
+
+  test("--verify runs smoke through bun with the installed path", () => {
+    const dir = scratch();
+    const dest = path.join(dir, "zcode-serve-acp");
+    const backups = path.join(dir, "backups");
+    const binDir = path.join(dir, "bin");
+    const record = path.join(dir, "argv");
+    mkdirSync(backups, { recursive: true });
+    mkdirSync(binDir, { recursive: true });
+    writeFileSync(dest, "current");
+    writeFileSync(path.join(backups, OLD), "restored");
+
+    const bun = path.join(binDir, "bun");
+    writeFileSync(
+      bun,
+      `#!/bin/sh
+printf '%s\\n' "$*" > "$RECORD"
+`,
+    );
+    chmodSync(bun, 0o755);
+
+    const result = runEnv(["--restore", OLD, "--verify", "--dest", dest], {
+      PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      RECORD: record,
+    });
+    expect(result.code).toBe(0);
+    expect(readFileSync(dest, "utf8")).toBe("restored");
+    const argv = readFileSync(record, "utf8");
+    expect(argv).toContain("scripts/smoke.mjs");
+    expect(argv).toContain(`--bin ${dest}`);
   });
 
   test("smoke --bin fails fast when the path does not exist", () => {
