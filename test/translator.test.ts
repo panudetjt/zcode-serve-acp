@@ -1040,3 +1040,128 @@ describe("FrameTranslator", () => {
     expect(res.updates).toHaveLength(0);
   });
 });
+
+describe("FrameTranslator uncovered-edge coverage", () => {
+  it("phase=error without lastError falls back to the default failure message", () => {
+    const translator = new FrameTranslator(() => {});
+    const res = translator.fold({
+      payload: {
+        kind: "deltas",
+        deltas: [{ op: "state.updated", patch: { control: { phase: "error" } } }],
+      },
+    });
+    expect(res.turnFailed).toBe(true);
+    expect(res.turnComplete).toBe(true);
+    expect(res.errorMessage).toBe("Turn execution failed in daemon");
+  });
+
+  it("subagent row without summaryText produces a tool call without content", () => {
+    const translator = new FrameTranslator(() => {});
+    const res = translator.fold({
+      payload: {
+        kind: "deltas",
+        deltas: [
+          {
+            op: "row.upserted",
+            row: { rowId: 21, kind: "subagent", subagentType: "researcher", status: "completed" },
+          },
+        ],
+      },
+    });
+    const tool = res.updates.find((u) => u.sessionUpdate === "tool_call") as
+      | { title?: string; content?: unknown }
+      | undefined;
+    expect(tool).toBeDefined();
+    expect(tool?.content).toBeUndefined();
+    expect(tool?.title).toBe("Subagent: researcher");
+  });
+
+  it("merge keeps existing questions when the new input also carries questions", () => {
+    const translator = new FrameTranslator(() => {});
+    const res = translator.fold({
+      payload: {
+        kind: "deltas",
+        deltas: [
+          {
+            op: "state.updated",
+            patch: {
+              pendingInteractions: [
+                {
+                  interactionId: "appr-q",
+                  kind: "userInput",
+                  payload: {
+                    toolName: "AskUserQuestion",
+                    summary: "Original",
+                    questions: [{ header: "H1", question: "Q1?", options: [] }],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            op: "row.upserted",
+            row: {
+              rowId: 31,
+              kind: "toolCall",
+              toolName: "AskUserQuestion",
+              status: "pendingApproval",
+              approvalInteractionId: "appr-q",
+              input: { questions: [{ header: "H2", question: "Q2?", options: [] }] },
+            },
+          },
+        ],
+      },
+    });
+    expect(res.pendingInteractions).toHaveLength(1);
+    const merged = res.pendingInteractions![0]!;
+    expect(merged.payload?.questions?.[0]?.header).toBe("H1");
+    expect(merged.payload?.summary).toBe("Original");
+  });
+
+  it("toolCall input with a path keys the title and locations off it", () => {
+    const translator = new FrameTranslator(() => {});
+    const res = translator.fold({
+      payload: {
+        kind: "deltas",
+        deltas: [
+          {
+            op: "row.upserted",
+            row: {
+              rowId: 41,
+              kind: "toolCall",
+              toolName: "read",
+              status: "completed",
+              input: { path: "/tmp/f.txt" },
+            },
+          },
+        ],
+      },
+    });
+    const tool = res.updates.find((u) => u.sessionUpdate === "tool_call") as
+      | { title?: string; locations?: Array<{ path: string }> }
+      | undefined;
+    expect(tool?.title).toBe("read: /tmp/f.txt");
+    expect(tool?.locations).toEqual([{ path: "/tmp/f.txt" }]);
+  });
+
+  it("debug flag logs unknown row kinds when constructed with ZCODE_SERVE_ACP_DEBUG=1", () => {
+    const original = process.env.ZCODE_SERVE_ACP_DEBUG;
+    process.env.ZCODE_SERVE_ACP_DEBUG = "1";
+    try {
+      const lines: unknown[][] = [];
+      const translator = new FrameTranslator((...parts: unknown[]) => {
+        lines.push(parts);
+      });
+      translator.fold({
+        payload: {
+          kind: "deltas",
+          deltas: [{ op: "row.appended", row: { rowId: 55, kind: "mysteryWidget", text: "x" } }],
+        },
+      });
+      expect(lines.some((parts) => parts.some((p) => String(p).includes("unknown row kind=mysteryWidget")))).toBe(true);
+    } finally {
+      if (original !== undefined) process.env.ZCODE_SERVE_ACP_DEBUG = original;
+      else delete process.env.ZCODE_SERVE_ACP_DEBUG;
+    }
+  });
+});

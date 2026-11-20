@@ -13,20 +13,27 @@ export interface LogShape {
   debug: (...parts: readonly unknown[]) => Effect.Effect<void>;
   /** always emitted on stderr */
   warn: (...parts: readonly unknown[]) => Effect.Effect<void>;
+  /**
+   * Same gate and sink as `debug`, for callers that run outside the runtime
+   * (the frame translator folds synchronously, so it cannot yield an Effect).
+   */
+  debugSync: (...parts: readonly unknown[]) => void;
 }
 
 export class Log extends Context.Service<Log, LogShape>()("zcode-serve-acp/Log") {
-  static readonly makeService = (debug: boolean): LogShape =>
-    Log.of({
-      debug: (...parts) =>
-        Effect.sync(() => {
-          if (debug) console.error(...parts);
-        }),
+  static readonly makeService = (debug: boolean): LogShape => {
+    const debugSync = (...parts: readonly unknown[]): void => {
+      if (debug) console.error(...parts);
+    };
+    return Log.of({
+      debugSync,
+      debug: (...parts) => Effect.sync(() => debugSync(...parts)),
       warn: (...parts) =>
         Effect.sync(() => {
           console.error(...parts);
         }),
     });
+  };
 
   static readonly layerVerbose: Layer.Layer<Log> = Layer.succeed(Log, Log.makeService(true));
 

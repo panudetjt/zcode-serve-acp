@@ -72,7 +72,7 @@ describe("initialize agentCapabilities", () => {
   it("advertises image prompt support and session resume/load in initialize agentCapabilities", async () => {
     const acp = AcpServer.make({
       sessions: { create: () => Effect.die("not used") } as never,
-      log: Log.of({ debug: () => Effect.void, warn: () => Effect.void }),
+      log: Log.of({ debug: () => Effect.void, warn: () => Effect.void, debugSync: () => {} }),
       emitNotification: () => Effect.void,
       clientRequest: () => Effect.fail(new Error("not used")),
       fallbackModels: Effect.succeed([]),
@@ -138,6 +138,19 @@ describe("fallbackModels", () => {
     const fakeFs = {
       readFileString: (path: string) => {
         if (path.includes("setting.json")) return Effect.succeed("{not valid json");
+        return Effect.succeed("{}");
+      },
+    } as unknown as FileSystem;
+    const res = await Effect.runPromise(fallbackModels.pipe(Effect.provideService(FileSystem, fakeFs)));
+    expect(res).toEqual([]);
+  });
+
+  it("yields no fallback models when a file decodes to the wrong shape", async () => {
+    // decodeUnknownSync throws on a structurally wrong document — the
+    // best-effort pipe must swallow it into an empty list.
+    const fakeFs = {
+      readFileString: (path: string) => {
+        if (path.includes("setting.json")) return Effect.succeed("[1, 2, 3]");
         return Effect.succeed("{}");
       },
     } as unknown as FileSystem;

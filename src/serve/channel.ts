@@ -62,6 +62,13 @@ export class ChannelClient {
   /**
    * Dial the daemon channel. The pump runs in the CALLER's Scope (provide one
    * with `Scope.provide`); closing it tears down the read loop and socket.
+   *
+   * Dial failures never surface as a typed failure of THIS effect: the WS
+   * acquisition runs lazily inside the socket's reader, so every failure
+   * (refused dial, constructor throw, async open error) arrives through
+   * pumpReader → failAll → the handshake await below, which maps it to
+   * ChannelOpenError. (A pre-rewrite "dial failed" mapError here was dead —
+   * removed when coverage proved nothing could reach it.)
    */
   static readonly connect = (
     url: string,
@@ -71,23 +78,34 @@ export class ChannelClient {
   ): Effect.Effect<ChannelClient, ChannelOpenError, ScopeNS.Scope | Socket.WebSocketConstructor> =>
     Effect.gen(function* () {
       yield* log.debug(`[channel] connecting ${url.replace(/token=[^&]*/, "token=…")}`);
-      const socket = yield* Socket.makeWebSocket(url, { headers }).pipe(
-        Effect.mapError(
-          (cause) => new ChannelOpenError({ message: `zcode server channel dial failed: ${text(cause)}` }),
-        ),
-      );
+      const socket = yield* Socket.makeWebSocket(url, { headers });
       const writer = yield* socket.writer;
-      const client = new ChannelClient(socket, writer, handlers, log);
-
-      yield* client.pumpReader().pipe(
-        Effect.catchCause((cause) => client.failAll(`zcode server channel closed (${text(cause)})`)),
-        Effect.forkScoped,
-      );
+      const client = yield* ChannelClient.forSocket(socket, writer, handlers, log);
 
       // The daemon sends [200] right after the socket opens.
       yield* Deferred.await(client.initDeferred).pipe(
         Effect.timeout(HANDSHAKE_TIMEOUT_MS),
         Effect.mapError(() => new ChannelOpenError({ message: "zcode server channel handshake timed out" })),
+      );
+      return client;
+    });
+
+  /**
+   * Attach the pump to an already-dialed socket — the seam `connect` uses
+   * after the dial, exposed for tests to inject fake readers/writers. The
+   * pump runs in the CALLER's Scope (provide one with `Scope.provide`).
+   */
+  static readonly forSocket = (
+    socket: Socket.Socket,
+    writer: Socket.Writer,
+    handlers: ChannelHandlers,
+    log: Log["Service"],
+  ): Effect.Effect<ChannelClient, never, ScopeNS.Scope> =>
+    Effect.gen(function* () {
+      const client = new ChannelClient(socket, writer, handlers, log);
+      yield* client.pumpReader().pipe(
+        Effect.catchCause((cause) => client.failAll(`zcode server channel closed (${text(cause)})`)),
+        Effect.forkScoped,
       );
       return client;
     });

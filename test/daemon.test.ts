@@ -217,43 +217,6 @@ describe("Daemon service operations", () => {
     expect(errFail.message).toContain("capability request failed");
   });
 
-  test("connect fails with DiscoveryError if serverRoot is unresolvable", async () => {
-    const originalHome = process.env.HOME;
-    const originalServerRoot = process.env.ZCODE_SERVER_ROOT;
-    const originalDataBase = process.env.ZCODE_DATA_BASE_DIR;
-    try {
-      delete process.env.HOME;
-      delete process.env.ZCODE_SERVER_ROOT;
-      delete process.env.ZCODE_DATA_BASE_DIR;
-
-      const prog = Effect.gen(function* () {
-        const daemon = yield* Daemon;
-        return yield* daemon.connect();
-      }).pipe(
-        Effect.provide(Daemon.layer),
-        Effect.provide(Layer.succeed(FileSystem, { exists: () => Effect.succeed(false) } as unknown as FileSystem)),
-        Effect.provide(
-          Layer.succeed(
-            HttpClient.HttpClient,
-            HttpClient.make(() => Effect.die("unused")),
-          ),
-        ),
-        Effect.provide(Log.layerQuiet),
-      );
-
-      // If os.homedir() returns something, serverRoot() might still return a path.
-      // But if serverRoot() returns undefined or if status file missing:
-      if (serverRoot() === undefined) {
-        const err = await Effect.runPromise(Effect.flip(prog));
-        expect(err._tag).toBe("DiscoveryError");
-      }
-    } finally {
-      if (originalHome !== undefined) process.env.HOME = originalHome;
-      if (originalServerRoot !== undefined) process.env.ZCODE_SERVER_ROOT = originalServerRoot;
-      if (originalDataBase !== undefined) process.env.ZCODE_DATA_BASE_DIR = originalDataBase;
-    }
-  });
-
   test("connect handles corrupt status.json and empty token file gracefully", async () => {
     let statusCallCount = 0;
     const fakeFs = {

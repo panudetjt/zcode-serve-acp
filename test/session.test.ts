@@ -379,3 +379,73 @@ describe("ServeSession lifecycle and operations", () => {
     }
   });
 });
+
+describe("ServeSession teardown edge", () => {
+  test("dispose after the daemon socket died still runs the listener disposers' fallback", async () => {
+    let closeServer: (() => void) | undefined;
+    const server = Bun.serve({
+      port: 0,
+      fetch(req, server) {
+        if (server.upgrade(req)) return;
+        return new Response("Not found", { status: 404 });
+      },
+      websocket: {
+        open(ws) {
+          ws.send(encodeRpcMessage([MSG.Initialize]));
+        },
+        message(ws, msg) {
+          const raw = typeof msg === "string" ? Buffer.from(msg) : new Uint8Array(msg);
+          const decoded = decodeRpcMessage(raw);
+          if (decoded.header[0] === MSG.Promise) {
+            const id = decoded.header[1] as number;
+            const channel = decoded.header[2] as string;
+            const method = decoded.header[3] as string;
+            const body =
+              channel === "project" && method === "saveProject"
+                ? { project: { id: "p-dump" } }
+                : channel === "zcode-session" && method === "createSession"
+                  ? { sessionId: "daemon-dump-1" }
+                  : {};
+            ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], body));
+          }
+        },
+      },
+    });
+    closeServer = () => server.stop(true);
+
+    const mockDaemon: Daemon["Service"] = {
+      connect: () =>
+        Effect.succeed({
+          status: { host: "localhost", port: server.port ?? 0, state: "ready" },
+          token: "tok",
+          wsPath: "/ws/host",
+        }),
+      getCapability: () => Effect.succeed("cap"),
+    };
+
+    const prog = Effect.gen(function* () {
+      const factory = yield* ServeSessionFactory;
+      const session = yield* factory.create("/dispose/ws", {
+        onConversationFrame: () => Effect.void,
+        onLifecycle: () => Effect.void,
+        onRequest: () => Effect.succeed(undefined),
+        onClosed: () => Effect.void,
+      });
+      yield* session.createSession(); // subscribes — two listener disposers registered
+      // Kill the socket out from under the channel, let the pump settle it.
+      closeServer!();
+      yield* Effect.promise(() => new Promise((r) => setTimeout(r, 150)));
+      // Disposers now write into a settled channel → their writes fail →
+      // dispose()'s per-disposer orElseSucceed fallback must absorb it.
+      yield* session.dispose();
+    }).pipe(
+      Effect.provide(ServeSessionFactory.layerNoDeps),
+      Effect.provide(Layer.succeed(Daemon, mockDaemon)),
+      Effect.provide(BunSocket.layerWebSocketConstructor),
+      Effect.provide(Log.layerQuiet),
+      Effect.scoped,
+    );
+
+    await Effect.runPromise(prog);
+  });
+});

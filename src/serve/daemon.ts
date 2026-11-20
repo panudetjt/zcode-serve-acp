@@ -152,7 +152,7 @@ export class Daemon extends Context.Service<
         { status: ServerStatus; token: string },
         DiscoveryError | SpawnError
       > {
-        const rootDir = serverRoot()!;
+        const rootDir = serverRoot();
         const deadline = (yield* Clock.currentTimeMillis) + 30_000;
         for (;;) {
           const status = yield* readStatus(rootDir);
@@ -181,10 +181,8 @@ export class Daemon extends Context.Service<
         DaemonConnection,
         DiscoveryError | SpawnError
       > {
+        // serverRoot() is always defined: env overrides or os.homedir() fallback.
         const rootDir = serverRoot();
-        if (rootDir === undefined) {
-          return yield* new DiscoveryError({ message: "cannot resolve zcode server root (no HOME?)" });
-        }
         let status = yield* readStatus(rootDir);
         const token = yield* readToken(rootDir);
         const ready = status !== undefined && (yield* probeServerInfo(status.host, status.port, token));
@@ -247,11 +245,10 @@ export function dataRoot(): string {
   return envHome() ?? os.homedir();
 }
 
-export function serverRoot(): string | undefined {
+export function serverRoot(): string {
   const override = envServerRoot();
   if (override) return override;
-  const root = dataRoot();
-  return root === undefined ? undefined : path.join(root, ".zcode", "server");
+  return path.join(dataRoot(), ".zcode", "server");
 }
 
 export const resolveServeBinary = (fs: FileSystem): Effect.Effect<string> =>

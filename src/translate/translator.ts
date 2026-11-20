@@ -279,7 +279,8 @@ interface ToolInfo {
   kind?: string;
 }
 
-const DEBUG = envDebug();
+// DEBUG is read per instance (below), not at module load, so tests can flip
+// ZCODE_SERVE_ACP_DEBUG between translator constructions.
 
 export class FrameTranslator {
   private rowText = new Map<number, string>();
@@ -291,6 +292,7 @@ export class FrameTranslator {
   private turnHeaderState?: string;
   private turnPhase?: string;
   private activeItemIds = new Set<number>();
+  private readonly debug = envDebug();
   private activeWorksCount = 0;
   private pendingInteractionsCount = 0;
 
@@ -813,7 +815,7 @@ export class FrameTranslator {
 
       const key = kind;
       this.unknownKinds.set(key, (this.unknownKinds.get(key) ?? 0) + 1);
-      if (DEBUG) {
+      if (this.debug) {
         this.log(`[translate] unknown row kind=${key} op=${op}:`, JSON.stringify(row.raw).slice(0, 300));
       }
     }

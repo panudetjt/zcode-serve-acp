@@ -21,6 +21,14 @@ describe("Log service", () => {
       const verbose = Log.makeService(true);
       await Effect.runPromise(verbose.debug("debug message"));
       expect(logged.length).toBe(2);
+
+      // debugSync is the sync escape hatch for the frame translator's fold —
+      // same gate and sink as debug.
+      const loud = Log.makeService(true);
+      loud.debugSync("sync debug line");
+      expect(logged.length).toBe(3);
+      Log.makeService(false).debugSync("sync, but quiet");
+      expect(logged.length).toBe(3);
     } finally {
       console.error = origErr;
     }
