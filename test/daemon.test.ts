@@ -217,6 +217,62 @@ describe("Daemon service operations", () => {
     expect(errFail.message).toContain("capability request failed");
   });
 
+  test("readStatus returns the parsed status file, or undefined when absent/malformed", async () => {
+    const statusOnDisk = {
+      protocolVersion: 1,
+      state: "ready",
+      pid: 2032707,
+      port: 41759,
+      host: "127.0.0.1",
+      version: "3.19.0",
+      startedAt: 1795149331746,
+      updatedAt: 1795209300437,
+    };
+    let fileContents: string | undefined = JSON.stringify(statusOnDisk);
+    const fakeFs = {
+      exists: () => Effect.succeed(false),
+      readFileString: (file: string) => {
+        if (file.endsWith("status.json")) {
+          return fileContents === undefined ? Effect.fail(new Error("File not found")) : Effect.succeed(fileContents);
+        }
+        return Effect.fail(new Error("File not found"));
+      },
+    } as unknown as FileSystem;
+
+    const prog = Effect.gen(function* () {
+      const daemon = yield* Daemon;
+      // Valid file (with runtime-3.19.0 extras tolerated) — pid + startedAt
+      // surface for the session watchdog's restart detection.
+      const status = yield* daemon.readStatus;
+      expect(status?.state).toBe("ready");
+      expect(status?.pid).toBe(2032707);
+      expect(status?.startedAt).toBe(1795149331746);
+
+      // Malformed JSON and schema-invalid payloads are tolerated as undefined
+      // (the watchdog never invalidates on a missing probe).
+      fileContents = "not json at all";
+      expect(yield* daemon.readStatus).toBeUndefined();
+      fileContents = JSON.stringify({ bad: "schema" });
+      expect(yield* daemon.readStatus).toBeUndefined();
+      fileContents = undefined;
+      expect(yield* daemon.readStatus).toBeUndefined();
+    }).pipe(
+      Effect.provide(Daemon.layer),
+      Effect.provide(Layer.succeed(FileSystem, fakeFs)),
+      Effect.provide(
+        Layer.succeed(
+          HttpClient.HttpClient,
+          HttpClient.make((req) =>
+            Effect.succeed(HttpClientResponse.fromWeb(req, new Response("ok", { status: 200 }))),
+          ),
+        ),
+      ),
+      Effect.provide(Log.layerQuiet),
+    );
+
+    await Effect.runPromise(prog);
+  });
+
   test("connect handles corrupt status.json and empty token file gracefully", async () => {
     let statusCallCount = 0;
     const fakeFs = {

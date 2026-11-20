@@ -35,6 +35,12 @@ export interface ServerStatus {
   port: number;
   version?: string;
   pid?: number;
+  /**
+   * Daemon start epoch ms (status.json `startedAt`, observed live on runtime
+   * 3.19.0). A restart mints a new pid AND startedAt — the session watchdog
+   * compares both to detect a restarted daemon (issue #5).
+   */
+  startedAt?: number;
 }
 
 export const ServerStatusSchema = Schema.Struct({
@@ -43,6 +49,7 @@ export const ServerStatusSchema = Schema.Struct({
   port: Schema.Finite,
   version: Schema.optional(Schema.String),
   pid: Schema.optional(Schema.Finite),
+  startedAt: Schema.optional(Schema.Finite),
 });
 
 export interface DaemonConnection {
@@ -114,6 +121,13 @@ export class Daemon extends Context.Service<
   {
     /** Attach to a ready daemon, spawning one if none is up. */
     readonly connect: Effect.Effect<DaemonConnection, DiscoveryError | SpawnError>;
+    /**
+     * Latest daemon status from the local status file — `undefined` when the
+     * file is absent, unreadable, or malformed (same tolerance as connect).
+     * Issue #5 watchdog: the session layer compares this against its memoized
+     * connection to detect a restarted daemon (pid/startedAt/port change).
+     */
+    readonly readStatus: Effect.Effect<ServerStatus | undefined>;
     /** Fresh single-use host capability token (30s TTL) — call right before each WS dial. */
     getCapability(connection: DaemonConnection): Effect.Effect<string, CapabilityError>;
   }
@@ -127,7 +141,7 @@ export class Daemon extends Context.Service<
       const readFile = (file: string) => deps.fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined));
 
       // Malformed/unready status → undefined (tolerated, keeps polling).
-      const readStatus = Effect.fn("Daemon.readStatus")(function* (rootDir: string) {
+      const readStatusFrom = Effect.fn("Daemon.readStatus")(function* (rootDir: string) {
         const text = yield* readFile(path.join(rootDir, "run", "status.json"));
         if (text === undefined) return undefined;
         // Typed catch per the taxonomy: the failure is swallowed into
@@ -167,7 +181,7 @@ export class Daemon extends Context.Service<
         const rootDir = serverRoot();
         const deadline = (yield* Clock.currentTimeMillis) + 30_000;
         for (;;) {
-          const status = yield* readStatus(rootDir);
+          const status = yield* readStatusFrom(rootDir);
           const token = yield* readToken(rootDir);
           if (status !== undefined && (yield* probeServerInfo(status.host, status.port, token))) {
             return { status, token };
@@ -196,7 +210,7 @@ export class Daemon extends Context.Service<
         Effect.fn("Daemon.connect")(function* (): Effect.fn.Return<DaemonConnection, DiscoveryError | SpawnError> {
           // serverRoot() is always defined: env overrides or os.homedir() fallback.
           const rootDir = serverRoot();
-          let status = yield* readStatus(rootDir);
+          let status = yield* readStatusFrom(rootDir);
           const token = yield* readToken(rootDir);
           const ready = status !== undefined && (yield* probeServerInfo(status.host, status.port, token));
 
@@ -208,6 +222,16 @@ export class Daemon extends Context.Service<
 
           yield* log.debug(`[daemon] attaching to ready daemon ${status!.host}:${status!.port}`);
           return { status: status!, token, wsPath: "/ws/host" } satisfies DaemonConnection;
+        }),
+      );
+
+      // Effect-valued property, same shape as `connect`: `Effect.suspend`
+      // re-invokes the `Effect.fn` body per run, so every run re-reads the
+      // status file fresh (the watchdog compares it against the memoized
+      // connection on every channel dispatch).
+      const readStatus: Effect.Effect<ServerStatus | undefined> = Effect.suspend(
+        Effect.fn("Daemon.readStatus.status")(function* (): Effect.fn.Return<ServerStatus | undefined> {
+          return yield* readStatusFrom(serverRoot());
         }),
       );
 
@@ -243,7 +267,7 @@ export class Daemon extends Context.Service<
         return capability;
       });
 
-      return Daemon.of({ connect, getCapability });
+      return Daemon.of({ connect, readStatus, getCapability });
     }),
   ).pipe(Layer.provide(DaemonDeps.layer));
 }

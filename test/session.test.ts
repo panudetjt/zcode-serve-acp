@@ -2,9 +2,16 @@ import { describe, expect, test } from "bun:test";
 import * as BunSocket from "@effect/platform-bun/BunSocket";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import { Log } from "../src/log.ts";
+import { BridgeExit } from "../src/serve/bridge.ts";
 import { Daemon } from "../src/serve/daemon.ts";
 import { ServeSessionFactory } from "../src/serve/session.ts";
 import { decodeRpcMessage, encodeRpcMessage, MSG } from "../src/serve/wire.ts";
+
+// Recovery must never fire in the plain lifecycle tests — a fake that dies
+// loudly (instead of exiting the test process) keeps that honest.
+const fakeBridgeExit = BridgeExit.of({
+  exit: (reason) => Effect.die(new Error(`BridgeExit requested in test: ${reason}`)),
+});
 
 describe("ServeSession lifecycle and operations", () => {
   test("full session lifecycle: createSession, sendPrompt, setMode, resolveInteraction, sendCommand, frame filtering, and dispose", async () => {
@@ -108,6 +115,10 @@ describe("ServeSession lifecycle and operations", () => {
                   },
                 }),
               );
+            } else if (channel === "zcode-agent" && method === "helloConversationV4") {
+              // the issue #5 pre-flight probe — must round-trip for the
+              // liveness check to pass
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { hello: true }));
             } else if (channel === "skills" && method === "list") {
               ws.send(
                 encodeRpcMessage([MSG.PromiseSuccess, id], {
@@ -169,6 +180,15 @@ describe("ServeSession lifecycle and operations", () => {
         status: { host: "localhost", port: server.port ?? 12345, state: "ready", version: "3.18.2", pid: 123 },
         token: "daemon-token",
         wsPath: "/ws/host",
+      }),
+      // the watchdog reads this on every channel dispatch — same daemon as
+      // `connect` so the memoized connection stays valid
+      readStatus: Effect.succeed({
+        host: "localhost",
+        port: server.port ?? 12345,
+        state: "ready",
+        version: "3.18.2",
+        pid: 123,
       }),
       getCapability: () => Effect.succeed("mock-cap-token"),
     };
@@ -272,6 +292,7 @@ describe("ServeSession lifecycle and operations", () => {
     }).pipe(
       Effect.provide(ServeSessionFactory.layerNoDeps),
       Effect.provide(Layer.succeed(Daemon, mockDaemon)),
+      Effect.provide(Layer.succeed(BridgeExit, fakeBridgeExit)),
       Effect.provide(BunSocket.layerWebSocketConstructor),
       Effect.provide(Log.layerQuiet),
       Effect.scoped,
@@ -364,6 +385,13 @@ describe("ServeSession lifecycle and operations", () => {
         token: "tok",
         wsPath: "/ws/host",
       }),
+      readStatus: Effect.succeed({
+        host: "localhost",
+        port: server.port ?? 12345,
+        state: "ready",
+        version: "3.18.2",
+        pid: 123,
+      }),
       getCapability: () => Effect.succeed("cap"),
     };
 
@@ -447,6 +475,7 @@ describe("ServeSession lifecycle and operations", () => {
     }).pipe(
       Effect.provide(ServeSessionFactory.layerNoDeps),
       Effect.provide(Layer.succeed(Daemon, mockDaemon)),
+      Effect.provide(Layer.succeed(BridgeExit, fakeBridgeExit)),
       Effect.provide(BunSocket.layerWebSocketConstructor),
       Effect.provide(Log.layerQuiet),
       Effect.scoped,
@@ -496,6 +525,13 @@ describe("ServeSession lifecycle and operations", () => {
         token: "tok",
         wsPath: "/ws/host",
       }),
+      readStatus: Effect.succeed({
+        host: "localhost",
+        port: server.port ?? 12345,
+        state: "ready",
+        version: "3.18.2",
+        pid: 1,
+      }),
       getCapability: () => Effect.succeed("cap"),
     };
 
@@ -516,6 +552,7 @@ describe("ServeSession lifecycle and operations", () => {
     }).pipe(
       Effect.provide(ServeSessionFactory.layerNoDeps),
       Effect.provide(Layer.succeed(Daemon, mockDaemon)),
+      Effect.provide(Layer.succeed(BridgeExit, fakeBridgeExit)),
       Effect.provide(BunSocket.layerWebSocketConstructor),
       Effect.provide(
         Layer.succeed(
@@ -577,6 +614,7 @@ describe("ServeSession teardown edge", () => {
         token: "tok",
         wsPath: "/ws/host",
       }),
+      readStatus: Effect.succeed({ host: "localhost", port: server.port ?? 0, state: "ready" }),
       getCapability: () => Effect.succeed("cap"),
     };
 
@@ -599,6 +637,7 @@ describe("ServeSession teardown edge", () => {
     }).pipe(
       Effect.provide(ServeSessionFactory.layerNoDeps),
       Effect.provide(Layer.succeed(Daemon, mockDaemon)),
+      Effect.provide(Layer.succeed(BridgeExit, fakeBridgeExit)),
       Effect.provide(BunSocket.layerWebSocketConstructor),
       Effect.provide(Log.layerQuiet),
       Effect.scoped,
@@ -662,6 +701,7 @@ describe("ServeSession teardown edge", () => {
         token: "tok",
         wsPath: "/ws",
       }),
+      readStatus: Effect.succeed({ host: "localhost", port: server.port ?? 0, state: "ready" }),
       getCapability: () => Effect.succeed("cap"),
     };
 
@@ -692,6 +732,7 @@ describe("ServeSession teardown edge", () => {
     }).pipe(
       Effect.provide(ServeSessionFactory.layerNoDeps),
       Effect.provide(Layer.succeed(Daemon, mockDaemon)),
+      Effect.provide(Layer.succeed(BridgeExit, fakeBridgeExit)),
       Effect.provide(BunSocket.layerWebSocketConstructor),
       Effect.provide(Log.layerQuiet),
       Effect.scoped,

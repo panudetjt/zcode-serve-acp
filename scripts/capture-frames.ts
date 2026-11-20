@@ -42,6 +42,7 @@ import * as BunSocket from "@effect/platform-bun/BunSocket";
 import { Clock, Effect, Layer, type Fiber } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { tolerate } from "../src/errors.ts";
+import { BridgeExit } from "../src/serve/bridge.ts";
 import { Daemon } from "../src/serve/daemon.ts";
 import { ServeSessionFactory, type CreateSessionResult, type ServeSession } from "../src/serve/session.ts";
 import { Log } from "../src/log.ts";
@@ -384,6 +385,7 @@ const program = Effect.gen(function* () {
 }).pipe(
   Effect.provide(ServeSessionFactory.layerNoDeps),
   Effect.provide(Daemon.layer),
+  Effect.provide(BridgeExit.layer),
   Effect.provide(
     Layer.mergeAll(Log.layerFromEnv, FetchHttpClient.layer, BunFileSystem.layer, BunSocket.layerWebSocketConstructor),
   ),

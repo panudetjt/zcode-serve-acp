@@ -31,6 +31,7 @@ import {
 } from "./jsonrpc.ts";
 import { Log } from "./log.ts";
 import { fallbackModels } from "./models.ts";
+import { BridgeExit } from "./serve/bridge.ts";
 import { Daemon } from "./serve/daemon.ts";
 import { ServeSessionFactory } from "./serve/session.ts";
 
@@ -140,7 +141,11 @@ const Main = Effect.gen(function* () {
   yield* Stream.runForEach(Stream.splitLines(Stream.decodeText(stdio.stdin)), handleLine);
 });
 
-const AppLayer = ServeSessionFactory.layerNoDeps.pipe(Layer.provide(Daemon.layer), Layer.provide(PlatformLayer));
+const AppLayer = ServeSessionFactory.layerNoDeps.pipe(
+  Layer.provide(Daemon.layer),
+  Layer.provide(BridgeExit.layer),
+  Layer.provide(PlatformLayer),
+);
 
 const program: Effect.Effect<void, PlatformError, never> = Effect.provide(
   Main,

@@ -565,4 +565,41 @@ describe("dispatchFrame edge branches", () => {
       server.stop(true);
     }
   });
+
+  test("isSettled tracks the channel lifecycle (issue #5 lazy reconnection)", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(req, server) {
+        if (server.upgrade(req)) return;
+        return new Response("Not found", { status: 404 });
+      },
+      websocket: {
+        open(ws) {
+          ws.send(encodeRpcMessage([MSG.Initialize]));
+        },
+        message() {},
+      },
+    });
+
+    const prog = Effect.gen(function* () {
+      const log = yield* Log;
+      const client = yield* ChannelClient.connect(
+        `ws://localhost:${server.port}`,
+        {},
+        {
+          onRequest: () => Effect.succeed(undefined),
+          onClose: () => Effect.void,
+        },
+        log,
+      );
+      expect(client.isSettled).toBe(false);
+      // A remote hangup must flip the flag — the session watchdog uses it to
+      // never hand out a settled channel again.
+      server.stop(true);
+      yield* Deferred.await(client.closed).pipe(Effect.timeout("5 seconds"));
+      expect(client.isSettled).toBe(true);
+    }).pipe(Effect.provide(BunSocket.layerWebSocketConstructor), Effect.provide(Log.layerQuiet), Effect.scoped);
+
+    await Effect.runPromise(prog);
+  });
 });
