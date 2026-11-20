@@ -41,8 +41,10 @@ describe("Errors & tolerate helper", () => {
     expect(res).toBeUndefined();
   });
 
-  // The onFail handler is best-effort too: if it fails, tolerate still
-  // resolves to undefined and the handler's error never escapes.
+  // Runtime lock for `tolerate`'s onFail contract: whatever the handler fails
+  // with (`E2`), the surrounding flow still resolves to undefined. The type
+  // half — onFail's channel staying generic instead of `unknown` — is enforced
+  // by `bun check`; this keeps the runtime swallow from regressing.
   test("tolerate swallows a failing onFail handler", async () => {
     const res = await Effect.runPromise(
       tolerate(Effect.fail("boom"), () => new SessionError({ message: "onFail itself failed" })),

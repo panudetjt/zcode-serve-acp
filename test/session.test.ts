@@ -378,4 +378,80 @@ describe("ServeSession lifecycle and operations", () => {
       server.stop(true);
     }
   });
+
+  test("dispose stays total when the app's onClosed handler fails", async () => {
+    const warnings: string[] = [];
+
+    const server = Bun.serve({
+      port: 0,
+      fetch(req, server) {
+        if (server.upgrade(req)) return;
+        return new Response("Not found", { status: 404 });
+      },
+      websocket: {
+        open(ws) {
+          ws.send(encodeRpcMessage([MSG.Initialize]));
+        },
+        message(ws, msg) {
+          const raw = typeof msg === "string" ? Buffer.from(msg) : new Uint8Array(msg);
+          const decoded = decodeRpcMessage(raw);
+          if (decoded.header[0] !== MSG.Promise) return;
+          const id = decoded.header[1] as number;
+          const channel = decoded.header[2] as string;
+          const method = decoded.header[3] as string;
+          const body =
+            channel === "project" && method === "saveProject"
+              ? { project: { id: "p-1" } }
+              : channel === "zcode-session" && method === "createSession"
+                ? { sessionId: "sess-1" }
+                : {};
+          ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], body));
+        },
+      },
+    });
+
+    const mockDaemon: Daemon["Service"] = {
+      connect: Effect.succeed({
+        status: { host: "localhost", port: server.port ?? 12345, state: "ready", version: "3.18.2", pid: 1 },
+        token: "tok",
+        wsPath: "/ws/host",
+      }),
+      getCapability: () => Effect.succeed("cap"),
+    };
+
+    const prog = Effect.gen(function* () {
+      const factory = yield* ServeSessionFactory;
+      const session = yield* factory.create("/test/workspace", {
+        onConversationFrame: () => Effect.void,
+        onLifecycle: () => Effect.void,
+        onRequest: () => Effect.succeed({}),
+        // The channel close surfaces this failure through `onClose`; dispose
+        // must warn and still complete (never propagate it).
+        onClosed: () => Effect.fail(new Error("onClose failed on purpose")),
+      });
+      yield* session.createSession();
+      yield* session.dispose;
+      expect(warnings.some((w) => w.includes("channel close failed during dispose"))).toBe(true);
+    }).pipe(
+      Effect.provide(ServeSessionFactory.layerNoDeps),
+      Effect.provide(Layer.succeed(Daemon, mockDaemon)),
+      Effect.provide(BunSocket.layerWebSocketConstructor),
+      Effect.provide(
+        Layer.succeed(
+          Log,
+          Log.of({
+            debug: () => Effect.void,
+            warn: (...parts) => Effect.sync(() => void warnings.push(parts.map(String).join(" "))),
+          }),
+        ),
+      ),
+      Effect.scoped,
+    );
+
+    try {
+      await Effect.runPromise(prog);
+    } finally {
+      server.stop(true);
+    }
+  });
 });
