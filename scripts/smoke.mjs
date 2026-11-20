@@ -4,24 +4,32 @@
  * drive ACP over stdio: initialize → session/new (assert daemon models) →
  * short prompt (assert streamed updates + turn end).
  *
- * Usage: bun scripts/smoke.mjs [--prompt "text"] [--cwd /path]
+ * Usage: bun scripts/smoke.mjs [--prompt "text"] [--cwd /path] [--bin /path/to/bridge]
+ * `--bin` defaults to dist/zcode-serve-acp (falling back to src/bin.ts).
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
 const repo = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
-const binary = path.join(repo, "dist", "zcode-serve-acp");
-const cmd = existsSync(binary) ? binary : "bun";
-const args = existsSync(binary) ? [] : [path.join(repo, "src", "bin.ts")];
 
 const argOf = (flag, def) => {
   const i = process.argv.indexOf(flag);
   return i >= 0 ? process.argv[i + 1] : def;
 };
+const binArg = argOf("--bin", "");
+const binary = binArg !== "" ? path.resolve(binArg) : path.join(repo, "dist", "zcode-serve-acp");
+if (binArg !== "" && !existsSync(binary)) {
+  console.error(`[smoke] --bin not found: ${binary}`);
+  process.exit(2);
+}
+const useBinary = existsSync(binary);
+const cmd = useBinary ? binary : "bun";
+const args = useBinary ? [] : [path.join(repo, "src", "bin.ts")];
 const prompt = argOf("--prompt", "Reply with exactly: BRIDGE_OK");
 const cwd = argOf("--cwd", repo);
 
+console.error(`[smoke] bridge: ${[cmd, ...args].join(" ")}`);
 const child = spawn(cmd, args, { cwd: repo, stdio: ["pipe", "pipe", "pipe"] });
 child.stderr.on("data", (d) => process.stderr.write(`[bridge] ${d}`));
 

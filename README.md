@@ -4,14 +4,16 @@ Standalone **Agent Client Protocol (ACP) bridge** that attaches a coding-agent c
 
 Why: the community bridge (`zcode-acp-server`) reads the CLI's credential store from outside and dies on `enc:v2:env:`-encrypted stores (headless/WSL server CLI). This bridge takes a different door — the daemon **owns all credentials itself** (the CLI reads its own store, signs its own requests), so the bridge never touches secrets, and the **model picker advertises the daemon's own models** (`session/create` → `settings.model.available`).
 
-Derived from the owner's closed t3code PRs #33684/#34713 (`pingdotgg/t3code`) — protocol reverse-engineered and ground-truthed against `server-core.js` runtime 3.18.2.
+Derived from the owner's closed t3code PRs #33684/#34713 (`pingdotgg/t3code`) — protocol reverse-engineered and ground-truthed against `server-core.js` runtime 3.18.2, re-verified against 3.19.0 (endpoint/constant diff + `scripts/probe-tools-resume.mjs`).
 
 ## Build (single binary)
 
 ```bash
-mise run compile   # → dist/zcode-serve-acp (bun build --compile, linux-x64)
-mise run test      # codec unit tests
-mise run smoke     # ACP handshake + session/new + real prompt vs the daemon
+mise run compile      # → dist/zcode-serve-acp (OUTFILE=… overrides the target)
+mise run test         # codec + install-script tests
+mise run smoke        # ACP handshake + session/new + real prompt vs the daemon
+scripts/install.sh    # build + backup + atomic install/restore (flags: --help)
+bun scripts/probe-tools-resume.mjs   # tool-call + session/load resume probe
 ```
 
 ## Use in T3 Code
