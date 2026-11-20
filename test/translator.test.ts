@@ -1354,6 +1354,27 @@ describe("FrameTranslator child-session drill-down (subagent cards)", () => {
     expect(text.length).toBeLessThan(20_000);
   });
 
+  it("carries the streamed child output through the completing card update", () => {
+    const translator = new FrameTranslator(() => {});
+    translator.fold({ payload: { kind: "deltas", deltas: [spawnSubagentRow()] } });
+    translator.foldChild("child-1", {
+      payload: {
+        kind: "deltas",
+        deltas: [{ op: "row.appended", row: { rowId: 6, kind: "assistantText", text: "work done" } }],
+      },
+    });
+    const res = translator.fold({
+      payload: {
+        kind: "deltas",
+        deltas: [spawnSubagentRow({ op: "row.upserted", status: "success", summaryText: "All verified" })],
+      },
+    });
+    const settleUpdate = res.updates.find((u) => u.status === "completed");
+    expect(settleUpdate).toBeDefined();
+    expect(settleUpdate!.rawOutput).toEqual({ text: "work done" });
+    expect(settleUpdate!.content).toEqual([{ type: "content", content: { type: "text", text: "All verified" } }]);
+  });
+
   it("formats a session/subagents snapshot as a compact batch overview", () => {
     const translator = new FrameTranslator(() => {});
     expect(

@@ -853,6 +853,7 @@ export class FrameTranslator {
             if (!this.childSettled.has(childSessionId)) newChildren.push(childSessionId);
           }
         }
+        let settlingChildOutput: string | undefined;
         if (
           (status === "completed" || status === "failed") &&
           childSessionId !== undefined &&
@@ -860,9 +861,17 @@ export class FrameTranslator {
           !this.childSettled.has(childSessionId)
         ) {
           this.childSettled.add(childSessionId);
+          // Carry the streamed child activity through the completing update —
+          // otherwise the live transcript vanishes from the card on settle and
+          // only the summary remains (seen live in probe-subagents.mjs).
+          settlingChildOutput = this.childOutput.get(childSessionId);
           this.childOutput.delete(childSessionId);
           settledChildren.push(childSessionId);
         }
+        const childRawOutput =
+          settlingChildOutput !== undefined && settlingChildOutput.length > 0
+            ? { rawOutput: { text: settlingChildOutput } }
+            : {};
 
         if (existing === undefined) {
           this.rowTool.set(rowId, { toolCallId, title, name: "subagent", kind: "other" });
@@ -874,6 +883,7 @@ export class FrameTranslator {
             kind: "other",
             status,
             ...(content !== undefined ? { content } : {}),
+            ...childRawOutput,
             ...(meta !== undefined ? { _meta: meta } : {}),
           });
         } else {
@@ -885,6 +895,7 @@ export class FrameTranslator {
             kind: "other",
             status,
             ...(content !== undefined ? { content } : {}),
+            ...childRawOutput,
             ...(meta !== undefined ? { _meta: meta } : {}),
           });
         }
