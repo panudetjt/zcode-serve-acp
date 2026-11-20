@@ -14,6 +14,7 @@
  */
 import { Effect, Schema } from "effect";
 import { FileSystem } from "effect/FileSystem";
+import { DecodeError, renderError } from "./errors.ts";
 import type { AvailableModel } from "./serve/session.ts";
 import { envDataOverride, envHome } from "./config.ts";
 
@@ -135,10 +136,16 @@ export const fallbackModels: Effect.Effect<AvailableModel[], never, FileSystem> 
   if (settingRaw === undefined || credsRaw === undefined || tableRaw === undefined) return [];
 
   // decodeUnknownSync throws on wrong shapes — route the throw through the
-  // typed error channel so the best-effort pipe below can swallow it.
-  const setting = yield* Effect.try(() => decodeSetting(settingRaw));
-  const creds = yield* Effect.try(() => decodeCreds(credsRaw));
-  const table = yield* Effect.try(() => decodeTable(tableRaw));
+  // typed channel (agent-patterns/effect.md: Effect.try carries a `catch`)
+  // so the best-effort pipe below can swallow it.
+  const decode = <A>(location: string, run: () => A): Effect.Effect<A, DecodeError> =>
+    Effect.try({
+      try: run,
+      catch: (cause) => new DecodeError({ location, message: renderError(cause), cause }),
+    });
+  const setting = yield* decode("models/setting", () => decodeSetting(settingRaw));
+  const creds = yield* decode("models/credentials", () => decodeCreds(credsRaw));
+  const table = yield* decode("models/provider-table", () => decodeTable(tableRaw));
 
   const families: string[] = [];
   for (const [family, selection] of Object.entries(setting.providerFamilyConnectionSelections ?? {})) {

@@ -390,9 +390,10 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       const bridge: BridgeSession = {
         id: sessionId,
         serve: undefined as never,
-        // runSync: the translator logs synchronously — building the Effect
-        // without running it (plain `void log.debug(...)`) dropped the lines.
-        translator: new FrameTranslator((...parts) => Effect.runSync(log.debug(...parts))),
+        // debugSync, not debug: the translator folds synchronously, so it needs
+        // a sink that writes now — `void log.debug(...)` would only build the
+        // Effect and drop the line. Same gate and stderr sink.
+        translator: new FrameTranslator((...parts) => log.debugSync(...parts)),
         models: [],
         skills: [],
         handledInteractions: new Set<string>(),
@@ -581,13 +582,13 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
                 // quiet fiber was never armed, so there is nothing else to stop.
                 const taken = yield* takeTurn(bridge);
                 if (Option.isSome(taken)) {
-                  yield* log.debug("[acp] turn failed: no daemon response within the guard window");
+                  yield* log.debug(`[acp] turn failed: no daemon response within ${turnTimeoutMs}ms`);
                   Deferred.doneUnsafe(
                     state.deferred,
                     Effect.fail(
                       new AcpMethodError({
                         method,
-                        message: "Turn timed out: no response received from daemon within 180 seconds",
+                        message: `Turn timed out: no response received from daemon within ${turnTimeoutMs}ms`,
                       }),
                     ),
                   );

@@ -19,21 +19,23 @@ interface CapturedLog {
   dieOnDebug?: string;
 }
 
-const captureLog = (capture: CapturedLog): Log["Service"] => ({
-  debug: (...parts: readonly unknown[]) =>
-    Effect.sync(() => {
-      const line = parts.map(String).join(" ");
-      capture.debugCalls.push(line);
-      if (capture.dieOnDebug !== undefined && line.includes(capture.dieOnDebug)) {
-        // sync callback can't die mid-effect; die by failing the sync body
-        throw new Error("log exploded");
-      }
-    }) as never,
-  warn: (...parts: readonly unknown[]) =>
-    Effect.sync(() => {
-      capture.warnCalls.push(parts.map(String).join(" "));
-    }),
-});
+const captureLog = (capture: CapturedLog): Log["Service"] => {
+  const debugSync = (...parts: readonly unknown[]): void => {
+    const line = parts.map(String).join(" ");
+    capture.debugCalls.push(line);
+    if (capture.dieOnDebug !== undefined && line.includes(capture.dieOnDebug)) {
+      throw new Error("log exploded");
+    }
+  };
+  return {
+    debugSync,
+    debug: (...parts) => Effect.sync(() => debugSync(...parts)),
+    warn: (...parts) =>
+      Effect.sync(() => {
+        capture.warnCalls.push(parts.map(String).join(" "));
+      }),
+  };
+};
 
 interface ServerFixture {
   server: ReturnType<typeof AcpServer.make>;
@@ -184,10 +186,10 @@ describe("AcpServer edge branches", () => {
     await settleFrame(handlers, 0);
     expect(await joinStopReason(fiberA)).toBe("end_turn");
 
-    // Idle: assistant rows settle with no active work → quiet window arms (172-178).
+    // Idle: assistant rows settle with no active work → quiet window arms.
     await assistantFrame(handlers, 5);
     await wait(15);
-    // Settling again re-arms → clearQuiet interrupts the armed fiber (167).
+    // Settling again re-arms → clearQuiet interrupts the armed fiber.
     await assistantFrame(handlers, 6);
     await wait(15);
 
@@ -215,7 +217,7 @@ describe("AcpServer edge branches", () => {
     await wait(15);
 
     // Idle arm, then the NEXT turn's completion interrupts the still-armed quiet
-    // fiber inside endTurn/stopFibers (136). Unknown row kind + unknown op first,
+    // fiber inside endTurn/stopFibers. Unknown row kind + unknown op first,
     // so the endTurn debug line renders non-empty unknown summaries.
     await assistantFrame(handlers, 10);
     await wait(15);
@@ -313,7 +315,7 @@ describe("AcpServer edge branches", () => {
   });
 
   test("elicitation fallbacks: failed cancel fallback and failed resolution are logged, not thrown", async () => {
-    // 1. clientRequest fails AND the fallback cancel resolution fails (339)
+    // 1. clientRequest fails AND the fallback cancel resolution fails
     const failingResolve = makeFixture({ models: [{ providerId: "p", modelId: "m" }] });
     failingResolve.setClientAnswer("FAIL");
     failingResolve.failResolve = true;
@@ -341,7 +343,7 @@ describe("AcpServer edge branches", () => {
     await joinStopReason(fiber1);
     expect(failingResolve.capture.debugCalls.some((l) => l.includes("fallback cancel resolution failed"))).toBe(true);
 
-    // 2. client answered but resolveInteraction itself fails (350)
+    // 2. client answered but resolveInteraction itself fails
     const resolveFails = makeFixture({
       models: [{ providerId: "p", modelId: "m" }],
       clientAnswer: { action: "accept", content: { q0: "yes" } },
@@ -397,7 +399,7 @@ describe("AcpServer edge branches", () => {
         }),
       );
 
-    // 1. clientRequest fails AND the fallback resolution fails (368)
+    // 1. clientRequest fails AND the fallback resolution fails
     const fx1 = makeFixture({ models: [{ providerId: "p", modelId: "m" }] });
     fx1.setClientAnswer("FAIL");
     fx1.failResolve = true;
@@ -410,7 +412,7 @@ describe("AcpServer edge branches", () => {
     await joinStopReason(fiber1);
     expect(fx1.capture.debugCalls.some((l) => l.includes("fallback resolution failed"))).toBe(true);
 
-    // 2. client answered but resolveInteraction fails (380)
+    // 2. client answered but resolveInteraction fails
     const fx2 = makeFixture({
       models: [{ providerId: "p", modelId: "m" }],
       clientAnswer: { outcome: { outcome: "selected", optionId: "allow_opt" } },
@@ -516,7 +518,7 @@ describe("AcpServer edge branches", () => {
   });
 
   test("thoughtLevel falls back to reasoningLevels[0] then to 'max'", async () => {
-    // 1. model with levels but no default → first level (435)
+    // 1. model with levels but no default → first level
     const withLevels = makeFixture({
       models: [{ providerId: "p", modelId: "m", label: "M", reasoningLevels: [{ value: "high", label: "High" }] }],
     });
@@ -528,7 +530,7 @@ describe("AcpServer edge branches", () => {
     const selL = withLevels.sentPrompts[0]?.modelSelection as { options?: { reasoningLevel?: string } };
     expect(selL?.options?.reasoningLevel).toBe("high");
 
-    // 2. bare model → 'max' (436)
+    // 2. bare model → 'max'
     const bare = makeFixture({ models: [{ providerId: "p", modelId: "m2", label: "M2" }] });
     await Effect.runPromise(bare.server.handle("session/new", { sessionId: "bare-sess" }));
     const fiberB = await promptFiber(bare, "bare-sess");
@@ -612,6 +614,8 @@ describe("AcpServer edge branches", () => {
       Effect.flip(fx.server.handle("session/prompt", { sessionId: "timeout-sess", prompt: "slow daemon" }) as never),
     );
     expect((err as { message: string }).message).toContain("Turn timed out");
+    // The message reports the budget actually used, not a frozen 180s.
+    expect((err as { message: string }).message).toContain("within 25ms");
   });
 
   test("layerNoDeps defaults: no-models fallback, host notifications, and unwired client requests", async () => {
@@ -631,14 +635,13 @@ describe("AcpServer edge branches", () => {
     } as unknown as ServeSessionFactory["Service"];
 
     const server = await Effect.runPromise(
-      Effect.gen(function* () {
-        return yield* AcpServer;
-      }).pipe(
+      AcpServer.pipe(
         Effect.provide(AcpServer.layerNoDeps),
         Effect.provideService(ServeSessionFactory, sessions),
         Effect.provideService(Log, {
           debug: () => Effect.void,
           warn: () => Effect.void,
+          debugSync: () => {},
         }),
         Effect.provideService(FileSystem, {
           readFileString: () => Effect.fail(new Error("ENOENT")),

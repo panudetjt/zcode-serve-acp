@@ -385,14 +385,12 @@ describe("dial and write failure fallbacks", () => {
         `ws://localhost:${server.port}`,
         {},
         {
-          // Closing the channel inside the handler makes the reply write hit
-          // the settled path — the fallback must swallow it, not throw.
+          // Settling the channel inside the handler makes the reply write land
+          // on the closed path — the fallback must swallow it, not throw.
           onRequest: (channelName, name) => {
-            void clientRef
-              ?.close()
-              .pipe(Effect.runPromise)
-              .catch(() => {});
-            return name === "boom" ? Effect.fail(new Error("forced handler failure")) : Effect.succeed({ ok: 1 });
+            const answer =
+              name === "boom" ? Effect.fail(new Error("forced handler failure")) : Effect.succeed({ ok: 1 });
+            return (clientRef?.close() ?? Effect.void).pipe(Effect.andThen(answer));
           },
           onClose: () => Effect.void,
         },
@@ -409,7 +407,14 @@ describe("dial and write failure fallbacks", () => {
 
       // dispose of a listener after close sends EventDispose on a settled channel
       const dispose = yield* client.listen("zcode-agent", "topic", undefined, () => Effect.void);
-      yield* dispose.pipe(Effect.orElseSucceed(() => undefined));
+      yield* dispose;
+
+      // The close really happened, and every write after it was swallowed:
+      // awaiting the closed deferred resolves instead of hanging, and a late
+      // call still gets the typed ChannelClosed rather than a defect.
+      expect(yield* Deferred.await(client.closed)).toBe("zcode server channel closed by client");
+      const late = yield* Effect.flip(client.call("zcode-agent", "x", undefined, 200));
+      expect(late._tag).toBe("ChannelClosed");
     }).pipe(Effect.provide(BunSocket.layerWebSocketConstructor), Effect.provide(Log.layerQuiet), Effect.scoped);
 
     try {
@@ -476,6 +481,9 @@ describe("dispatchFrame edge branches", () => {
 
     const captured: string[] = [];
     const captureLog = Log.of({
+      debugSync: (...parts: unknown[]) => {
+        captured.push(parts.map((x) => String(x)).join(" "));
+      },
       debug: (...parts: unknown[]) => Effect.sync(() => captured.push(parts.map((x) => String(x)).join(" "))),
       warn: (...parts: unknown[]) => Effect.sync(() => captured.push("WARN " + parts.map((x) => String(x)).join(" "))),
     });

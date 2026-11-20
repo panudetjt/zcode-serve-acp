@@ -72,7 +72,7 @@ describe("initialize agentCapabilities", () => {
   it("advertises image prompt support and session resume/load in initialize agentCapabilities", async () => {
     const acp = AcpServer.make({
       sessions: { create: () => Effect.die("not used") } as never,
-      log: Log.of({ debug: () => Effect.void, warn: () => Effect.void }),
+      log: Log.of({ debug: () => Effect.void, warn: () => Effect.void, debugSync: () => {} }),
       emitNotification: () => Effect.void,
       clientRequest: () => Effect.fail(new Error("not used")),
       fallbackModels: Effect.succeed([]),

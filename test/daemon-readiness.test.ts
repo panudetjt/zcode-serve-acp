@@ -10,6 +10,13 @@ import { Daemon } from "../src/serve/daemon.ts";
  * by a fake Clock: sleep advances the fake now by the slept duration (with a
  * macrotask yield so the detached spawn's async 'error' event can land), so
  * the 30s loop completes in milliseconds of real time.
+ *
+ * Waiver — agent-patterns/effect.md §Testing names `TestClock` for
+ * deterministic time. TestClock advances only on `TestClock.adjust` and does
+ * not yield the event loop, so the detached child process's async 'error'
+ * event could never land while the loop is suspended and the SpawnError path
+ * would be unreachable. Guard: the fake clock's only real-time dependency is a
+ * `setTimeout(…, 0)` macrotask — the code under test observes fake `now` only.
  */
 
 const makeFakeClock = () => {
@@ -97,7 +104,10 @@ describe("Daemon readiness loop (fake clock)", () => {
     await withBin("/usr/bin/true", async () => {
       const debugCalls: string[] = [];
       const log: Log["Service"] = {
-        debug: (...parts: readonly unknown[]) =>
+        debugSync: (...parts) => {
+          debugCalls.push(parts.map(String).join(" "));
+        },
+        debug: (...parts) =>
           Effect.sync(() => {
             debugCalls.push(parts.map(String).join(" "));
           }),

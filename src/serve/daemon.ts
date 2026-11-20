@@ -65,14 +65,12 @@ class DaemonDeps extends Context.Service<
   static readonly layer: Layer.Layer<DaemonDeps, never, HttpClient.HttpClient | FileSystem> = Layer.effect(
     DaemonDeps,
     Effect.gen(function* () {
-      console.error("M66 deps-layer-gen");
       const client = yield* HttpClient.HttpClient;
       const fs = yield* FileSystem;
       const serveBin = yield* resolveServeBinary(fs);
       let spawnError: string | undefined;
 
       const spawnServe = Effect.fn("DaemonDeps.spawnServe")(function* () {
-        console.error("M73 spawnServe-gen");
         yield* Effect.try({
           try: () => {
             const child = nodeSpawn(serveBin, ["serve"], {
@@ -115,7 +113,6 @@ export class Daemon extends Context.Service<
   static readonly layer: Layer.Layer<Daemon, never, HttpClient.HttpClient | FileSystem | Log> = Layer.effect(
     Daemon,
     Effect.gen(function* () {
-      console.error("M115 daemon-layer-gen");
       const deps = yield* DaemonDeps;
       const log = yield* Log;
 
@@ -123,7 +120,6 @@ export class Daemon extends Context.Service<
 
       // Malformed/unready status → undefined (tolerated, keeps polling).
       const readStatus = Effect.fn("Daemon.readStatus")(function* (rootDir: string) {
-        console.error("M122 readStatus-gen");
         const text = yield* readFile(path.join(rootDir, "run", "status.json"));
         if (text === undefined) return undefined;
         const parsed = yield* Effect.try(() => JSON.parse(text) as unknown).pipe(Effect.result);
@@ -133,7 +129,6 @@ export class Daemon extends Context.Service<
       });
 
       const readToken = Effect.fn("Daemon.readToken")(function* (rootDir: string) {
-        console.error("M131 readToken-gen");
         const text = yield* readFile(path.join(rootDir, "run", "ingress-token"));
         return text === undefined ? "" : text.trim();
       });
@@ -142,7 +137,7 @@ export class Daemon extends Context.Service<
         deps.client
           .execute(
             HttpClientRequest.get(`http://${host}:${port}/api/server-info`).pipe(
-              token ? HttpClientRequest.setHeaders({ authorization: `Bearer ${token}` }) : (request) => { console.error("M140 header-cond"); return request; },
+              token ? HttpClientRequest.setHeaders({ authorization: `Bearer ${token}` }) : (request) => request,
             ),
           )
           .pipe(
@@ -155,7 +150,6 @@ export class Daemon extends Context.Service<
         { status: ServerStatus; token: string },
         DiscoveryError | SpawnError
       > {
-        console.error("M149 waitForReady-gen");
         const rootDir = serverRoot();
         const deadline = (yield* Clock.currentTimeMillis) + 30_000;
         for (;;) {
@@ -185,7 +179,6 @@ export class Daemon extends Context.Service<
         DaemonConnection,
         DiscoveryError | SpawnError
       > {
-        console.error("M178 connect-gen");
         // serverRoot() is always defined: env overrides or os.homedir() fallback.
         const rootDir = serverRoot();
         let status = yield* readStatus(rootDir);
@@ -205,7 +198,6 @@ export class Daemon extends Context.Service<
       const getCapability = Effect.fn("Daemon.getCapability")(function* (
         connection: DaemonConnection,
       ): Effect.fn.Return<string, CapabilityError> {
-        console.error("M198 getCapability-gen");
         const response = yield* deps.client
           .execute(
             HttpClientRequest.post(
@@ -246,22 +238,19 @@ const rec = (value: unknown): Record<string, unknown> | undefined =>
 const formatCause = (cause: unknown): string => renderError(cause);
 
 export function dataRoot(): string {
-  console.error("M240 dataRoot");
   const override = envDataOverride();
   if (override) return override;
   return envHome() ?? os.homedir();
 }
 
 export function serverRoot(): string {
-  console.error("M246 serverRoot");
   const override = envServerRoot();
   if (override) return override;
   return path.join(dataRoot(), ".zcode", "server");
 }
 
-export const resolveServeBinary = (fs: FileSystem): Effect.Effect<string> => {
-  console.error("M252 resolveServeBinary-outer");
-  return Effect.gen(function* () {
+export const resolveServeBinary = (fs: FileSystem): Effect.Effect<string> =>
+  Effect.gen(function* () {
     const serveBin = envServeBin();
     if (serveBin) return serveBin;
     const candidates = [path.join(os.homedir(), ".zcode", "server", "bin", "zcode"), "/usr/local/bin/zcode"];
@@ -271,7 +260,6 @@ export const resolveServeBinary = (fs: FileSystem): Effect.Effect<string> => {
     }
     return "zcode"; // last resort: hope PATH has it
   });
-};
 
 /**
  * Internal deps. The detached spawn is deliberately raw `node:child_process`:
