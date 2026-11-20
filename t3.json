@@ -1,0 +1,12 @@
+{
+  "$schema": "https://t3.codes/schema/t3.json",
+  "scripts": [
+    {
+      "name": "Setup Worktree",
+      "command": "[ -d .repos/effect/.git ] || { rm -rf .repos/effect; mkdir -p .repos && git clone --depth 1 https://github.com/Effect-TS/effect.git .repos/effect; }",
+      "icon": "configure",
+      "runOnWorktreeCreate": true,
+      "async": false
+    }
+  ]
+}

@@ -32,68 +32,92 @@ export const tolerate = <A, E>(
     return result.success;
   });
 
-export class DecodeError extends Schema.TaggedError<DecodeError>()("DecodeError", {
+export class DecodeError extends Schema.TaggedError<DecodeError, { readonly brand: unique symbol }>()("DecodeError", {
   /** what boundary failed to decode, e.g. "wire/frame" or "acp/params" */
   location: Schema.String,
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-export class DiscoveryError extends Schema.TaggedError<DiscoveryError>()("DiscoveryError", {
-  message: Schema.String,
-}) {}
+export class DiscoveryError extends Schema.TaggedError<DiscoveryError, { readonly brand: unique symbol }>()(
+  "DiscoveryError",
+  {
+    message: Schema.String,
+  },
+) {}
 
-export class SpawnError extends Schema.TaggedError<SpawnError>()("SpawnError", {
+export class SpawnError extends Schema.TaggedError<SpawnError, { readonly brand: unique symbol }>()("SpawnError", {
   bin: Schema.String,
   message: Schema.String,
 }) {}
 
-export class CapabilityError extends Schema.TaggedError<CapabilityError>()("CapabilityError", {
-  status: Schema.optional(Schema.Number),
-  message: Schema.String,
-}) {}
+export class CapabilityError extends Schema.TaggedError<CapabilityError, { readonly brand: unique symbol }>()(
+  "CapabilityError",
+  {
+    status: Schema.optional(Schema.Finite),
+    message: Schema.String,
+  },
+) {}
 
-export class ChannelClosed extends Schema.TaggedError<ChannelClosed>()("ChannelClosed", {
-  reason: Schema.String,
-}) {}
+export class ChannelClosed extends Schema.TaggedError<ChannelClosed, { readonly brand: unique symbol }>()(
+  "ChannelClosed",
+  {
+    reason: Schema.String,
+  },
+) {}
 
-export class ChannelOpenError extends Schema.TaggedError<ChannelOpenError>()("ChannelOpenError", {
-  message: Schema.String,
-}) {}
+export class ChannelOpenError extends Schema.TaggedError<ChannelOpenError, { readonly brand: unique symbol }>()(
+  "ChannelOpenError",
+  {
+    message: Schema.String,
+  },
+) {}
 
-export class ClientRequestError extends Schema.TaggedError<ClientRequestError>()("ClientRequestError", {
-  message: Schema.String,
-}) {}
+export class ClientRequestError extends Schema.TaggedError<ClientRequestError, { readonly brand: unique symbol }>()(
+  "ClientRequestError",
+  {
+    message: Schema.String,
+  },
+) {}
 
 /** The daemon answered a channel call with PromiseError. */
-export class RpcError extends Schema.TaggedError<RpcError>()("RpcError", {
+export class RpcError extends Schema.TaggedError<RpcError, { readonly brand: unique symbol }>()("RpcError", {
   channel: Schema.String,
   method: Schema.String,
   message: Schema.String,
 }) {}
 
 /** A channel call exceeded its budget; PromiseCancel was sent to the daemon. */
-export class RpcTimeout extends Schema.TaggedError<RpcTimeout>()("RpcTimeout", {
+export class RpcTimeout extends Schema.TaggedError<RpcTimeout, { readonly brand: unique symbol }>()("RpcTimeout", {
   channel: Schema.String,
   method: Schema.String,
-  timeoutMs: Schema.Number,
+  timeoutMs: Schema.Finite,
 }) {}
 
-export class SessionError extends Schema.TaggedError<SessionError>()("SessionError", {
-  message: Schema.String,
-}) {}
+export class SessionError extends Schema.TaggedError<SessionError, { readonly brand: unique symbol }>()(
+  "SessionError",
+  {
+    message: Schema.String,
+  },
+) {}
 
 /** Failure while driving a permission/elicitation interaction. */
-export class InteractionError extends Schema.TaggedError<InteractionError>()("InteractionError", {
-  interactionId: Schema.String,
-  message: Schema.String,
-}) {}
+export class InteractionError extends Schema.TaggedError<InteractionError, { readonly brand: unique symbol }>()(
+  "InteractionError",
+  {
+    interactionId: Schema.String,
+    message: Schema.String,
+  },
+) {}
 
 /** Any failure from an ACP method handler — the JSON-RPC error payload. */
-export class AcpMethodError extends Schema.TaggedError<AcpMethodError>()("AcpMethodError", {
-  method: Schema.String,
-  message: Schema.String,
-}) {}
+export class AcpMethodError extends Schema.TaggedError<AcpMethodError, { readonly brand: unique symbol }>()(
+  "AcpMethodError",
+  {
+    method: Schema.String,
+    message: Schema.String,
+  },
+) {}
 
 /** Human-readable rendering used for JSON-RPC error messages and logs. */
 export const renderError = (error: unknown): string => (error instanceof Error ? error.message : String(error));

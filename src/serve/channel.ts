@@ -127,7 +127,9 @@ export class ChannelClient {
 
   private dispatchFrame(frame: Uint8Array): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
-      const decoded = yield* Effect.try(() => decodeRpcMessage(frame)).pipe(Effect.result);
+      const decoded = yield* Effect.try({ try: () => decodeRpcMessage(frame), catch: (cause) => cause }).pipe(
+        Effect.result,
+      );
       if (!Result.isSuccess(decoded)) {
         yield* this.log.warn(`[channel] undecodable frame ignored: ${text(decoded.failure)}`);
         return;
