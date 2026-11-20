@@ -50,7 +50,7 @@ export interface DaemonConnection {
   readonly wsPath: string;
 }
 
-class DaemonDeps extends Context.Service<
+export class DaemonDeps extends Context.Service<
   DaemonDeps,
   {
     readonly client: HttpClient.HttpClient;
@@ -116,7 +116,12 @@ export class Daemon extends Context.Service<
     getCapability(connection: DaemonConnection): Effect.Effect<string, CapabilityError>;
   }
 >()("zcode-serve-acp/Daemon") {
-  static readonly layer: Layer.Layer<Daemon, never, HttpClient.HttpClient | FileSystem | Log> = Layer.effect(
+  /**
+   * Test seam: the service built against an injected `DaemonDeps` (fake spawn,
+   * fs, http), so the discovery/spawn branches can be driven deterministically.
+   * Production wiring is `layer` below.
+   */
+  static readonly layerFromDeps: Layer.Layer<Daemon, never, DaemonDeps | Log> = Layer.effect(
     Daemon,
     Effect.gen(function* () {
       const deps = yield* DaemonDeps;
@@ -245,7 +250,11 @@ export class Daemon extends Context.Service<
 
       return Daemon.of({ connect, getCapability });
     }),
-  ).pipe(Layer.provide(DaemonDeps.layer));
+  );
+
+  /** Production wiring: real spawn + FS + HTTP behind `DaemonDeps`. */
+  static readonly layer: Layer.Layer<Daemon, never, HttpClient.HttpClient | FileSystem | Log> =
+    Daemon.layerFromDeps.pipe(Layer.provide(DaemonDeps.layer));
 }
 
 const rec = (value: unknown): Record<string, unknown> | undefined =>

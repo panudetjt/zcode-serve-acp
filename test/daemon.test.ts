@@ -1,9 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Fiber, Layer, Result, Schema } from "effect";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { FileSystem } from "effect/FileSystem";
+import { TestClock } from "effect/testing";
 import { Log } from "../src/log.ts";
-import { Daemon, ServerStatusSchema, dataRoot, resolveServeBinary, serverRoot } from "../src/serve/daemon.ts";
+import {
+  Daemon,
+  DaemonDeps,
+  ServerStatusSchema,
+  dataRoot,
+  resolveServeBinary,
+  serverRoot,
+} from "../src/serve/daemon.ts";
 
 describe("Daemon discovery and resolution", () => {
   test("ServerStatusSchema validates daemon status JSON", () => {
@@ -297,6 +305,69 @@ describe("Daemon service operations", () => {
     } finally {
       if (origBin !== undefined) process.env.ZCODE_SERVE_BIN = origBin;
       else delete process.env.ZCODE_SERVE_BIN;
+    }
+  });
+});
+
+describe("Daemon spawn and discovery branches (injected deps)", () => {
+  /**
+   * Drive `connect` with a fake `DaemonDeps`: no status.json (fake fs always
+   * fails the read), so the not-ready path runs — spawn, then the 30s
+   * readiness window on the TestClock.
+   */
+  const connectWithFakes = async (spawnFailure: string | undefined) => {
+    const originalData = process.env.ZCODE_DATA_BASE_DIR;
+    process.env.ZCODE_DATA_BASE_DIR = "/fake/data";
+    const calls = { spawns: 0 };
+    const deps = DaemonDeps.of({
+      client: {} as unknown as HttpClient.HttpClient,
+      fs: { readFileString: () => Effect.fail(new Error("ENOENT")) } as unknown as FileSystem,
+      serveBin: "/fake/zcode",
+      spawnServe: Effect.sync(() => {
+        calls.spawns += 1;
+      }),
+      spawnFailure: Effect.succeed(spawnFailure),
+    });
+
+    const prog = Effect.gen(function* () {
+      const daemon = yield* Daemon;
+      // Building the layer must not spawn: the Effect value is lazy.
+      expect(calls.spawns).toBe(0);
+      const fiber = yield* Effect.forkDetach(daemon.connect.pipe(Effect.result));
+      yield* TestClock.adjust("31 seconds");
+      const outcome = yield* Fiber.join(fiber);
+      // Exactly one spawn attempt for one connect run.
+      expect(calls.spawns).toBe(1);
+      return outcome;
+    }).pipe(
+      Effect.provide(Daemon.layerFromDeps),
+      Effect.provide(Layer.merge(Layer.succeed(DaemonDeps, deps), Log.layerQuiet)),
+      Effect.provide(TestClock.layer()),
+    );
+
+    try {
+      return await Effect.runPromise(prog);
+    } finally {
+      if (originalData !== undefined) process.env.ZCODE_DATA_BASE_DIR = originalData;
+      else delete process.env.ZCODE_DATA_BASE_DIR;
+    }
+  };
+
+  test("connect surfaces the recorded spawn failure as SpawnError", async () => {
+    const outcome = await connectWithFakes("spawn zcode ENOENT");
+    expect(Result.isFailure(outcome)).toBe(true);
+    if (Result.isFailure(outcome)) {
+      expect(outcome.failure._tag).toBe("SpawnError");
+      expect(outcome.failure.message).toContain("spawn zcode ENOENT");
+    }
+  });
+
+  test("connect reports a 30s DiscoveryError when no spawn error was recorded", async () => {
+    const outcome = await connectWithFakes(undefined);
+    expect(Result.isFailure(outcome)).toBe(true);
+    if (Result.isFailure(outcome)) {
+      expect(outcome.failure._tag).toBe("DiscoveryError");
+      expect(outcome.failure.message).toContain("did not report a ready daemon (30s)");
     }
   });
 });
