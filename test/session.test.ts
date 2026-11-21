@@ -746,7 +746,7 @@ describe("ServeSession teardown edge", () => {
   });
 
   test("createSession formats and forwards mcpServers in createSession and resumeSession RPC payloads", async () => {
-    const serverCalls: Array<{ channel: string; method: string; arg: any }> = [];
+    const serverCalls: Array<{ channel: string; method: string; arg: unknown }> = [];
     let resumeCallCount = 0;
 
     const server = Bun.serve({
@@ -768,7 +768,7 @@ describe("ServeSession teardown edge", () => {
           const method = decoded.header[3] as string;
 
           if (type === MSG.Promise) {
-            const arg = (decoded.body as any[])?.[0];
+            const arg = (decoded.body as unknown[])?.[0];
             serverCalls.push({ channel, method, arg });
 
             if (channel === "project" && method === "saveProject") {
@@ -847,7 +847,8 @@ describe("ServeSession teardown edge", () => {
 
       const createCall = serverCalls.find((c) => c.channel === "zcode-session" && c.method === "createSession");
       expect(createCall).toBeDefined();
-      expect(createCall?.arg.mcpServers).toEqual([
+      const createArg = createCall?.arg as { mcpServers?: unknown } | undefined;
+      expect(createArg?.mcpServers).toEqual([
         {
           name: "t3-code",
           type: "http",
@@ -874,14 +875,13 @@ describe("ServeSession teardown edge", () => {
           url: "http://127.0.0.1:4001",
         },
       ];
-      if (session.setMcpServers) {
-        yield* session.setMcpServers(updatedMcp);
-      }
+      yield* session.setMcpServers(updatedMcp);
 
       const resumeCall = serverCalls.find((c) => c.channel === "zcode-session" && c.method === "resumeSession");
       expect(resumeCall).toBeDefined();
-      expect(resumeCall?.arg.sessionId).toBe("daemon-sess-mcp-99");
-      expect(resumeCall?.arg.mcpServers).toEqual([
+      const resumeArg = resumeCall?.arg as { sessionId?: string; mcpServers?: unknown } | undefined;
+      expect(resumeArg?.sessionId).toBe("daemon-sess-mcp-99");
+      expect(resumeArg?.mcpServers).toEqual([
         {
           name: "t3-code-new",
           type: "http",
@@ -893,9 +893,7 @@ describe("ServeSession teardown edge", () => {
       ]);
 
       // Calling setMcpServers again when daemon returns an error exercises the tolerate failure branch
-      if (session.setMcpServers) {
-        yield* session.setMcpServers(updatedMcp);
-      }
+      yield* session.setMcpServers(updatedMcp);
 
       yield* session.dispose;
     }).pipe(

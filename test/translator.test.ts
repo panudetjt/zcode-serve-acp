@@ -1614,6 +1614,7 @@ describe("FrameTranslator child-session drill-down (subagent cards)", () => {
       const doneUpdate = res2.updates[0]!;
       expect(doneUpdate.sessionUpdate).toBe("tool_call_update");
       expect(doneUpdate.status).toBe("completed");
+      expect(doneUpdate.rawOutput).toBe("HTML chart rendered at height 420px");
       expect(doneUpdate.content).toEqual([
         { type: "content", content: { type: "text", text: "HTML chart rendered at height 420px" } },
       ]);

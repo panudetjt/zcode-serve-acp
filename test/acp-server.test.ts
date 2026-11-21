@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Effect, Fiber } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { AcpServer } from "../src/acp/server.ts";
+import type { McpServer } from "../src/acp/protocol.ts";
 import { ClientRequestError } from "../src/errors.ts";
 import { Log } from "../src/log.ts";
 import { ServeSessionFactory, type AvailableModel, type ServeSession } from "../src/serve/session.ts";
@@ -31,6 +32,7 @@ const mockSessionInstance = {
       skills: [],
       currentMode: "default",
     }),
+  setMcpServers: () => Effect.void,
   sendPrompt: () => Effect.succeed({ inputId: "mock-inp" }),
   setMode: () => Effect.void,
   sendCommand: () => Effect.void,
@@ -68,11 +70,11 @@ describe("AcpServer Effect handler", () => {
   });
 
   test("session/new and session/load accept mcpServers and pass them to ServeSession", async () => {
-    let capturedCreateMcpServers: any;
-    let capturedSetMcpServers: any;
+    let capturedCreateMcpServers: unknown;
+    let capturedSetMcpServers: unknown;
 
     const mockSessionWithMcp = {
-      createSession: (_modelSel: any, mcpServers: any) => {
+      createSession: (_modelSel: unknown, mcpServers?: readonly McpServer[]) => {
         capturedCreateMcpServers = mcpServers;
         return Effect.succeed({
           models: sampleModels,
@@ -81,7 +83,7 @@ describe("AcpServer Effect handler", () => {
           currentMode: "default",
         });
       },
-      setMcpServers: (mcpServers: any) => {
+      setMcpServers: (mcpServers: readonly McpServer[]) => {
         capturedSetMcpServers = mcpServers;
         return Effect.void;
       },

@@ -47,6 +47,7 @@ describe("classifyToolKind", () => {
     expect(classifyToolKind("http")).toBe("fetch");
     expect(classifyToolKind("preview_open")).toBe("fetch");
     expect(classifyToolKind("preview_navigate")).toBe("fetch");
+    expect(classifyToolKind("browser")).toBe("fetch");
   });
 
   test("classifies delete tools", () => {
@@ -60,6 +61,8 @@ describe("classifyToolKind", () => {
     expect(classifyToolKind("device_close")).toBe("delete");
     expect(classifyToolKind("t3_preview_close")).toBe("delete");
     expect(classifyToolKind("t3_project_delete")).toBe("delete");
+    expect(classifyToolKind("task_cancel")).toBe("delete");
+    expect(classifyToolKind("t3_workflow_stop")).toBe("delete");
   });
 
   test("classifies MCP tools and strips namespace prefix", () => {
@@ -67,6 +70,9 @@ describe("classifyToolKind", () => {
     expect(classifyToolKind("preview_act")).toBe("execute");
     expect(classifyToolKind("preview_evaluate")).toBe("execute");
     expect(classifyToolKind("ci_rerun")).toBe("execute");
+    expect(classifyToolKind("delegate_task")).toBe("execute");
+    expect(classifyToolKind("run_scheduled_task_now")).toBe("execute");
+    expect(classifyToolKind("t3_thread_interrupt")).toBe("execute");
 
     // Reading
     expect(classifyToolKind("preview_snapshot")).toBe("read");
@@ -79,6 +85,11 @@ describe("classifyToolKind", () => {
     expect(classifyToolKind("t3_worktree_status")).toBe("read");
     expect(classifyToolKind("t3_thread_list")).toBe("read");
     expect(classifyToolKind("t3_thread_read")).toBe("read");
+    expect(classifyToolKind("orchestrator_capabilities")).toBe("read");
+    expect(classifyToolKind("task_status")).toBe("read");
+    expect(classifyToolKind("list_scheduled_tasks")).toBe("read");
+    expect(classifyToolKind("t3_thread_wait")).toBe("read");
+    expect(classifyToolKind("t3_pending_request")).toBe("read");
 
     // Editing
     expect(classifyToolKind("t3_thread_update")).toBe("edit");
@@ -94,22 +105,29 @@ describe("classifyToolKind", () => {
     expect(classifyToolKind("link_pull_request")).toBe("edit");
     expect(classifyToolKind("t3_project_create")).toBe("edit");
     expect(classifyToolKind("t3_theme_set")).toBe("edit");
+    expect(classifyToolKind("t3_thread_launch")).toBe("edit");
+    expect(classifyToolKind("create_threads")).toBe("edit");
+    expect(classifyToolKind("t3_thread_send")).toBe("edit");
+    expect(classifyToolKind("t3_thread_configure")).toBe("edit");
+    expect(classifyToolKind("request_secret")).toBe("edit");
+    expect(classifyToolKind("device_open")).toBe("edit");
 
-    // Other (mockup/rendering/orchestrator)
+    // Other (mockup/rendering)
     expect(classifyToolKind("html_render")).toBe("other");
     expect(classifyToolKind("html_preview")).toBe("other");
-    expect(classifyToolKind("orchestrator_capabilities")).toBe("other");
-    expect(classifyToolKind("delegate_task")).toBe("other");
-    expect(classifyToolKind("task_status")).toBe("other");
-    expect(classifyToolKind("task_cancel")).toBe("other");
 
-    // Stripping mcp__ prefix
+    // Stripping mcp__ prefix (single and multi-level namespace)
     expect(classifyToolKind("mcp__t3_code__preview_open")).toBe("fetch");
     expect(classifyToolKind("mcp__t3_code__preview_snapshot")).toBe("read");
     expect(classifyToolKind("mcp__t3_code__preview_act")).toBe("execute");
     expect(classifyToolKind("mcp__t3_code__create_issue")).toBe("edit");
     expect(classifyToolKind("mcp__t3_code__device_close")).toBe("delete");
     expect(classifyToolKind("mcp__t3_code__html_render")).toBe("other");
+    expect(classifyToolKind("mcp__read_file")).toBe("read");
+    expect(classifyToolKind("mcp__preview_open")).toBe("fetch");
+    expect(classifyToolKind("mcp__bash")).toBe("execute");
+    expect(classifyToolKind("mcp__create_issue")).toBe("edit");
+    expect(classifyToolKind("mcp__delete_scheduled_task")).toBe("delete");
 
     // Heuristics
     expect(classifyToolKind("read_custom_data")).toBe("read");

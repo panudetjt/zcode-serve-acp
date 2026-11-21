@@ -7,8 +7,12 @@
 /** ACP tool_call `kind` classification for the client's tool UI. */
 export function classifyToolKind(toolName?: string): string {
   const raw = (toolName ?? "").toLowerCase();
-  // Strip MCP namespace prefix if present (e.g. "mcp__t3_code__preview_open" -> "preview_open")
-  const t = raw.startsWith("mcp__") ? raw.slice(raw.indexOf("__", 5) + 2) : raw;
+  // Strip MCP namespace prefix if present (e.g. "mcp__t3_code__preview_open" -> "preview_open", "mcp__read_file" -> "read_file")
+  let t = raw;
+  if (t.startsWith("mcp__")) {
+    const secondSep = t.indexOf("__", 5);
+    t = secondSep !== -1 ? t.slice(secondSep + 2) : t.slice(5);
+  }
 
   if (
     t === "bash" ||
@@ -21,7 +25,10 @@ export function classifyToolKind(toolName?: string): string {
     t === "command" ||
     t === "preview_act" ||
     t === "preview_evaluate" ||
-    t === "ci_rerun"
+    t === "ci_rerun" ||
+    t === "delegate_task" ||
+    t === "run_scheduled_task_now" ||
+    t === "t3_thread_interrupt"
   ) {
     return "execute";
   }
@@ -54,7 +61,12 @@ export function classifyToolKind(toolName?: string): string {
     t === "t3_project_read" ||
     t === "t3_theme_read" ||
     t === "t3_environment_read" ||
-    t === "t3_preview_list"
+    t === "t3_preview_list" ||
+    t === "orchestrator_capabilities" ||
+    t === "task_status" ||
+    t === "list_scheduled_tasks" ||
+    t === "t3_thread_wait" ||
+    t === "t3_pending_request"
   ) {
     return "read";
   }
@@ -82,7 +94,16 @@ export function classifyToolKind(toolName?: string): string {
     t === "t3_project_create" ||
     t === "t3_project_update" ||
     t === "t3_theme_set" ||
-    t === "t3_environment_preferences_update"
+    t === "t3_environment_preferences_update" ||
+    t === "t3_thread_launch" ||
+    t === "create_threads" ||
+    t === "t3_thread_send" ||
+    t === "t3_thread_configure" ||
+    t === "t3_thread_transfer" ||
+    t === "t3_thread_organize" ||
+    t === "t3_thread_send_attachments" ||
+    t === "request_secret" ||
+    t === "device_open"
   ) {
     return "edit";
   }
@@ -98,7 +119,9 @@ export function classifyToolKind(toolName?: string): string {
     t === "device_close" ||
     t === "t3_preview_close" ||
     t === "t3_attachment_discard" ||
-    t === "t3_project_delete"
+    t === "t3_project_delete" ||
+    t === "task_cancel" ||
+    t === "t3_workflow_stop"
   ) {
     return "delete";
   }
@@ -111,7 +134,8 @@ export function classifyToolKind(toolName?: string): string {
     t === "curl" ||
     t === "http" ||
     t === "preview_open" ||
-    t === "preview_navigate"
+    t === "preview_navigate" ||
+    t === "browser"
   ) {
     return "fetch";
   }

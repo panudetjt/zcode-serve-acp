@@ -19,6 +19,7 @@ import { decodeRpcMessage, encodeRpcMessage, MSG } from "../src/serve/wire.ts";
 interface ServerCall {
   channel: string;
   method: string;
+  arg?: unknown;
 }
 
 /**
@@ -57,7 +58,8 @@ const makeDaemonServer = (calls: Array<ServerCall>, fireFrameOnSubscribe: boolea
         const id = decoded.header[1] as number;
         const channel = decoded.header[2] as string;
         const method = decoded.header[3] as string;
-        calls.push({ channel, method });
+        const arg = (decoded.body as unknown[])?.[0];
+        calls.push({ channel, method, arg });
         const reply = (body: unknown) => ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], body));
         if (channel === "project" && method === "saveProject") reply({ project: { id: "proj-1" } });
         else if (channel === "zcode-agent" && method === "initialize") reply({ ok: true });
@@ -190,6 +192,19 @@ describe("Channel recovery (issue #5)", () => {
     // initialize replay → conversation re-subscribe → the prompt itself.
     const methods2 = calls2.map((c) => c.method);
     expect(methods2).toContain("resumeSession");
+    const resumeCall = calls2.find((c) => c.method === "resumeSession");
+    const resumeArg = resumeCall?.arg as { sessionId?: string; mcpServers?: unknown } | undefined;
+    expect(resumeArg?.sessionId).toBe("daemon-sess-1");
+    expect(resumeArg?.mcpServers).toEqual([
+      {
+        name: "t3-code",
+        type: "http",
+        url: "http://localhost:3000",
+        headers: [],
+        isolation: "session",
+        alwaysLoad: true,
+      },
+    ]);
     expect(methods2).toContain("subscribeConversationV4");
     expect(methods2).toContain("helloConversationV4");
     expect(methods2).toContain("sendPrompt");

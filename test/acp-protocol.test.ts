@@ -118,6 +118,22 @@ describe("ACP protocol - MCP capabilities and schema", () => {
     });
     expect("headers" in httpNoHeaders && httpNoHeaders.headers).toEqual([]);
 
+    // SSE
+    const sseDaemon = toDaemonMcpServer({
+      type: "sse",
+      name: "sse-tool",
+      url: "http://127.0.0.1:4000/sse",
+      headers: [{ name: "X-Header", value: "test" }],
+    });
+    expect(sseDaemon).toEqual({
+      name: "sse-tool",
+      type: "sse",
+      url: "http://127.0.0.1:4000/sse",
+      headers: [{ name: "X-Header", value: "test" }],
+      isolation: "session",
+      alwaysLoad: true,
+    });
+
     // Stdio
     const stdioDaemon = toDaemonMcpServer({
       type: "stdio",

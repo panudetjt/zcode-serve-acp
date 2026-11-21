@@ -163,7 +163,7 @@ export interface ServeSession {
     modelSelection?: unknown,
     mcpServers?: readonly McpServer[],
   ) => Effect.Effect<CreateSessionResult, SessionError | RpcError | RpcTimeout | ChannelClosed>;
-  readonly setMcpServers?: (
+  readonly setMcpServers: (
     mcpServers: readonly McpServer[],
   ) => Effect.Effect<void, SessionError | RpcError | RpcTimeout | ChannelClosed>;
   readonly sendPrompt: (
@@ -704,9 +704,8 @@ const makeSession = <E>(
 
     const setMcpServers: ServeSession["setMcpServers"] = (mcpServers) =>
       Effect.gen(function* () {
-        if (mcpServers.length === 0) return;
         const daemonMcpServers = mcpServers.map(toDaemonMcpServer);
-        yield* Ref.set(mcpServersRef, Option.some(daemonMcpServers));
+        yield* Ref.set(mcpServersRef, daemonMcpServers.length > 0 ? Option.some(daemonMcpServers) : Option.none());
         const session = yield* Ref.get(sessionRef);
         if (Option.isSome(session)) {
           yield* tolerate(

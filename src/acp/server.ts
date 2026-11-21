@@ -651,13 +651,11 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
           const bridge = existingId !== undefined ? bridgeSessions.get(existingId) : undefined;
           const mcpServers = decodeMcpServers(params.mcpServers);
           if (bridge !== undefined) {
-            if (mcpServers.length > 0) {
+            if (params.mcpServers !== undefined) {
               bridge.mcpServers = mcpServers;
-              if (typeof bridge.serve.setMcpServers === "function") {
-                yield* tolerate(bridge.serve.setMcpServers(mcpServers), (cause) =>
-                  log.debug(`[${method}] setMcpServers failed: ${renderError(cause)}`),
-                );
-              }
+              yield* tolerate(bridge.serve.setMcpServers(mcpServers), (cause) =>
+                log.debug(`[${method}] setMcpServers failed: ${renderError(cause)}`),
+              );
             }
             yield* advertiseCommands(bridge);
             return {
