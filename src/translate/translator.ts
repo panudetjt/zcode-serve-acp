@@ -249,6 +249,7 @@ interface ToolRow {
   toolCallId: string | undefined;
   inputText: string | undefined;
   input: unknown;
+  rawOutput: unknown;
   output: Rec | undefined;
   outputPreview: Rec | undefined;
   error: Rec | undefined;
@@ -257,6 +258,13 @@ interface ToolRow {
   approvalInteractionId: string | undefined;
   progressPreviewLine: string | undefined;
 }
+
+const extractFallbackOutputText = (output: Rec | undefined): string | undefined => {
+  if (output === undefined || output["text"] !== undefined) return undefined;
+  if (typeof output["result"] === "string") return output["result"];
+  if (typeof output["value"] === "string") return output["value"];
+  return JSON.stringify(output);
+};
 
 const readToolRow = (row: Row): ToolRow => ({
   status: str(row.raw, "status"),
@@ -267,6 +275,7 @@ const readToolRow = (row: Row): ToolRow => ({
   toolCallId: str(row.raw, "toolCallId"),
   inputText: str(row.raw, "inputText"),
   input: row.raw["input"],
+  rawOutput: row.raw["output"],
   output: recAt(row.raw, "output"),
   outputPreview: recAt(row.raw, "outputPreview"),
   error: recAt(row.raw, "error"),
@@ -1021,17 +1030,19 @@ export class FrameTranslator {
         const name = tool.toolName ?? tool.name ?? (kindCls === "execute" ? "bash" : undefined);
         const streamedOutput = this.toolOutput.get(rowId);
         const rawOutput =
-          tool.output ??
+          tool.rawOutput ??
           (streamedOutput !== undefined ? { text: streamedOutput } : undefined) ??
           tool.outputPreview ??
           (tool.error !== undefined ? { error: tool.error } : undefined);
         const outputText =
+          (typeof tool.rawOutput === "string" ? tool.rawOutput : undefined) ??
           tool.output?.["text"] ??
           streamedOutput ??
           str(tool.outputPreview, "fullText") ??
           str(tool.outputPreview, "text") ??
           tool.progressPreviewLine ??
-          tool.error?.["message"];
+          tool.error?.["message"] ??
+          extractFallbackOutputText(tool.output);
         const content: ToolCallContentItem[] | undefined =
           typeof outputText === "string" && outputText.length > 0
             ? [{ type: "content", content: { type: "text", text: outputText } }]

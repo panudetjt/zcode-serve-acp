@@ -30,6 +30,7 @@ import { Log } from "../log.ts";
 import { ChannelClient, type ServerRequestHandler } from "./channel.ts";
 import { Daemon, type DaemonConnection } from "./daemon.ts";
 import { BridgeExit } from "./bridge.ts";
+import type { McpServer } from "../acp/protocol.ts";
 
 const CLIENT_ID = "zcode-serve-acp";
 
@@ -116,10 +117,55 @@ export interface SessionHandlers<E = never> {
   onClosed: (reason: string) => Effect.Effect<void, E>;
 }
 
+export interface DaemonMcpServerHttp {
+  name: string;
+  type: "http" | "sse";
+  url: string;
+  headers: Array<{ name: string; value: string }>;
+  isolation: "session";
+  alwaysLoad: true;
+}
+
+export interface DaemonMcpServerStdio {
+  name: string;
+  command: string;
+  args: string[];
+  env: Array<{ name: string; value: string }>;
+  isolation: "session";
+  alwaysLoad: true;
+}
+
+export type DaemonMcpServer = DaemonMcpServerHttp | DaemonMcpServerStdio;
+
+export function toDaemonMcpServer(server: McpServer): DaemonMcpServer {
+  if ("type" in server && (server.type === "http" || server.type === "sse")) {
+    return {
+      name: server.name,
+      type: server.type,
+      url: server.url,
+      headers: server.headers ? server.headers.map((h) => ({ name: h.name, value: h.value })) : [],
+      isolation: "session",
+      alwaysLoad: true,
+    };
+  }
+  return {
+    name: server.name,
+    command: server.command,
+    args: server.args ? [...server.args] : [],
+    env: server.env ? server.env.map((e) => ({ name: e.name, value: e.value })) : [],
+    isolation: "session",
+    alwaysLoad: true,
+  };
+}
+
 export interface ServeSession {
   readonly createSession: (
     modelSelection?: unknown,
+    mcpServers?: readonly McpServer[],
   ) => Effect.Effect<CreateSessionResult, SessionError | RpcError | RpcTimeout | ChannelClosed>;
+  readonly setMcpServers: (
+    mcpServers: readonly McpServer[],
+  ) => Effect.Effect<void, SessionError | RpcError | RpcTimeout | ChannelClosed>;
   readonly sendPrompt: (
     text: string,
     modelSelection?: { providerId: string; modelId: string; options?: { reasoningLevel?: string } },
@@ -220,6 +266,7 @@ const makeSession = <E>(
     const sessionRef = Ref.makeUnsafe<Option.Option<{ daemonSessionId: string; workspace: WorkspaceInfo }>>(
       Option.none(),
     );
+    const mcpServersRef = Ref.makeUnsafe<Option.Option<DaemonMcpServer[]>>(Option.none());
     const subscribedRef = Ref.makeUnsafe(false);
     // Child conversation topics subscribed for live subagent drill-down — also
     // the routing table for the frame listener below.
@@ -378,6 +425,25 @@ const makeSession = <E>(
         }
         const session = yield* Ref.get(sessionRef);
         if (Option.isSome(session)) {
+          const mcpServers = yield* Ref.get(mcpServersRef);
+          if (Option.isSome(mcpServers) && mcpServers.value.length > 0) {
+            yield* tolerate(
+              channel.call(
+                "zcode-session",
+                "resumeSession",
+                {
+                  sessionId: session.value.daemonSessionId,
+                  workspace: {
+                    workspacePath: session.value.workspace.workspacePath,
+                    workspaceIdentity: session.value.workspace.workspaceIdentity,
+                  },
+                  mcpServers: mcpServers.value,
+                },
+                30_000,
+              ),
+              (cause) => log.debug(`[session] post-reconnect resumeSession failed (continuing): ${renderError(cause)}`),
+            );
+          }
           yield* tolerate(
             subscribeConversation(session.value.daemonSessionId, session.value.workspace, channel),
             (cause) => log.debug(`[session] post-reconnect subscribe failed: ${renderError(cause)}`),
@@ -579,7 +645,7 @@ const makeSession = <E>(
         return session.value;
       });
 
-    const createSession = (modelSelection?: unknown): Effect.Effect<CreateSessionResult, ServeError> =>
+    const createSession: ServeSession["createSession"] = (modelSelection, mcpServers) =>
       Effect.gen(function* () {
         const workspace = yield* ensureWorkspace;
         const arg: Record<string, unknown> = {
@@ -588,6 +654,11 @@ const makeSession = <E>(
           workspaceIdentity: workspace.workspaceIdentity,
         };
         if (modelSelection !== undefined && modelSelection !== null) arg.model = modelSelection;
+        if (mcpServers !== undefined && mcpServers.length > 0) {
+          const daemonMcpServers = mcpServers.map(toDaemonMcpServer);
+          arg.mcpServers = daemonMcpServers;
+          yield* Ref.set(mcpServersRef, Option.some(daemonMcpServers));
+        }
         const result = yield* callSession("createSession", arg, 150_000);
         const decoded = decodeCreateSession(result);
         if (decoded === undefined) {
@@ -629,6 +700,30 @@ const makeSession = <E>(
           skills,
           raw: result,
         } satisfies CreateSessionResult;
+      });
+
+    const setMcpServers: ServeSession["setMcpServers"] = (mcpServers) =>
+      Effect.gen(function* () {
+        const daemonMcpServers = mcpServers.map(toDaemonMcpServer);
+        yield* Ref.set(mcpServersRef, daemonMcpServers.length > 0 ? Option.some(daemonMcpServers) : Option.none());
+        const session = yield* Ref.get(sessionRef);
+        if (Option.isSome(session)) {
+          yield* tolerate(
+            callSession(
+              "resumeSession",
+              {
+                sessionId: session.value.daemonSessionId,
+                workspace: {
+                  workspacePath: session.value.workspace.workspacePath,
+                  workspaceIdentity: session.value.workspace.workspaceIdentity,
+                },
+                mcpServers: daemonMcpServers,
+              },
+              30_000,
+            ),
+            (cause) => log.debug(`[session] resumeSession with mcpServers failed: ${renderError(cause)}`),
+          );
+        }
       });
 
     /**
@@ -845,6 +940,7 @@ const makeSession = <E>(
 
     return {
       createSession,
+      setMcpServers,
       sendPrompt,
       resolveInteraction,
       setMode,

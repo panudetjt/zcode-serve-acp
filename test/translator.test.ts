@@ -1493,4 +1493,242 @@ describe("FrameTranslator child-session drill-down (subagent cards)", () => {
     expect(translator.settleChild("child-1")).toBe(false); // already settled
     expect(translator.settleChild("unknown")).toBe(false);
   });
+
+  describe("MCP tool call translation", () => {
+    it("translates preview_open toolCall row to tool_call and tool_call_update", () => {
+      const translator = new FrameTranslator(() => {});
+
+      // 1. Tool call started (running)
+      const res1 = translator.fold({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.appended",
+              row: {
+                rowId: 10,
+                kind: "toolCall",
+                toolName: "preview_open",
+                title: "Open preview: port 3000",
+                toolCallId: "tc-preview-1",
+                input: { target: { port: 3000 } },
+                status: "running",
+              },
+            },
+          ],
+        },
+      });
+
+      expect(res1.updates).toHaveLength(1);
+      const callUpdate = res1.updates[0]!;
+      expect(callUpdate.sessionUpdate).toBe("tool_call");
+      expect(callUpdate.toolCallId).toBe("tc-preview-1");
+      expect(callUpdate.name).toBe("preview_open");
+      expect(callUpdate.kind).toBe("fetch");
+      expect(callUpdate.status).toBe("in_progress");
+      expect(callUpdate.title).toBe("Open preview: port 3000");
+      expect(callUpdate.rawInput).toEqual({ target: { port: 3000 } });
+      expect(res1.hasActiveWork).toBe(true);
+
+      // 2. Tool call completed with text output
+      const res2 = translator.fold({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.updated",
+              row: {
+                rowId: 10,
+                kind: "toolCall",
+                toolName: "preview_open",
+                title: "Open preview: port 3000",
+                toolCallId: "tc-preview-1",
+                status: "success",
+                output: { text: "Preview opened successfully on tab preview-1" },
+              },
+            },
+          ],
+        },
+      });
+
+      expect(res2.updates).toHaveLength(1);
+      const doneUpdate = res2.updates[0]!;
+      expect(doneUpdate.sessionUpdate).toBe("tool_call_update");
+      expect(doneUpdate.toolCallId).toBe("tc-preview-1");
+      expect(doneUpdate.status).toBe("completed");
+      expect(doneUpdate.rawOutput).toEqual({ text: "Preview opened successfully on tab preview-1" });
+      expect(doneUpdate.content).toEqual([
+        { type: "content", content: { type: "text", text: "Preview opened successfully on tab preview-1" } },
+      ]);
+    });
+
+    it("translates html_render with string output and object output fallbacks", () => {
+      const translator = new FrameTranslator(() => {});
+
+      // 1. Tool call started
+      const res1 = translator.fold({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.appended",
+              row: {
+                rowId: 20,
+                kind: "toolCall",
+                toolName: "html_render",
+                toolCallId: "tc-html-1",
+                input: { html: "<div class='chart'>Graph</div>" },
+                status: "running",
+              },
+            },
+          ],
+        },
+      });
+
+      expect(res1.updates).toHaveLength(1);
+      expect(res1.updates[0]!.name).toBe("html_render");
+      expect(res1.updates[0]!.kind).toBe("other");
+      expect(res1.updates[0]!.status).toBe("in_progress");
+
+      // 2. Tool call completed with string output
+      const res2 = translator.fold({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.updated",
+              row: {
+                rowId: 20,
+                kind: "toolCall",
+                toolName: "html_render",
+                toolCallId: "tc-html-1",
+                status: "success",
+                output: "HTML chart rendered at height 420px",
+              },
+            },
+          ],
+        },
+      });
+
+      expect(res2.updates).toHaveLength(1);
+      const doneUpdate = res2.updates[0]!;
+      expect(doneUpdate.sessionUpdate).toBe("tool_call_update");
+      expect(doneUpdate.status).toBe("completed");
+      expect(doneUpdate.rawOutput).toBe("HTML chart rendered at height 420px");
+      expect(doneUpdate.content).toEqual([
+        { type: "content", content: { type: "text", text: "HTML chart rendered at height 420px" } },
+      ]);
+    });
+
+    it("extracts output fallback text from result, value, and JSON object", () => {
+      const translator = new FrameTranslator(() => {});
+
+      // 1. output with result property
+      const res1 = translator.fold({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.appended",
+              row: {
+                rowId: 101,
+                kind: "toolCall",
+                toolName: "custom_tool",
+                status: "success",
+                output: { result: "computed result value" },
+              },
+            },
+          ],
+        },
+      });
+      expect(res1.updates[0]!.content).toEqual([
+        { type: "content", content: { type: "text", text: "computed result value" } },
+      ]);
+
+      // 2. output with value property
+      const res2 = translator.fold({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.appended",
+              row: {
+                rowId: 102,
+                kind: "toolCall",
+                toolName: "custom_tool",
+                status: "success",
+                output: { value: "named value output" },
+              },
+            },
+          ],
+        },
+      });
+      expect(res2.updates[0]!.content).toEqual([
+        { type: "content", content: { type: "text", text: "named value output" } },
+      ]);
+
+      // 3. arbitrary output object falls back to JSON.stringify
+      const res3 = translator.fold({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.appended",
+              row: {
+                rowId: 103,
+                kind: "toolCall",
+                toolName: "custom_tool",
+                status: "success",
+                output: { customField: 42 },
+              },
+            },
+          ],
+        },
+      });
+      expect(res3.updates[0]!.content).toEqual([
+        { type: "content", content: { type: "text", text: JSON.stringify({ customField: 42 }) } },
+      ]);
+    });
+
+    it("routes pendingApproval MCP tool call into pending status and pendingInteractions", () => {
+      const translator = new FrameTranslator(() => {});
+
+      const res = translator.fold({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.appended",
+              row: {
+                rowId: 30,
+                kind: "toolCall",
+                toolName: "mcp__t3_code__preview_act",
+                title: "Click element on page",
+                toolCallId: "tc-act-1",
+                approvalInteractionId: "approval-act-99",
+                input: { action: "click", selector: "#submit-btn" },
+                status: "pendingApproval",
+              },
+            },
+          ],
+        },
+      });
+
+      expect(res.updates).toHaveLength(1);
+      const call = res.updates[0]!;
+      expect(call.sessionUpdate).toBe("tool_call");
+      expect(call.status).toBe("pending");
+      expect(call.name).toBe("mcp__t3_code__preview_act");
+      expect(call.kind).toBe("execute");
+
+      expect(res.pendingInteractions).toBeDefined();
+      expect(res.pendingInteractions).toHaveLength(1);
+      const interaction = res.pendingInteractions![0]!;
+      expect(interaction.interactionId).toBe("approval-act-99");
+      expect(interaction.kind).toBe("permission");
+      expect(interaction.payload?.toolName).toBe("mcp__t3_code__preview_act");
+      expect(interaction.payload?.summary).toBe("Click element on page");
+      expect(interaction.payload?.input).toEqual({ action: "click", selector: "#submit-btn" });
+    });
+  });
 });

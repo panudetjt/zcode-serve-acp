@@ -744,4 +744,179 @@ describe("ServeSession teardown edge", () => {
       server.stop(true);
     }
   });
+
+  test("createSession formats and forwards mcpServers in createSession and resumeSession RPC payloads", async () => {
+    const serverCalls: Array<{ channel: string; method: string; arg: unknown }> = [];
+    let resumeCallCount = 0;
+
+    const server = Bun.serve({
+      port: 0,
+      fetch(req, server) {
+        if (server.upgrade(req)) return;
+        return new Response("Not found", { status: 404 });
+      },
+      websocket: {
+        open(ws) {
+          ws.send(encodeRpcMessage([MSG.Initialize]));
+        },
+        message(ws, msg) {
+          const raw = typeof msg === "string" ? Buffer.from(msg) : new Uint8Array(msg);
+          const decoded = decodeRpcMessage(raw);
+          const type = decoded.header[0];
+          const id = decoded.header[1] as number;
+          const channel = decoded.header[2] as string;
+          const method = decoded.header[3] as string;
+
+          if (type === MSG.Promise) {
+            const arg = (decoded.body as unknown[])?.[0];
+            serverCalls.push({ channel, method, arg });
+
+            if (channel === "project" && method === "saveProject") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { project: { id: "p-mcp" } }));
+            } else if (channel === "zcode-agent" && method === "initialize") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { ok: true }));
+            } else if (channel === "zcode-session" && method === "createSession") {
+              ws.send(
+                encodeRpcMessage([MSG.PromiseSuccess, id], {
+                  sessionId: "daemon-sess-mcp-99",
+                  session: { sessionId: "daemon-sess-mcp-99", mode: "plan" },
+                  settings: {
+                    model: {
+                      current: { ref: { providerId: "zai", modelId: "glm-5" } },
+                      available: [{ ref: { providerId: "zai", modelId: "glm-5" } }],
+                    },
+                  },
+                }),
+              );
+            } else if (channel === "zcode-agent" && method === "subscribeConversationV4") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { subscribed: true }));
+            } else if (channel === "skills" && method === "list") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { skills: [] }));
+            } else if (channel === "zcode-session" && method === "resumeSession") {
+              resumeCallCount++;
+              if (resumeCallCount === 1) {
+                ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { ok: true }));
+              } else {
+                ws.send(encodeRpcMessage([MSG.PromiseError, id], { message: "resumeSession failed" }));
+              }
+            } else {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], {}));
+            }
+          }
+        },
+      },
+    });
+
+    const mockDaemon: Daemon["Service"] = {
+      connect: Effect.succeed({
+        status: { host: "localhost", port: server.port ?? 0, state: "ready" },
+        token: "tok",
+        wsPath: "/ws",
+      }),
+      readStatus: Effect.succeed({ host: "localhost", port: server.port ?? 0, state: "ready" }),
+      getCapability: () => Effect.succeed("cap"),
+    };
+
+    const prog = Effect.gen(function* () {
+      const factory = yield* ServeSessionFactory;
+      const session = yield* factory.create("/ws/mcp", {
+        onConversationFrame: () => Effect.void,
+        onChildFrame: () => Effect.void,
+        onLifecycle: () => Effect.void,
+        onRequest: () => Effect.succeed(undefined),
+        onClosed: () => Effect.void,
+      });
+
+      const mcpInput = [
+        {
+          type: "http" as const,
+          name: "t3-code",
+          url: "http://127.0.0.1:4000",
+          headers: [{ name: "Authorization", value: "Bearer secret" }],
+        },
+        {
+          type: "stdio" as const,
+          name: "cli-srv",
+          command: "/bin/srv",
+          args: ["--opt"],
+          env: [{ name: "KEY", value: "VAL" }],
+        },
+      ];
+
+      yield* session.createSession(undefined, mcpInput);
+
+      const createCall = serverCalls.find((c) => c.channel === "zcode-session" && c.method === "createSession");
+      expect(createCall).toBeDefined();
+      const createArg = createCall?.arg as { mcpServers?: unknown } | undefined;
+      expect(createArg?.mcpServers).toEqual([
+        {
+          name: "t3-code",
+          type: "http",
+          url: "http://127.0.0.1:4000",
+          headers: [{ name: "Authorization", value: "Bearer secret" }],
+          isolation: "session",
+          alwaysLoad: true,
+        },
+        {
+          name: "cli-srv",
+          command: "/bin/srv",
+          args: ["--opt"],
+          env: [{ name: "KEY", value: "VAL" }],
+          isolation: "session",
+          alwaysLoad: true,
+        },
+      ]);
+
+      // Test setMcpServers sends resumeSession with updated mcpServers
+      const updatedMcp = [
+        {
+          type: "http" as const,
+          name: "t3-code-new",
+          url: "http://127.0.0.1:4001",
+        },
+      ];
+      yield* session.setMcpServers(updatedMcp);
+
+      const resumeCall = serverCalls.find((c) => c.channel === "zcode-session" && c.method === "resumeSession");
+      expect(resumeCall).toBeDefined();
+      const resumeArg = resumeCall?.arg as { sessionId?: string; mcpServers?: unknown } | undefined;
+      expect(resumeArg?.sessionId).toBe("daemon-sess-mcp-99");
+      expect(resumeArg?.mcpServers).toEqual([
+        {
+          name: "t3-code-new",
+          type: "http",
+          url: "http://127.0.0.1:4001",
+          headers: [],
+          isolation: "session",
+          alwaysLoad: true,
+        },
+      ]);
+
+      // Calling setMcpServers again when daemon returns an error exercises the tolerate failure branch
+      yield* session.setMcpServers(updatedMcp);
+
+      // Calling setMcpServers with empty array clears servers
+      yield* session.setMcpServers([]);
+      const clearCall = serverCalls[serverCalls.length - 1];
+      expect(clearCall?.channel).toBe("zcode-session");
+      expect(clearCall?.method).toBe("resumeSession");
+      const clearArg = clearCall?.arg as { sessionId?: string; mcpServers?: unknown } | undefined;
+      expect(clearArg?.mcpServers).toEqual([]);
+
+      yield* session.dispose;
+    }).pipe(
+      Effect.provide(ServeSessionFactory.layerNoDeps),
+      Effect.provide(Layer.succeed(Daemon, mockDaemon)),
+      Effect.provide(Layer.succeed(BridgeExit, fakeBridgeExit)),
+      Effect.provide(BunSocket.layerWebSocketConstructor),
+      Effect.provide(Log.layerQuiet),
+      Effect.scoped,
+    );
+
+    try {
+      await Effect.runPromise(prog);
+    } finally {
+      server.stop(true);
+    }
+  });
 });
