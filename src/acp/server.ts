@@ -403,8 +403,8 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
           }
           const allowOpt = rawOptions[0];
           return rawArg.interactionId !== undefined
-            ? { interactionId: rawArg.interactionId, answer: allowOpt ?? { optionId: "allow" } }
-            : { answer: allowOpt ?? { optionId: "allow" } };
+            ? { interactionId: rawArg.interactionId, answer: allowOpt ?? { optionId: "allow_once" } }
+            : { answer: allowOpt ?? { optionId: "allow_once" } };
         }
         // Unknown server request — acknowledge with empty object (logged above).
         return {};
@@ -466,7 +466,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       const answer = yield* tolerate(clientRequest("session/request_permission", params), (cause) =>
         Effect.gen(function* () {
           yield* log.debug(`[interaction] request_permission threw: ${renderError(cause)}`);
-          const fallbackOpt = rawOptions[0]?.optionId ?? "allow";
+          const fallbackOpt = rawOptions[0]?.optionId ?? "allow_once";
           yield* tolerate(bridge.serve.resolveInteraction(interactionId, { optionId: fallbackOpt }), (fallback) =>
             log.debug(`[interaction] fallback resolution failed: ${renderError(fallback)}`),
           );

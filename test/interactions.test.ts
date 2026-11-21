@@ -144,6 +144,21 @@ describe("request_permission mapping", () => {
     );
     expect(extractPermissionOptionId({ outcome: { outcome: "cancelled" } }, rawOptions, mapped)).toBe("deny");
     expect(extractPermissionOptionId({ optionId: "allow" }, rawOptions, mapped)).toBe("allow");
+
+    // When rawOptions has allow_once instead of allow, normalize allow -> allow_once
+    const rawDaemonOptions = [
+      { optionId: "allow_once", kind: "allowOnce" },
+      { optionId: "deny", kind: "deny" },
+    ];
+    const mappedDaemon = mapPermissionOptions(rawDaemonOptions);
+    expect(
+      extractPermissionOptionId(
+        { outcome: { outcome: "selected", optionId: "allow" } },
+        rawDaemonOptions,
+        mappedDaemon,
+      ),
+    ).toBe("allow_once");
+    expect(extractPermissionOptionId({ optionId: "allow" }, rawDaemonOptions, mappedDaemon)).toBe("allow_once");
   });
 
   it("falls back to the first mapped option when the client returns nothing usable", () => {
@@ -156,6 +171,10 @@ describe("request_permission mapping", () => {
     const withDefaults = buildPermissionParams("sess-1", {}, "tool_123");
     expect(withDefaults.toolCall.toolCallId).toBe("tool_123");
     expect(withDefaults.options.length).toBe(2);
+    expect(withDefaults.options[0]?.optionId).toBe("allow_once");
+    expect(withDefaults.options[0]?.kind).toBe("allow_once");
+    expect(withDefaults.options[1]?.optionId).toBe("deny");
+    expect(withDefaults.options[1]?.kind).toBe("reject_once");
 
     const withCustom = buildPermissionParams(
       "sess-1",

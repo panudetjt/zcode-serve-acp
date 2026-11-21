@@ -84,6 +84,9 @@ export function extractPermissionOptionId(
   if (!chosenOptionId && mappedOptions.length > 0) {
     chosenOptionId = mappedOptions[0]?.optionId;
   }
+  if (chosenOptionId === "allow" && !rawOptions.some((o) => o.optionId === "allow")) {
+    chosenOptionId = "allow_once";
+  }
   return chosenOptionId;
 }
 
@@ -325,7 +328,7 @@ export function buildPermissionParams(
       options.length > 0
         ? options
         : [
-            { optionId: "allow", name: "Allow", kind: "allow_once" },
+            { optionId: "allow_once", name: "Allow once", kind: "allow_once" },
             { optionId: "deny", name: "Deny", kind: "reject_once" },
           ],
   };
