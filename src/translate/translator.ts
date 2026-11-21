@@ -267,7 +267,7 @@ const readToolRow = (row: Row): ToolRow => ({
   toolCallId: str(row.raw, "toolCallId"),
   inputText: str(row.raw, "inputText"),
   input: row.raw["input"],
-  output: recAt(row.raw, "output"),
+  output: recAt(row.raw, "output") ?? (typeof row.raw["output"] === "string" ? { text: row.raw["output"] } : undefined),
   outputPreview: recAt(row.raw, "outputPreview"),
   error: recAt(row.raw, "error"),
   backgrounded: bool(row.raw, "backgrounded"),
@@ -1031,7 +1031,14 @@ export class FrameTranslator {
           str(tool.outputPreview, "fullText") ??
           str(tool.outputPreview, "text") ??
           tool.progressPreviewLine ??
-          tool.error?.["message"];
+          tool.error?.["message"] ??
+          (tool.output !== undefined && tool.output["text"] === undefined
+            ? typeof tool.output["result"] === "string"
+              ? tool.output["result"]
+              : typeof tool.output["value"] === "string"
+                ? tool.output["value"]
+                : JSON.stringify(tool.output)
+            : undefined);
         const content: ToolCallContentItem[] | undefined =
           typeof outputText === "string" && outputText.length > 0
             ? [{ type: "content", content: { type: "text", text: outputText } }]

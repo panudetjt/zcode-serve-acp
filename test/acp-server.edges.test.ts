@@ -92,6 +92,7 @@ const makeFixture = (script: SessionScript = {}, depsOverride: Partial<AcpServer
             return { resolved: true };
           }) as never),
     setMode: () => Effect.void,
+    setMcpServers: () => Effect.void,
     sendCommand: () => Effect.succeed({}),
     listSubagents: () => Effect.succeed({ revision: 0, running: [], ended: { total: 0, items: [] } }),
     subscribeChild: () => Effect.void,

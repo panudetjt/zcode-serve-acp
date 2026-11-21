@@ -58,12 +58,89 @@ describe("AcpServer Effect handler", () => {
     const res = (await Effect.runPromise(server.handle("initialize", {}))) as {
       protocolVersion: number;
       agentInfo: { name: string; version: string };
-      agentCapabilities: { loadSession: boolean };
+      agentCapabilities: { loadSession: boolean; mcpCapabilities?: { http: boolean; sse: boolean } };
     };
 
     expect(res.protocolVersion).toBe(1);
     expect(res.agentInfo.name).toBe("zcode-serve-acp");
     expect(res.agentCapabilities.loadSession).toBe(true);
+    expect(res.agentCapabilities.mcpCapabilities).toEqual({ http: true, sse: true });
+  });
+
+  test("session/new and session/load accept mcpServers and pass them to ServeSession", async () => {
+    let capturedCreateMcpServers: any;
+    let capturedSetMcpServers: any;
+
+    const mockSessionWithMcp = {
+      createSession: (_modelSel: any, mcpServers: any) => {
+        capturedCreateMcpServers = mcpServers;
+        return Effect.succeed({
+          models: sampleModels,
+          currentModel: "zai-provider/GLM-5.3",
+          skills: [],
+          currentMode: "default",
+        });
+      },
+      setMcpServers: (mcpServers: any) => {
+        capturedSetMcpServers = mcpServers;
+        return Effect.void;
+      },
+      sendPrompt: () => Effect.succeed({ inputId: "mock-inp" }),
+      setMode: () => Effect.void,
+      sendCommand: () => Effect.void,
+      dispose: Effect.void,
+    } as unknown as ServeSession;
+
+    const srv = AcpServer.make({
+      sessions: {
+        create: () => Effect.succeed(mockSessionWithMcp),
+      } as unknown as ServeSessionFactory["Service"],
+      log: mockLog,
+      emitNotification: () => Effect.void,
+      clientRequest: () => Effect.die(new Error("not implemented")),
+      fallbackModels: Effect.succeed(sampleModels),
+    });
+
+    const mcpServers = [
+      {
+        type: "http",
+        name: "t3-code",
+        url: "http://127.0.0.1:51234",
+        headers: [{ name: "Authorization", value: "Bearer token-1" }],
+      },
+    ];
+
+    // session/new passes mcpServers to createSession
+    const newRes = (await Effect.runPromise(
+      srv.handle("session/new", {
+        cwd: "/tmp/workspace",
+        sessionId: "sess-mcp-test",
+        mcpServers,
+      }),
+    )) as { sessionId: string };
+
+    expect(newRes.sessionId).toBe("sess-mcp-test");
+    expect(capturedCreateMcpServers).toEqual(mcpServers);
+
+    // session/load on existing session updates mcpServers via setMcpServers
+    const updatedMcpServers = [
+      {
+        type: "http",
+        name: "t3-code",
+        url: "http://127.0.0.1:59999",
+        headers: [{ name: "Authorization", value: "Bearer token-2" }],
+      },
+    ];
+    const loadRes = (await Effect.runPromise(
+      srv.handle("session/load", {
+        cwd: "/tmp/workspace",
+        sessionId: "sess-mcp-test",
+        mcpServers: updatedMcpServers,
+      }),
+    )) as { sessionId: string };
+
+    expect(loadRes.sessionId).toBe("sess-mcp-test");
+    expect(capturedSetMcpServers).toEqual(updatedMcpServers);
   });
 
   test("auth/authenticate returns empty result (daemon owns credentials)", async () => {
@@ -543,6 +620,7 @@ describe("AcpServer Effect handler", () => {
         }),
       setMode: () => Effect.fail(new Error("setMode rejected")),
       sendCommand: () => Effect.fail(new Error("stop rejected")),
+      setMcpServers: () => Effect.fail(new Error("setMcpServers rejected")),
       dispose: Effect.void,
     } as unknown as ServeSession;
 
@@ -557,6 +635,15 @@ describe("AcpServer Effect handler", () => {
     });
 
     await Effect.runPromise(s.handle("session/new", { sessionId: "fail-sess" }));
+
+    // 0. session/load with mcpServers failure tolerated
+    const loadMcpRes = await Effect.runPromise(
+      s.handle("session/load", {
+        sessionId: "fail-sess",
+        mcpServers: [{ type: "http", name: "t3-fail", url: "http://localhost:3000" }],
+      }),
+    );
+    expect(loadMcpRes).toBeDefined();
 
     // 1. session/set_mode failure tolerated
     const modeRes = await Effect.runPromise(s.handle("session/set_mode", { sessionId: "fail-sess", modeId: "fast" }));

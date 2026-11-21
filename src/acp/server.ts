@@ -30,8 +30,10 @@ import {
   buildConfigOptions,
   buildInitializeResult,
   buildAvailableCommands,
+  decodeMcpServers,
   decodePrompt,
   rewriteSkillMention,
+  type McpServer,
   type ModelSelection,
 } from "./protocol.ts";
 import {
@@ -52,6 +54,7 @@ interface BridgeSession {
   readonly translator: FrameTranslator;
   models: AvailableModel[];
   skills: DiscoveredSkill[];
+  mcpServers?: McpServer[];
   slashCommands?: Array<{ name: string; description?: string }>;
   modelSelection?: ModelSelection;
   thoughtLevel?: string;
@@ -545,10 +548,11 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
   const initializeNewSession = (
     method: string,
     bridge: BridgeSession,
+    mcpServers?: McpServer[],
   ): Effect.Effect<unknown, AcpMethodError | PlatformError> =>
     Effect.gen(function* () {
       const created = yield* bridge.serve
-        .createSession()
+        .createSession(undefined, mcpServers)
         .pipe(Effect.mapError((cause) => new AcpMethodError({ method, message: cause.message })));
       let models = created.models;
       let current = created.currentModel;
@@ -645,7 +649,16 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
           const existingId =
             typeof params.sessionId === "string" && params.sessionId !== "" ? params.sessionId : undefined;
           const bridge = existingId !== undefined ? bridgeSessions.get(existingId) : undefined;
+          const mcpServers = decodeMcpServers(params.mcpServers);
           if (bridge !== undefined) {
+            if (mcpServers.length > 0) {
+              bridge.mcpServers = mcpServers;
+              if (typeof bridge.serve.setMcpServers === "function") {
+                yield* tolerate(bridge.serve.setMcpServers(mcpServers), (cause) =>
+                  log.debug(`[${method}] setMcpServers failed: ${renderError(cause)}`),
+                );
+              }
+            }
             yield* advertiseCommands(bridge);
             return {
               sessionId: bridge.id,
@@ -660,7 +673,10 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
             };
           }
           const created = yield* createBridgeSession(cwd, existingId);
-          return yield* initializeNewSession(method, created);
+          if (mcpServers.length > 0) {
+            created.mcpServers = mcpServers;
+          }
+          return yield* initializeNewSession(method, created, mcpServers);
         }
         case "session/prompt": {
           const sessionId = String(params.sessionId ?? "");

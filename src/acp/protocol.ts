@@ -5,7 +5,7 @@
  * These shapes are the drop-in wire contract with the ACP client (T3 Code) —
  * see the pre-rewrite acp/server.ts for where each quirk comes from.
  */
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { DecodeError } from "../errors.ts";
 import type { DiscoveredSkill } from "../serve/session.ts";
 
@@ -18,6 +18,7 @@ export interface InitializeResult {
     loadSession: boolean;
     sessionCapabilities: { resume: Record<string, never> };
     promptCapabilities: { audio: boolean; embeddedContext: boolean; image: boolean };
+    mcpCapabilities: { http: boolean; sse: boolean };
   };
   authMethods: Array<{ id: string; name: string; description: string }>;
 }
@@ -29,6 +30,7 @@ export const buildInitializeResult = (): InitializeResult => ({
     loadSession: true,
     sessionCapabilities: { resume: {} },
     promptCapabilities: { audio: false, embeddedContext: false, image: true },
+    mcpCapabilities: { http: true, sse: true },
   },
   authMethods: [
     {
@@ -38,6 +40,63 @@ export const buildInitializeResult = (): InitializeResult => ({
     },
   ],
 });
+
+// ---------- MCP servers ----------
+
+export const HeaderOrEnvEntry = Schema.Struct({
+  name: Schema.String,
+  value: Schema.String,
+});
+export type HeaderOrEnvEntry = typeof HeaderOrEnvEntry.Type;
+
+export const McpServerHttp = Schema.Struct({
+  type: Schema.Literal("http"),
+  name: Schema.String,
+  url: Schema.String,
+  headers: Schema.optional(Schema.Array(HeaderOrEnvEntry)),
+  _meta: Schema.optional(Schema.Unknown),
+});
+export type McpServerHttp = typeof McpServerHttp.Type;
+
+export const McpServerSse = Schema.Struct({
+  type: Schema.Literal("sse"),
+  name: Schema.String,
+  url: Schema.String,
+  headers: Schema.optional(Schema.Array(HeaderOrEnvEntry)),
+  _meta: Schema.optional(Schema.Unknown),
+});
+export type McpServerSse = typeof McpServerSse.Type;
+
+export const McpServerStdio = Schema.Struct({
+  type: Schema.optional(Schema.Literal("stdio")),
+  name: Schema.String,
+  command: Schema.String,
+  args: Schema.optional(Schema.Array(Schema.String)),
+  env: Schema.optional(Schema.Array(HeaderOrEnvEntry)),
+  _meta: Schema.optional(Schema.Unknown),
+});
+export type McpServerStdio = typeof McpServerStdio.Type;
+
+export const McpServerSchema = Schema.Union([McpServerHttp, McpServerSse, McpServerStdio]);
+export type McpServer = typeof McpServerSchema.Type;
+
+const decodeMcpServerOption = Schema.decodeUnknownOption(McpServerSchema);
+
+/**
+ * Validates and decodes MCP servers from ACP params. Malformed or foreign entries
+ * are filtered out safely without dropping the session.
+ */
+export function decodeMcpServers(raw: unknown): McpServer[] {
+  if (!Array.isArray(raw)) return [];
+  const valid: McpServer[] = [];
+  for (const item of raw) {
+    const parsed = decodeMcpServerOption(item);
+    if (Option.isSome(parsed)) {
+      valid.push(parsed.value);
+    }
+  }
+  return valid;
+}
 
 export const MODES = ["plan", "build", "edit", "guarded", "yolo"] as const;
 

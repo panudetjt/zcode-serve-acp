@@ -149,7 +149,13 @@ describe("Channel recovery (issue #5)", () => {
           }),
       });
 
-      const created = yield* session.createSession();
+      const created = yield* session.createSession(undefined, [
+        {
+          type: "http",
+          name: "t3-code",
+          url: "http://localhost:3000",
+        },
+      ]);
       expect(created.daemonSessionId).toBe("daemon-sess-1");
 
       // The daemon "restarts": old process dies (socket half-opens then
@@ -183,6 +189,7 @@ describe("Channel recovery (issue #5)", () => {
     // server2 saw the full re-attach workflow: capability-backed dial →
     // initialize replay → conversation re-subscribe → the prompt itself.
     const methods2 = calls2.map((c) => c.method);
+    expect(methods2).toContain("resumeSession");
     expect(methods2).toContain("subscribeConversationV4");
     expect(methods2).toContain("helloConversationV4");
     expect(methods2).toContain("sendPrompt");
