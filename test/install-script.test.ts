@@ -167,7 +167,7 @@ describe("install.sh", () => {
     chmodSync(dest, 0o755);
     writeFileSync(path.join(backups, OLD), "restored");
 
-    const child = Bun.spawn([dest, "-c", "while :; do read -r -t 1 _ || :; done"], {
+    const child = Bun.spawn([dest, "-c", "while :; do sleep 1; done"], {
       stdin: "ignore",
       stdout: "ignore",
       stderr: "ignore",
@@ -180,7 +180,7 @@ describe("install.sh", () => {
       await Bun.sleep(100);
       expect(isAlive(child.pid)).toBe(false);
     } finally {
-      child.kill();
+      child.kill("SIGKILL");
     }
   });
 
@@ -197,7 +197,7 @@ describe("install.sh", () => {
     symlinkSync(dest, link);
     writeFileSync(path.join(backups, OLD), "restored");
 
-    const child = Bun.spawn([link, "-c", "while :; do read -r -t 1 _ || :; done"], {
+    const child = Bun.spawn([link, "-c", "while :; do sleep 1; done"], {
       stdin: "ignore",
       stdout: "ignore",
       stderr: "ignore",
@@ -225,7 +225,7 @@ describe("install.sh", () => {
     chmodSync(dest, 0o755);
     writeFileSync(path.join(backups, OLD), "restored");
 
-    const child = Bun.spawn([dest, "-c", "trap '' TERM; while :; do read -r -t 1 _ || :; done"], {
+    const child = Bun.spawn([dest, "-c", "trap '' TERM; while :; do sleep 1; done"], {
       stdin: "ignore",
       stdout: "ignore",
       stderr: "ignore",
@@ -240,7 +240,9 @@ describe("install.sh", () => {
       await Bun.sleep(100);
       expect(isAlive(child.pid)).toBe(false);
     } finally {
-      child.kill();
+      // SIGTERM is trapped by the stub by design — only SIGKILL guarantees
+      // cleanup if an assertion above throws before the script's own SIGKILL.
+      child.kill("SIGKILL");
     }
   }, 15_000);
 
@@ -255,7 +257,7 @@ describe("install.sh", () => {
     chmodSync(dest, 0o755);
     writeFileSync(path.join(backups, OLD), "restored");
 
-    const child = Bun.spawn([dest, "-c", "trap '' TERM; while :; do read -r -t 1 _ || :; done"], {
+    const child = Bun.spawn([dest, "-c", "trap '' TERM; while :; do sleep 1; done"], {
       stdin: "ignore",
       stdout: "ignore",
       stderr: "ignore",
@@ -269,7 +271,9 @@ describe("install.sh", () => {
       expect(result.err).toContain("survived SIGKILL");
       expect(isAlive(child.pid)).toBe(true);
     } finally {
-      child.kill();
+      // The stub traps SIGTERM and must stay alive through the script; only
+      // SIGKILL here stops it — a plain kill() leaked a spinning process per run.
+      child.kill("SIGKILL");
     }
   });
 
