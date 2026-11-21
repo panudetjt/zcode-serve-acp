@@ -156,6 +156,11 @@ describe("AcpServer Effect handler", () => {
         (e.params as { update?: { sessionUpdate?: string } }).update?.sessionUpdate === "available_commands_update",
     );
     expect(resumeUpdates.length).toBeGreaterThanOrEqual(1);
+    expect(resumeUpdates[0]).toBeDefined();
+    const resumeCommands = (resumeUpdates[0]!.params as { update: { availableCommands: Array<{ name: string }> } })
+      .update.availableCommands;
+    expect(resumeCommands.some((c) => c.name === "goal")).toBe(true);
+    expect(resumeCommands.some((c) => c.name === "$test-skill")).toBe(true);
 
     // 3. session/load on existing bridge also emits available_commands_update
     emitted.length = 0;
@@ -166,6 +171,31 @@ describe("AcpServer Effect handler", () => {
         (e.params as { update?: { sessionUpdate?: string } }).update?.sessionUpdate === "available_commands_update",
     );
     expect(loadUpdates.length).toBeGreaterThanOrEqual(1);
+    expect(loadUpdates[0]).toBeDefined();
+    const loadCommands = (loadUpdates[0]!.params as { update: { availableCommands: Array<{ name: string }> } }).update
+      .availableCommands;
+    expect(loadCommands.some((c) => c.name === "goal")).toBe(true);
+    expect(loadCommands.some((c) => c.name === "$test-skill")).toBe(true);
+
+    // 4. session/prompt turn start also emits available_commands_update
+    emitted.length = 0;
+    await Effect.runPromise(
+      Effect.forkDetach(
+        cmdServer.handle("session/prompt", { sessionId: "cmd-sess", prompt: [{ type: "text", text: "hello" }] }),
+      ),
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    const promptUpdates = emitted.filter(
+      (e) =>
+        e.method === "session/update" &&
+        (e.params as { update?: { sessionUpdate?: string } }).update?.sessionUpdate === "available_commands_update",
+    );
+    expect(promptUpdates.length).toBeGreaterThanOrEqual(1);
+    expect(promptUpdates[0]).toBeDefined();
+    const promptCommands = (promptUpdates[0]!.params as { update: { availableCommands: Array<{ name: string }> } })
+      .update.availableCommands;
+    expect(promptCommands.some((c) => c.name === "goal")).toBe(true);
+    expect(promptCommands.some((c) => c.name === "$test-skill")).toBe(true);
   });
 
   test("unknown method fails with AcpMethodError", async () => {

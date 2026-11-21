@@ -522,13 +522,25 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       },
     });
 
-  const emitAvailableCommandsDelayed = (bridge: BridgeSession): Effect.Effect<void> =>
-    Effect.forkDetach(
-      Effect.sleep("100 millis").pipe(
-        Effect.andThen(emitAvailableCommands(bridge)),
-        Effect.catchCause((cause) => log.debug(`[commands] delayed update failed: ${renderError(cause)}`)),
-      ),
-    ).pipe(Effect.asVoid);
+  /**
+   * Advertises available slash commands and skills to the ACP client.
+   *
+   * Emits immediately, and forks a detached 100ms delayed emission.
+   * The delay is required because T3 Code's AcpSessionRuntime gates session/load
+   * (`loadingThisSession = true`) and drops any session/update notifications received
+   * before the session/load or session/new RPC response returns.
+   * See .repos/t3code/packages/provider-acp/src/server/AcpSessionRuntime.ts
+   */
+  const advertiseCommands = (bridge: BridgeSession): Effect.Effect<void, PlatformError> =>
+    Effect.gen(function* () {
+      yield* emitAvailableCommands(bridge);
+      yield* Effect.forkDetach(
+        Effect.sleep("100 millis").pipe(
+          Effect.andThen(emitAvailableCommands(bridge)),
+          Effect.catchCause((cause) => log.debug(`[commands] delayed update failed: ${renderError(cause)}`)),
+        ),
+      );
+    });
 
   const initializeNewSession = (
     method: string,
@@ -565,8 +577,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       yield* log.debug(
         `[${method}] daemon=${created.daemonSessionId} models=${modelsAcp.availableModels.map((m) => m.modelId).join(", ")} skills=${bridge.skills.length}`,
       );
-      yield* emitAvailableCommands(bridge);
-      yield* emitAvailableCommandsDelayed(bridge);
+      yield* advertiseCommands(bridge);
       const rawProj = (created.raw as { projection?: { contextUsed?: number; contextWindow?: number } } | undefined)
         ?.projection;
       const initialUsed = rawProj?.contextUsed ?? 0;
@@ -635,8 +646,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
             typeof params.sessionId === "string" && params.sessionId !== "" ? params.sessionId : undefined;
           const bridge = existingId !== undefined ? bridgeSessions.get(existingId) : undefined;
           if (bridge !== undefined) {
-            yield* emitAvailableCommands(bridge);
-            yield* emitAvailableCommandsDelayed(bridge);
+            yield* advertiseCommands(bridge);
             return {
               sessionId: bridge.id,
               models: modelsToAcp(
