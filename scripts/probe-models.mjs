@@ -82,9 +82,4 @@ const AppLayer = ServeSessionFactory.layerNoDeps.pipe(
   Layer.provide(PlatformLayer),
 );
 
-BunRuntime.runMain(
-  Effect.provide(
-    Main,
-    Layer.merge(AppLayer, PlatformLayer),
-  ),
-);
+BunRuntime.runMain(Effect.provide(Main, Layer.merge(AppLayer, PlatformLayer)));
