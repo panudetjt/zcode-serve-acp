@@ -23,6 +23,13 @@ const str = (value: unknown): string | undefined => (typeof value === "string" ?
 
 const STR = (r: Record<string, unknown> | undefined, key: string): string | undefined => str(r?.[key]);
 
+/**
+ * Default daemon option id for the "allow" action — the daemon recognises
+ * `allow_once` (or camelCase `allowOnce`), **not** bare `allow`.  Used as
+ * the fallback whenever no raw option list is available.
+ */
+export const DEFAULT_ALLOW_OPTION_ID = "allow_once" as const;
+
 export interface MappedPermissionOption {
   optionId: string;
   name: string;
@@ -83,6 +90,9 @@ export function extractPermissionOptionId(
   }
   if (!chosenOptionId && mappedOptions.length > 0) {
     chosenOptionId = mappedOptions[0]?.optionId;
+  }
+  if (chosenOptionId === "allow" && !rawOptions.some((o) => o.optionId === "allow")) {
+    chosenOptionId = DEFAULT_ALLOW_OPTION_ID;
   }
   return chosenOptionId;
 }
@@ -325,7 +335,7 @@ export function buildPermissionParams(
       options.length > 0
         ? options
         : [
-            { optionId: "allow", name: "Allow", kind: "allow_once" },
+            { optionId: DEFAULT_ALLOW_OPTION_ID, name: "Allow once", kind: "allow_once" },
             { optionId: "deny", name: "Deny", kind: "reject_once" },
           ],
   };
