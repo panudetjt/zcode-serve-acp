@@ -1404,4 +1404,93 @@ describe("FrameTranslator child-session drill-down (subagent cards)", () => {
       ].join("\n"),
     );
   });
+
+  it("handles formatSubagentsSummary overflow (>12) and title fallback", () => {
+    const translator = new FrameTranslator(() => {});
+    const running = Array.from({ length: 15 }, (_, i) => ({
+      childSessionId: `run-${i}`,
+      subagentType: "Explore",
+      // Leave half without explicit title to test the subagentType fallback
+      ...(i % 2 === 0 ? { title: `Task ${i}` } : {}),
+      status: "running",
+    }));
+    const text = translator.formatSubagentsSummary({
+      revision: 1,
+      running,
+      ended: { total: 0, items: [] },
+    });
+    expect(text).toBeDefined();
+    expect(text).toContain("Subagents — 15 running, 0 done");
+    expect(text).toContain("… and 3 more");
+    expect(text).toContain("▸ Explore: Explore"); // fallback to subagentType
+  });
+
+  it("ignores non-summaryText row.delta on subagent rows", () => {
+    const translator = new FrameTranslator(() => {});
+    translator.fold({
+      payload: { kind: "deltas", deltas: [spawnSubagentRow()] },
+    });
+    // delta on a different path, e.g. status or other metadata
+    const res = translator.fold({
+      payload: {
+        kind: "deltas",
+        deltas: [{ op: "row.delta", rowId: 10, path: "status", append: "failed" }],
+      },
+    });
+    // Should NOT emit a tool_call_update treating "failed" as summaryText
+    expect(res.updates).toEqual([]);
+  });
+
+  it("settles cross-filled children even when terminal row omits childSessionId", () => {
+    const translator = new FrameTranslator(() => {});
+    translator.fold({
+      payload: {
+        kind: "deltas",
+        deltas: [
+          { op: "row.appended", row: { rowId: 4, kind: "toolCall", toolCallId: "agent-tc-cross", title: "Task" } },
+        ],
+      },
+    });
+    expect(translator.bindChildSession("child-cross", "agent-tc-cross")).toBe(true);
+
+    translator.foldChild("child-cross", {
+      payload: {
+        kind: "deltas",
+        deltas: [{ op: "row.appended", row: { rowId: 1, kind: "assistantText", text: "child work" } }],
+      },
+    });
+
+    // Terminal row has parentToolCallId but NO childSessionId
+    const settle = translator.fold({
+      payload: {
+        kind: "deltas",
+        deltas: [
+          {
+            op: "row.upserted",
+            row: {
+              rowId: 20,
+              kind: "subagent",
+              parentToolCallId: "agent-tc-cross",
+              status: "success",
+              summaryText: "Finished without childSessionId on row",
+            },
+          },
+        ],
+      },
+    });
+    expect(settle.settledChildren).toEqual(["child-cross"]);
+    const completedUpdate = settle.updates.find((u) => u.status === "completed");
+    expect(completedUpdate).toBeDefined();
+    expect((completedUpdate!.rawOutput as { text: string }).text).toBe("child work");
+  });
+
+  it("settleChild marks child settled and releases its output buffer", () => {
+    const translator = new FrameTranslator(() => {});
+    translator.fold({
+      payload: { kind: "deltas", deltas: [spawnSubagentRow()] },
+    });
+    expect(translator.settleChild("child-1")).toBe(true);
+    expect(translator.settleChild("child-1")).toBe(false); // already settled
+    expect(translator.settleChild("unknown")).toBe(false);
+  });
 });

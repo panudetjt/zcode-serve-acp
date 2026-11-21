@@ -310,6 +310,7 @@ export class FrameTranslator {
   // child rows）" (server-core.js 3.19.0). This bridge subscribes the child
   // topic itself and folds child frames via foldChild into the parent card.
   private childTool = new Map<string, string>(); // childSessionId → parent card toolCallId
+  private toolChild = new Map<string, string>(); // parent card toolCallId → childSessionId
   private childTitle = new Map<string, string>(); // childSessionId → parent card title
   private childSettled = new Set<string>();
   private childOutput = new Map<string, string>(); // childSessionId → accumulated activity text
@@ -327,6 +328,10 @@ export class FrameTranslator {
     this.pendingInteractionsCount = 0;
     this.activeItemIds.clear();
     this.toolOutput.clear();
+    this.childRowKind.clear();
+    this.childRowText.clear();
+    this.childToolLineDrawn.clear();
+    this.childFailLineDrawn.clear();
   }
 
   getLatestActiveToolCallId(): string | undefined {
@@ -483,11 +488,25 @@ export class FrameTranslator {
     for (const info of this.rowTool.values()) {
       if (info.toolCallId === toolCallId) {
         this.childTool.set(childSessionId, toolCallId);
+        this.toolChild.set(toolCallId, childSessionId);
         this.childTitle.set(childSessionId, info.title);
         return true;
       }
     }
     return false;
+  }
+
+  /**
+   * Mark a child session settled (e.g. from session/subagents ended list) and
+   * clean up its output buffer. Returns true if the child was known and not
+   * previously settled.
+   */
+  settleChild(childSessionId: string): boolean {
+    if (childSessionId === "" || this.childSettled.has(childSessionId)) return false;
+    if (!this.childTool.has(childSessionId)) return false;
+    this.childSettled.add(childSessionId);
+    this.childOutput.delete(childSessionId);
+    return true;
   }
 
   /**
@@ -702,7 +721,7 @@ export class FrameTranslator {
                 sessionUpdate: isThought ? "agent_thought_chunk" : "agent_message_chunk",
                 content: { type: "text", text: appendText },
               });
-            } else {
+            } else if (path === "summaryText") {
               // summaryText streams as a row path (streamablePathSchema,
               // server-core.js 3.19.0:4377) — surface it on the card as it
               // arrives instead of waiting for the next full row upsert.
@@ -844,11 +863,16 @@ export class FrameTranslator {
         // Drill-down contract (see child fields above): the row carries the
         // child conversation id once the daemon knows it — surface it so the
         // caller subscribes conversation/<childSessionId> and folds child
-        // frames into this card.
-        const childSessionId = str(row.raw, "childSessionId");
+        // frames into this card. Fall back to toolChild for cross-filled bindings.
+        const rawChildSessionId = str(row.raw, "childSessionId");
+        const childSessionId =
+          rawChildSessionId !== undefined && rawChildSessionId !== ""
+            ? rawChildSessionId
+            : this.toolChild.get(toolCallId);
         if (childSessionId !== undefined && childSessionId !== "") {
           if (!this.childTool.has(childSessionId)) {
             this.childTool.set(childSessionId, toolCallId);
+            this.toolChild.set(toolCallId, childSessionId);
             this.childTitle.set(childSessionId, title);
             if (!this.childSettled.has(childSessionId)) newChildren.push(childSessionId);
           }

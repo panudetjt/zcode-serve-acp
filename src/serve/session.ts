@@ -210,6 +210,8 @@ const makeSession = <E>(
     // Child conversation topics subscribed for live subagent drill-down — also
     // the routing table for the frame listener below.
     const childTopics = new Set<string>();
+    const inFlightSubscribes = new Set<string>();
+    const cancelledSubscribes = new Set<string>();
 
     const ensureConnection: Effect.Effect<DaemonConnection, SessionError> = Effect.gen(function* () {
       const existing = yield* Ref.get(connectionRef);
@@ -328,6 +330,17 @@ const makeSession = <E>(
           });
 
         const topic = `conversation/${daemonSessionId}`;
+        const extractFrameTopic = (p: unknown): string | undefined => {
+          const rec = p as { topic?: string; frame?: { topic?: string } } | undefined;
+          return rec?.frame?.topic ?? rec?.topic;
+        };
+        const extractChildSessionId = (topicStr: string | undefined): string | undefined => {
+          if (typeof topicStr === "string" && topicStr.startsWith("conversation/")) {
+            return topicStr.slice("conversation/".length);
+          }
+          return undefined;
+        };
+
         // The daemon pushes workspace-wide frames: every v4/conversation/frame
         // notification it receives is fired into the per-workspace emitter
         // (server-core.js 3.19.0:62503-62539), so frames of child conversations
@@ -340,23 +353,15 @@ const makeSession = <E>(
         yield* registerListener(
           "onDynamicConversationFrame",
           (payload) => {
-            const p = payload as { topic?: string; frame?: { topic?: string } } | undefined;
-            const frameTopic = p?.frame?.topic ?? p?.topic;
+            const frameTopic = extractFrameTopic(payload);
             if (frameTopic === undefined || frameTopic === topic) return true;
-            return (
-              typeof frameTopic === "string" &&
-              frameTopic.startsWith("conversation/") &&
-              childTopics.has(frameTopic.slice("conversation/".length))
-            );
+            const childId = extractChildSessionId(frameTopic);
+            return childId !== undefined && childTopics.has(childId);
           },
           (payload) => {
-            const p = payload as { topic?: string; frame?: { topic?: string } } | undefined;
-            const frameTopic = p?.frame?.topic ?? p?.topic;
+            const frameTopic = extractFrameTopic(payload);
             if (frameTopic === undefined || frameTopic === topic) return handlers.onConversationFrame(payload);
-            const childId =
-              typeof frameTopic === "string" && frameTopic.startsWith("conversation/")
-                ? frameTopic.slice("conversation/".length)
-                : undefined;
+            const childId = extractChildSessionId(frameTopic);
             if (childId !== undefined && childTopics.has(childId)) return handlers.onChildFrame(childId, payload);
             return Effect.void;
           },
@@ -533,37 +538,25 @@ const makeSession = <E>(
 
     const subscribeChild = (childSessionId: string): Effect.Effect<void, ServeError> =>
       Effect.gen(function* () {
-        if (childTopics.has(childSessionId)) return;
-        const { workspace } = yield* requireDaemonSession;
-        const channel = yield* getChannel;
-        yield* channel.call(
-          "zcode-agent",
-          "subscribeConversationV4",
-          {
-            sessionId: childSessionId,
-            workspacePath: workspace.workspacePath,
-            workspaceIdentity: workspace.workspaceIdentity,
-            visibility: "background",
-          },
-          30_000,
-        );
-        // Routed into childTopics only on success — a failed subscribe leaves
-        // the child retryable on the next row/RPC sighting.
-        childTopics.add(childSessionId);
-        yield* log.debug(`[session] subscribed child conversation ${childSessionId}`);
-      });
-
-    const unsubscribeChild = (childSessionId: string): Effect.Effect<void> =>
-      tolerate(
-        Effect.gen(function* () {
-          if (!childTopics.has(childSessionId)) return;
-          childTopics.delete(childSessionId);
+        if (childTopics.has(childSessionId) || inFlightSubscribes.has(childSessionId)) return;
+        inFlightSubscribes.add(childSessionId);
+        try {
           const { workspace } = yield* requireDaemonSession;
-          // unsubscribeConversationV4 resolves the remembered route from the
-          // sessionId/workspace args (server-core.js 3.19.0:62069) — no
-          // subscriptionId to carry.
-          yield* Effect.flatMap(getChannel, (channel) =>
-            channel.call(
+          const channel = yield* getChannel;
+          yield* channel.call(
+            "zcode-agent",
+            "subscribeConversationV4",
+            {
+              sessionId: childSessionId,
+              workspacePath: workspace.workspacePath,
+              workspaceIdentity: workspace.workspaceIdentity,
+              visibility: "background",
+            },
+            30_000,
+          );
+          if (cancelledSubscribes.has(childSessionId)) {
+            cancelledSubscribes.delete(childSessionId);
+            yield* channel.call(
               "zcode-agent",
               "unsubscribeConversationV4",
               {
@@ -572,7 +565,39 @@ const makeSession = <E>(
                 workspaceIdentity: workspace.workspaceIdentity,
               },
               15_000,
-            ),
+            );
+            return;
+          }
+          childTopics.add(childSessionId);
+          yield* log.debug(`[session] subscribed child conversation ${childSessionId}`);
+        } finally {
+          inFlightSubscribes.delete(childSessionId);
+        }
+      });
+
+    const unsubscribeChild = (childSessionId: string): Effect.Effect<void> =>
+      tolerate(
+        Effect.gen(function* () {
+          if (inFlightSubscribes.has(childSessionId)) {
+            cancelledSubscribes.add(childSessionId);
+          }
+          if (!childTopics.has(childSessionId)) return;
+          childTopics.delete(childSessionId);
+          cancelledSubscribes.delete(childSessionId);
+          const { workspace } = yield* requireDaemonSession;
+          const channel = yield* getChannel;
+          // unsubscribeConversationV4 resolves the remembered route from the
+          // sessionId/workspace args (server-core.js 3.19.0:62069) — no
+          // subscriptionId to carry.
+          yield* channel.call(
+            "zcode-agent",
+            "unsubscribeConversationV4",
+            {
+              sessionId: childSessionId,
+              workspacePath: workspace.workspacePath,
+              workspaceIdentity: workspace.workspaceIdentity,
+            },
+            15_000,
           );
           yield* log.debug(`[session] unsubscribed child conversation ${childSessionId}`);
         }),
@@ -771,48 +796,66 @@ const decodeSkills = (result: unknown): DiscoveredSkill[] => {
     });
 };
 
+const SubagentEntryShape = Schema.Struct({
+  childSessionId: Schema.String,
+  subagentType: Schema.String,
+  status: Schema.String,
+  toolCallId: Schema.optional(Schema.String),
+  title: Schema.optional(Schema.String),
+  summary: Schema.optional(Schema.String),
+});
+const decodeSubagentEntryShape = Schema.decodeUnknownOption(SubagentEntryShape);
+
+const SubagentsSnapshotShape = Schema.Struct({
+  revision: Schema.optional(Schema.Finite),
+  childSessionIds: Schema.optional(Schema.Array(Schema.String)),
+  running: Schema.optional(Schema.Array(Schema.Unknown)),
+  ended: Schema.optional(
+    Schema.Struct({
+      total: Schema.optional(Schema.Finite),
+      items: Schema.optional(Schema.Array(Schema.Unknown)),
+      nextCursor: Schema.optional(Schema.String),
+    }),
+  ),
+});
+const decodeSubagentsSnapshotShape = Schema.decodeUnknownOption(SubagentsSnapshotShape);
+
 /**
  * Tolerant `session/subagents` decode — the result arrives as
  * `{ revision, childSessionIds, running[], ended: { total, items, nextCursor? }
  * }` (see SubagentsSnapshot provenance). Entries missing any of childSessionId
  * / subagentType / status are dropped; everything else is taken when it has
- * the right primitive type, mirroring the pre-rewrite shape probing style.
+ * the right primitive type, conforming to Schema decoding.
  */
 const decodeSubagents = (result: unknown): SubagentsSnapshot | undefined => {
-  const r = rec(result);
-  if (r === undefined) return undefined;
-  const readEntries = (value: unknown): SubagentEntry[] => {
-    if (!Array.isArray(value)) return [];
+  const opt = decodeSubagentsSnapshotShape(result);
+  if (Option.isNone(opt)) return undefined;
+  const r = opt.value;
+  const parseEntries = (arr: readonly unknown[] | undefined): SubagentEntry[] => {
+    if (!Array.isArray(arr)) return [];
     const entries: SubagentEntry[] = [];
-    for (const item of value) {
-      const e = rec(item);
-      if (e === undefined) continue;
-      const childSessionId = typeof e["childSessionId"] === "string" ? e["childSessionId"] : undefined;
-      const subagentType = typeof e["subagentType"] === "string" ? e["subagentType"] : undefined;
-      const status = typeof e["status"] === "string" ? e["status"] : undefined;
-      if (childSessionId === undefined || subagentType === undefined || status === undefined) continue;
-      const toolCallId = typeof e["toolCallId"] === "string" ? e["toolCallId"] : undefined;
-      const title = typeof e["title"] === "string" ? e["title"] : undefined;
-      const summary = typeof e["summary"] === "string" ? e["summary"] : undefined;
-      entries.push({
-        childSessionId,
-        subagentType,
-        status,
-        ...(toolCallId !== undefined ? { toolCallId } : {}),
-        ...(title !== undefined ? { title } : {}),
-        ...(summary !== undefined ? { summary } : {}),
-      });
+    for (const item of arr) {
+      const entryOpt = decodeSubagentEntryShape(item);
+      if (Option.isSome(entryOpt)) {
+        const val = entryOpt.value;
+        entries.push({
+          childSessionId: val.childSessionId,
+          subagentType: val.subagentType,
+          status: val.status,
+          ...(val.toolCallId !== undefined ? { toolCallId: val.toolCallId } : {}),
+          ...(val.title !== undefined ? { title: val.title } : {}),
+          ...(val.summary !== undefined ? { summary: val.summary } : {}),
+        });
+      }
     }
     return entries;
   };
-  const running = readEntries(r["running"]);
-  const endedRaw = rec(r["ended"]);
   return {
-    revision: typeof r["revision"] === "number" ? r["revision"] : 0,
-    running,
+    revision: r.revision ?? 0,
+    running: parseEntries(r.running),
     ended: {
-      total: endedRaw !== undefined && typeof endedRaw["total"] === "number" ? endedRaw["total"] : 0,
-      items: endedRaw !== undefined ? readEntries(endedRaw["items"]) : [],
+      total: r.ended?.total ?? 0,
+      items: parseEntries(r.ended?.items),
     },
   };
 };

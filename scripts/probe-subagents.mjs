@@ -159,6 +159,12 @@ try {
   const liveUpdates = cardUpdates.filter(
     (u) => u.status === "in_progress" && typeof u.rawOutput?.text === "string" && u.rawOutput.text.length > 0,
   );
+  const settleUpdates = cardUpdates.filter(
+    (u) =>
+      (u.status === "completed" || u.status === "failed") &&
+      typeof u.rawOutput?.text === "string" &&
+      u.rawOutput.text.length > 0,
+  );
   const summaries = updates.filter(
     (u) =>
       u.sessionUpdate === "agent_message_chunk" &&
@@ -169,10 +175,16 @@ try {
   const check = (ok, label) => console.error(`[probe] ${ok ? "PASS" : "FAIL"}: ${label}`);
   check(cards.length > 0, `subagent card emitted (${cards.length})`);
   check(liveUpdates.length > 0, `live rawOutput while in_progress (${liveUpdates.length} updates)`);
+  check(settleUpdates.length > 0, `settle update keeps rawOutput transcript (${settleUpdates.length})`);
   check(summaries.length > 0, `batch summary chunk (${summaries.length})`);
   check(result?.stopReason === "end_turn", `clean turn end (stopReason=${result?.stopReason})`);
 
-  const ok = cards.length > 0 && liveUpdates.length > 0 && summaries.length > 0 && result?.stopReason === "end_turn";
+  const ok =
+    cards.length > 0 &&
+    liveUpdates.length > 0 &&
+    settleUpdates.length > 0 &&
+    summaries.length > 0 &&
+    result?.stopReason === "end_turn";
   console.error(`[probe] RESULT: ${ok ? "ALL PASS" : "SOME CHECKS FAILED"}`);
   process.exitCode = ok ? 0 : 1;
 } catch (err) {

@@ -214,7 +214,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
           if (snapshot === undefined) return;
           // Cross-fill: bind running children the subagent rows never told us
           // about (rows carry childSessionId only optionally) and bring them
-          // live too.
+          // live too; release any ended children reported by the snapshot.
           for (const entry of snapshot.running) {
             if (bridge.translator.bindChildSession(entry.childSessionId, entry.toolCallId)) {
               yield* Effect.forkDetach(
@@ -222,6 +222,11 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
                   log.debug(`[subagents] subscribeChild ${entry.childSessionId} failed: ${renderError(cause)}`),
                 ),
               );
+            }
+          }
+          for (const entry of snapshot.ended.items) {
+            if (bridge.translator.settleChild(entry.childSessionId)) {
+              yield* Effect.forkDetach(bridge.serve.unsubscribeChild(entry.childSessionId));
             }
           }
           const text = bridge.translator.formatSubagentsSummary(snapshot);
