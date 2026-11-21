@@ -106,6 +106,98 @@ describe("AcpServer Effect handler", () => {
     expect(res).toEqual({});
   });
 
+  test("emits available_commands_update on session/new, session/resume, and session/load", async () => {
+    const emitted: Array<{ method: string; params: unknown }> = [];
+    const skills = [{ name: "test-skill", description: "A skill" }];
+    const slashCommands = [{ name: "goal", description: "Set goal" }];
+    const sessionWithSkills = {
+      ...mockSessionInstance,
+      createSession: () =>
+        Effect.succeed({
+          models: sampleModels,
+          currentModel: "zai-provider/GLM-5.3",
+          skills,
+          slashCommands,
+          currentMode: "default",
+        }),
+    } as unknown as ServeSession;
+
+    const cmdServer = AcpServer.make({
+      sessions: { create: () => Effect.succeed(sessionWithSkills) } as unknown as ServeSessionFactory["Service"],
+      log: mockLog,
+      emitNotification: (method, params) =>
+        Effect.sync(() => {
+          emitted.push({ method, params });
+        }),
+      clientRequest: () => Effect.die("unused"),
+      fallbackModels: Effect.succeed(sampleModels),
+    });
+
+    // 1. session/new emits available_commands_update
+    await Effect.runPromise(cmdServer.handle("session/new", { sessionId: "cmd-sess" }));
+    const newUpdates = emitted.filter(
+      (e) =>
+        e.method === "session/update" &&
+        (e.params as { update?: { sessionUpdate?: string } }).update?.sessionUpdate === "available_commands_update",
+    );
+    expect(newUpdates.length).toBeGreaterThanOrEqual(1);
+    expect(newUpdates[0]).toBeDefined();
+    const newCommands = (newUpdates[0]!.params as { update: { availableCommands: Array<{ name: string }> } }).update
+      .availableCommands;
+    expect(newCommands.some((c) => c.name === "goal")).toBe(true);
+    expect(newCommands.some((c) => c.name === "$test-skill")).toBe(true);
+
+    // 2. session/resume on existing bridge also emits available_commands_update
+    emitted.length = 0;
+    await Effect.runPromise(cmdServer.handle("session/resume", { sessionId: "cmd-sess" }));
+    const resumeUpdates = emitted.filter(
+      (e) =>
+        e.method === "session/update" &&
+        (e.params as { update?: { sessionUpdate?: string } }).update?.sessionUpdate === "available_commands_update",
+    );
+    expect(resumeUpdates.length).toBeGreaterThanOrEqual(1);
+    expect(resumeUpdates[0]).toBeDefined();
+    const resumeCommands = (resumeUpdates[0]!.params as { update: { availableCommands: Array<{ name: string }> } })
+      .update.availableCommands;
+    expect(resumeCommands.some((c) => c.name === "goal")).toBe(true);
+    expect(resumeCommands.some((c) => c.name === "$test-skill")).toBe(true);
+
+    // 3. session/load on existing bridge also emits available_commands_update
+    emitted.length = 0;
+    await Effect.runPromise(cmdServer.handle("session/load", { sessionId: "cmd-sess" }));
+    const loadUpdates = emitted.filter(
+      (e) =>
+        e.method === "session/update" &&
+        (e.params as { update?: { sessionUpdate?: string } }).update?.sessionUpdate === "available_commands_update",
+    );
+    expect(loadUpdates.length).toBeGreaterThanOrEqual(1);
+    expect(loadUpdates[0]).toBeDefined();
+    const loadCommands = (loadUpdates[0]!.params as { update: { availableCommands: Array<{ name: string }> } }).update
+      .availableCommands;
+    expect(loadCommands.some((c) => c.name === "goal")).toBe(true);
+    expect(loadCommands.some((c) => c.name === "$test-skill")).toBe(true);
+
+    // 4. session/prompt turn start also emits available_commands_update
+    emitted.length = 0;
+    await Effect.runPromise(
+      Effect.forkDetach(
+        cmdServer.handle("session/prompt", { sessionId: "cmd-sess", prompt: [{ type: "text", text: "hello" }] }),
+      ),
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    const promptUpdates = emitted.filter(
+      (e) =>
+        e.method === "session/update" &&
+        (e.params as { update?: { sessionUpdate?: string } }).update?.sessionUpdate === "available_commands_update",
+    );
+    expect(promptUpdates.length).toBeGreaterThanOrEqual(1);
+    expect(promptUpdates[0]).toBeDefined();
+    const promptCommands = (promptUpdates[0]!.params as { update: { availableCommands: Array<{ name: string }> } })
+      .update.availableCommands;
+    expect(promptCommands.some((c) => c.name === "goal")).toBe(true);
+    expect(promptCommands.some((c) => c.name === "$test-skill")).toBe(true);
+  });
+
   test("unknown method fails with AcpMethodError", async () => {
     const result = await Effect.runPromise(server.handle("nonexistent/method", {}).pipe(Effect.result));
     expect(result._tag).toBe("Failure");
