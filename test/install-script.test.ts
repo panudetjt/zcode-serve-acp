@@ -210,7 +210,7 @@ describe("install.sh", () => {
       await Bun.sleep(100);
       expect(isAlive(child.pid)).toBe(false);
     } finally {
-      child.kill();
+      child.kill("SIGKILL");
     }
   });
 
