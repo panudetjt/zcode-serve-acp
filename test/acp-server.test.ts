@@ -795,6 +795,80 @@ describe("AcpServer Effect handler", () => {
     expect(resolvedInteractions.some((r) => r.id === "perm-fail-1" && r.resolve.optionId === "allow_opt")).toBe(true);
   });
 
+  test("uses DEFAULT_ALLOW_OPTION_ID when permission options are empty", async () => {
+    let capturedHandlers: any;
+    const resolvedInteractions: Array<{ id: string; resolve: any }> = [];
+    const mockSession = {
+      ...mockSessionInstance,
+      resolveInteraction: (id: string, resolve: any) =>
+        Effect.sync(() => {
+          resolvedInteractions.push({ id, resolve });
+        }),
+    } as unknown as ServeSession;
+
+    const testServer = AcpServer.make({
+      sessions: {
+        create: (_cwd: string, handlers: any) => {
+          capturedHandlers = handlers;
+          return Effect.succeed(mockSession);
+        },
+      } as unknown as ServeSessionFactory["Service"],
+      log: mockLog,
+      emitNotification: () => Effect.void,
+      clientRequest: () => Effect.fail(new ClientRequestError({ message: "Client rejected" })),
+      fallbackModels: Effect.succeed(sampleModels),
+    });
+
+    await Effect.runPromise(testServer.handle("session/new", { sessionId: "empty-opts-sess" }));
+
+    const turnFiber = await Effect.runPromise(
+      Effect.forkDetach(testServer.handle("session/prompt", { sessionId: "empty-opts-sess", prompt: "Go" })),
+    );
+    await new Promise((r) => setTimeout(r, 20));
+
+    // 1. Permission interaction with empty options -> fallback resolves with allow_once
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "state.updated",
+              patch: {
+                pendingInteractions: [
+                  {
+                    interactionId: "perm-empty-1",
+                    kind: "permission",
+                    payload: { toolName: "run_command", options: [] },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 40));
+
+    // 2. Server request permission with empty options -> returns allow_once fallback
+    const srvReqRes = await Effect.runPromise(
+      capturedHandlers.onRequest("zcode", "requestPermission", {
+        interactionId: "req-empty-1",
+        toolName: "run_command",
+        options: [],
+      }),
+    );
+    expect(srvReqRes).toEqual({ interactionId: "req-empty-1", answer: { optionId: "allow_once" } });
+
+    // 3. End turn
+    await Effect.runPromise(capturedHandlers.onLifecycle({ state: "stopping" }));
+    const result = (await Effect.runPromise(Fiber.join(turnFiber))) as { stopReason: string };
+    expect(result.stopReason).toBe("end_turn");
+
+    // Verify the frame-driven permission fallback also used allow_once
+    expect(resolvedInteractions.some((r) => r.id === "perm-empty-1" && r.resolve.optionId === "allow_once")).toBe(true);
+  });
+
   test("handles turn cancellation and assistant settled quiet window in frames", async () => {
     let capturedHandlers: any;
     const testServer = AcpServer.make({

@@ -8,6 +8,7 @@ import {
   buildElicitationParams,
   buildElicitationResolve,
   buildPermissionParams,
+  DEFAULT_ALLOW_OPTION_ID,
   extractElicitationQuestions,
   extractPermissionOptionId,
   isElicitation,
