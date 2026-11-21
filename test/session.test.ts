@@ -895,6 +895,14 @@ describe("ServeSession teardown edge", () => {
       // Calling setMcpServers again when daemon returns an error exercises the tolerate failure branch
       yield* session.setMcpServers(updatedMcp);
 
+      // Calling setMcpServers with empty array clears servers
+      yield* session.setMcpServers([]);
+      const clearCall = serverCalls[serverCalls.length - 1];
+      expect(clearCall?.channel).toBe("zcode-session");
+      expect(clearCall?.method).toBe("resumeSession");
+      const clearArg = clearCall?.arg as { sessionId?: string; mcpServers?: unknown } | undefined;
+      expect(clearArg?.mcpServers).toEqual([]);
+
       yield* session.dispose;
     }).pipe(
       Effect.provide(ServeSessionFactory.layerNoDeps),

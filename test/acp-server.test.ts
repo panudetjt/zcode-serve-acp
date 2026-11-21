@@ -143,6 +143,16 @@ describe("AcpServer Effect handler", () => {
 
     expect(loadRes.sessionId).toBe("sess-mcp-test");
     expect(capturedSetMcpServers).toEqual(updatedMcpServers);
+
+    // session/load with empty mcpServers clears mcpServers
+    await Effect.runPromise(
+      srv.handle("session/load", {
+        cwd: "/tmp/workspace",
+        sessionId: "sess-mcp-test",
+        mcpServers: [],
+      }),
+    );
+    expect(capturedSetMcpServers).toEqual([]);
   });
 
   test("auth/authenticate returns empty result (daemon owns credentials)", async () => {

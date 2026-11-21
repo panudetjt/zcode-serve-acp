@@ -1620,6 +1620,76 @@ describe("FrameTranslator child-session drill-down (subagent cards)", () => {
       ]);
     });
 
+    it("extracts output fallback text from result, value, and JSON object", () => {
+      const translator = new FrameTranslator(() => {});
+
+      // 1. output with result property
+      const res1 = translator.fold({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.appended",
+              row: {
+                rowId: 101,
+                kind: "toolCall",
+                toolName: "custom_tool",
+                status: "success",
+                output: { result: "computed result value" },
+              },
+            },
+          ],
+        },
+      });
+      expect(res1.updates[0]!.content).toEqual([
+        { type: "content", content: { type: "text", text: "computed result value" } },
+      ]);
+
+      // 2. output with value property
+      const res2 = translator.fold({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.appended",
+              row: {
+                rowId: 102,
+                kind: "toolCall",
+                toolName: "custom_tool",
+                status: "success",
+                output: { value: "named value output" },
+              },
+            },
+          ],
+        },
+      });
+      expect(res2.updates[0]!.content).toEqual([
+        { type: "content", content: { type: "text", text: "named value output" } },
+      ]);
+
+      // 3. arbitrary output object falls back to JSON.stringify
+      const res3 = translator.fold({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.appended",
+              row: {
+                rowId: 103,
+                kind: "toolCall",
+                toolName: "custom_tool",
+                status: "success",
+                output: { customField: 42 },
+              },
+            },
+          ],
+        },
+      });
+      expect(res3.updates[0]!.content).toEqual([
+        { type: "content", content: { type: "text", text: JSON.stringify({ customField: 42 }) } },
+      ]);
+    });
+
     it("routes pendingApproval MCP tool call into pending status and pendingInteractions", () => {
       const translator = new FrameTranslator(() => {});
 
