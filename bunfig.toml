@@ -11,3 +11,20 @@
 [test]
 coverageSkipTestFiles = true
 coverageThreshold = 0.92
+
+# bun fmt — mirrors the Effect monorepo's dprint.json (read-only reference
+# clone in .repos/effect): indentWidth 2, lineWidth 120, newLineKind lf;
+# typescript: semiColons asi, quoteStyle alwaysDouble, trailingCommas never,
+# arrowFunction.useParentheses force. dprint's operatorPosition "maintain"
+# has no prettier-side equivalent — bun fmt keeps its default placement.
+[fmt]
+printWidth = 120
+tabWidth = 2
+semi = false
+singleQuote = false
+trailingComma = "none"
+arrowParens = "always"
+endOfLine = "lf"
+# captured daemon fixtures must stay byte-stable (AGENTS.md: never hand-edit);
+# .repos/ is gitignored (default ignore) but listed for clarity
+ignorePatterns = [".repos/", "test/fixtures/"]
