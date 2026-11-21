@@ -52,6 +52,7 @@ interface BridgeSession {
   readonly translator: FrameTranslator;
   models: AvailableModel[];
   skills: DiscoveredSkill[];
+  slashCommands?: Array<{ name: string; description?: string }>;
   modelSelection?: ModelSelection;
   thoughtLevel?: string;
   currentMode?: string;
@@ -512,6 +513,23 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       return bridge;
     });
 
+  const emitAvailableCommands = (bridge: BridgeSession): Effect.Effect<void, PlatformError> =>
+    emitNotification("session/update", {
+      sessionId: bridge.id,
+      update: {
+        sessionUpdate: "available_commands_update",
+        availableCommands: buildAvailableCommands(bridge.slashCommands ?? [], bridge.skills),
+      },
+    });
+
+  const emitAvailableCommandsDelayed = (bridge: BridgeSession): Effect.Effect<void> =>
+    Effect.forkDetach(
+      Effect.sleep("100 millis").pipe(
+        Effect.andThen(emitAvailableCommands(bridge)),
+        Effect.catchCause((cause) => log.debug(`[commands] delayed update failed: ${renderError(cause)}`)),
+      ),
+    ).pipe(Effect.asVoid);
+
   const initializeNewSession = (
     method: string,
     bridge: BridgeSession,
@@ -530,6 +548,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       }
       bridge.models = models;
       bridge.skills = created.skills ?? [];
+      bridge.slashCommands = created.slashCommands ?? [];
       bridge.currentMode = created.currentMode ?? bridge.currentMode;
       const currentModel = current
         ? (models.find((m) => `${m.providerId}/${m.modelId}` === current || m.modelId === current) ?? models[0])
@@ -546,13 +565,8 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       yield* log.debug(
         `[${method}] daemon=${created.daemonSessionId} models=${modelsAcp.availableModels.map((m) => m.modelId).join(", ")} skills=${bridge.skills.length}`,
       );
-      yield* emitNotification("session/update", {
-        sessionId: bridge.id,
-        update: {
-          sessionUpdate: "available_commands_update",
-          availableCommands: buildAvailableCommands(created.slashCommands ?? [], bridge.skills),
-        },
-      });
+      yield* emitAvailableCommands(bridge);
+      yield* emitAvailableCommandsDelayed(bridge);
       const rawProj = (created.raw as { projection?: { contextUsed?: number; contextWindow?: number } } | undefined)
         ?.projection;
       const initialUsed = rawProj?.contextUsed ?? 0;
@@ -621,6 +635,8 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
             typeof params.sessionId === "string" && params.sessionId !== "" ? params.sessionId : undefined;
           const bridge = existingId !== undefined ? bridgeSessions.get(existingId) : undefined;
           if (bridge !== undefined) {
+            yield* emitAvailableCommands(bridge);
+            yield* emitAvailableCommandsDelayed(bridge);
             return {
               sessionId: bridge.id,
               models: modelsToAcp(
@@ -639,6 +655,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
         case "session/prompt": {
           const sessionId = String(params.sessionId ?? "");
           const bridge = yield* getSession(sessionId);
+          yield* emitAvailableCommands(bridge);
           const prompt = yield* decodePrompt(Array.isArray(params.prompt) ? params.prompt : []).pipe(
             Effect.mapError((cause) => new AcpMethodError({ method, message: cause.message })),
           );
