@@ -69,6 +69,16 @@ export class ChannelClient<E = never> {
   readonly closed: Deferred.Deferred<string, never>;
   private settled = false;
 
+  /**
+   * True once the pump settled this channel (peer close, socket failure, or
+   * client close). The session layer's lazy reconnection checks this before
+   * reusing a memoized channel — a settled channel must never be handed out
+   * again (issue #5 zombie-channel recovery).
+   */
+  get isSettled(): boolean {
+    return this.settled;
+  }
+
   private constructor(
     private readonly socket: Socket.Socket,
     private readonly writer: Socket.Writer,

@@ -13,14 +13,23 @@
  * `createSession` results are decoded with tolerant Schemas instead of
  * four-shape `as` probing. Each session owns an internal Scope holding its
  * WS channel; `dispose` closes it (used by session/unload).
+ *
+ * Channel recovery (issue #5): the memoized Channel and Daemon connection are
+ * no longer trusted forever. A channel close invalidates every cached
+ * artifact; each channel dispatch re-checks the daemon's local status file
+ * for a restarted daemon (pid/startedAt/port change); a Turn dispatch runs a
+ * sub-second round-trip probe first to catch silent half-open sockets; and
+ * reconnection runs on a bounded budget — if the Daemon stays unreachable the
+ * Bridge exits non-zero so the Client's runtime recovery restarts it.
  */
-import { Clock, Context, Effect, Exit, Layer, Option, Ref, Schema } from "effect";
+import { Clock, Context, Effect, Exit, Layer, Option, Ref, Result, Schema, Semaphore } from "effect";
 import * as ScopeType from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import { ChannelClosed, RpcError, RpcTimeout, SessionError, renderError, tolerate } from "../errors.ts";
 import { Log } from "../log.ts";
 import { ChannelClient, type ServerRequestHandler } from "./channel.ts";
 import { Daemon, type DaemonConnection } from "./daemon.ts";
+import { BridgeExit } from "./bridge.ts";
 
 const CLIENT_ID = "zcode-serve-acp";
 
@@ -167,18 +176,22 @@ export class ServeSessionFactory extends Context.Service<
   }
 >()("zcode-serve-acp/ServeSessionFactory") {
   /** Compose with a WebSocketConstructor layer in bin.ts; tests provide fakes. */
-  static readonly layerNoDeps: Layer.Layer<ServeSessionFactory, never, Daemon | Log | Socket.WebSocketConstructor> =
-    Layer.effect(
-      ServeSessionFactory,
-      Effect.gen(function* () {
-        const daemon = yield* Daemon;
-        const log = yield* Log;
-        const wsConstructor = yield* Socket.WebSocketConstructor;
-        return ServeSessionFactory.of({
-          create: (cwd, handlers) => makeSession(daemon, log, wsConstructor, cwd, handlers),
-        });
-      }),
-    );
+  static readonly layerNoDeps: Layer.Layer<
+    ServeSessionFactory,
+    never,
+    Daemon | Log | Socket.WebSocketConstructor | BridgeExit
+  > = Layer.effect(
+    ServeSessionFactory,
+    Effect.gen(function* () {
+      const daemon = yield* Daemon;
+      const log = yield* Log;
+      const wsConstructor = yield* Socket.WebSocketConstructor;
+      const bridgeExit = yield* BridgeExit;
+      return ServeSessionFactory.of({
+        create: (cwd, handlers) => makeSession(daemon, log, wsConstructor, bridgeExit, cwd, handlers),
+      });
+    }),
+  );
 }
 
 type ServeError = SessionError | RpcError | RpcTimeout | ChannelClosed;
@@ -193,6 +206,7 @@ const makeSession = <E>(
   daemon: Daemon["Service"],
   log: Log["Service"],
   wsConstructor: Socket.WebSocketConstructor["Service"],
+  bridgeExit: BridgeExit["Service"],
   cwd: string,
   handlers: SessionHandlers<E>,
 ): Effect.Effect<ServeSession> =>
@@ -212,6 +226,73 @@ const makeSession = <E>(
     const childTopics = new Set<string>();
     const inFlightSubscribes = new Set<string>();
     const cancelledSubscribes = new Set<string>();
+    // Bumped on every invalidation so a reconnection that waited on the
+    // permit can tell "another fiber reconnected while I waited" (adopt its
+    // channel) apart from "the channel I deemed stale is still cached".
+    const connectionEpoch = Ref.makeUnsafe(0);
+    // Generation of the currently-cached channel. Each dial claims the next
+    // generation; a close event belonging to a superseded channel (a late
+    // pump death arriving after a reconnect already landed) is ignored — it
+    // must not wipe the fresh connection or notify the Client (issue #5).
+    const channelGenRef = Ref.makeUnsafe(0);
+
+    // ---- issue #5: watchdog, lazy reconnection, fail-fast exit -------------
+    //
+    // Provenance (server-core.js 3.19.0, re-verified live): run/status.json
+    // carries pid + startedAt + host + port + state — a daemon restart mints
+    // a new process (new pid AND startedAt) and may bind a new port. On the
+    // conversation adapter, `zcode-agent`/`helloConversationV4` is the
+    // lightest channel round-trip available (`assertOpen` + hello payload, no
+    // state beyond the `helloIssued` flag that `initializeConversationV4`
+    // requires anyway) — it is the pre-flight probe.
+    const PROBE_TIMEOUT_MS = 900;
+    const RECOVERY_ATTEMPTS = 2;
+    const RECOVERY_RETRY_DELAY = "1 second";
+    // Reconnection is serialized per session: concurrent getChannel callers
+    // (event fibers, the next prompt) wait on this permit and then adopt the
+    // fresh channel instead of dialing a second one on top of the in-flight
+    // recovery.
+    const reconnectPermit = Semaphore.makeUnsafe(1);
+
+    /**
+     * Drop every cached connection artifact (issue #5 state invalidation).
+     * Listener disposers captured on a dead channel only ever write to that
+     * dead channel (their writes are tolerated inside the disposer), so they
+     * are dropped without draining. Clearing subscribedRef forces the
+     * conversation re-subscription to happen on the fresh channel.
+     */
+    const invalidateConnection: Effect.Effect<void> = Effect.gen(function* () {
+      listenerDisposers.splice(0);
+      yield* Ref.set(channelRef, Option.none());
+      yield* Ref.set(connectionRef, Option.none());
+      yield* Ref.set(subscribedRef, false);
+      yield* Ref.update(connectionEpoch, (epoch) => epoch + 1);
+    });
+
+    /**
+     * Watchdog: compare the daemon's local status file against the memoized
+     * connection. A missing/unreadable status file is treated as transient —
+     * invalidation only ever happens on positive evidence of a different or
+     * unready daemon (same tolerance as the Daemon layer's own reads).
+     */
+    const connectionStillValid = (connection: DaemonConnection): Effect.Effect<boolean> =>
+      Effect.gen(function* () {
+        const status = yield* daemon.readStatus;
+        if (status === undefined) return true;
+        if (status.state !== "ready") return false;
+        if (status.host !== connection.status.host || status.port !== connection.status.port) return false;
+        if (connection.status.pid !== undefined && status.pid !== undefined && status.pid !== connection.status.pid) {
+          return false;
+        }
+        if (
+          connection.status.startedAt !== undefined &&
+          status.startedAt !== undefined &&
+          status.startedAt !== connection.status.startedAt
+        ) {
+          return false;
+        }
+        return true;
+      });
 
     const ensureConnection: Effect.Effect<DaemonConnection, SessionError> = Effect.gen(function* () {
       const existing = yield* Ref.get(connectionRef);
@@ -223,9 +304,11 @@ const makeSession = <E>(
       return connection;
     });
 
-    const getChannel: Effect.Effect<ChannelClient<E>, ServeError> = Effect.gen(function* () {
-      const existing = yield* Ref.get(channelRef);
-      if (Option.isSome(existing)) return existing.value;
+    /**
+     * Fresh dial: status + ingress token (via ensureConnection), single-use
+     * capability, WS channel. Runs in the session's internal Scope.
+     */
+    const connectChannel: Effect.Effect<ChannelClient<E>, ServeError> = Effect.gen(function* () {
       const connection = yield* ensureConnection;
       const capability = yield* daemon
         .getCapability(connection)
@@ -233,12 +316,23 @@ const makeSession = <E>(
       const wsUrl =
         `ws://${connection.status.host}:${connection.status.port}${connection.wsPath}` +
         (connection.token ? `?token=${encodeURIComponent(connection.token)}` : "");
+      // Claim the next channel generation for this dial — its close handler
+      // only acts while this generation is still current. The claim is
+      // published BEFORE the dial so a late close from the superseded
+      // channel (arriving during the handshake) is already recognized as
+      // stale and cannot wipe the in-flight connection state.
+      const channelGen = (yield* Ref.get(channelGenRef)) + 1;
+      yield* Ref.set(channelGenRef, channelGen);
       const channel = yield* ChannelClient.connect(
         wsUrl,
         { "x-zcode-rpc-host-capability": capability },
         {
           onRequest: handlers.onRequest,
-          onClose: handlers.onClosed,
+          // Issue #5 state invalidation: a channel close first drops the
+          // cached connection metadata, then reaches the app handler — but
+          // only for the channel that is still current (a late close from a
+          // superseded channel is ignored).
+          onClose: onChannelClosed(channelGen),
         },
         log,
       ).pipe(
@@ -249,6 +343,106 @@ const makeSession = <E>(
       yield* Ref.set(channelRef, Option.some(channel));
       yield* log.debug(`[session] channel ready ${wsUrl.replace(/token=[^&]*/, "token=…")}`);
       return channel;
+    });
+
+    const onChannelClosed =
+      (channelGen: number) =>
+      (reason: string): Effect.Effect<void, E> =>
+        Effect.gen(function* () {
+          const currentGen = yield* Ref.get(channelGenRef);
+          if (currentGen !== channelGen) {
+            // A reconnect (or dispose) already moved past this channel — its
+            // late close must not invalidate the fresh connection state.
+            yield* log.debug(`[session] ignored close of superseded channel gen ${channelGen} (${reason})`);
+            return;
+          }
+          yield* invalidateConnection;
+          yield* log.debug(`[session] channel closed (${reason}) — cached connection invalidated`);
+          yield* handlers.onClosed(reason);
+        });
+
+    /**
+     * Best-effort replays after a fresh channel: `initialize` is per-channel
+     * daemon state (the project itself persists across daemon restarts, so
+     * the cached workspace/project id stays valid), and the conversation
+     * subscription must be re-registered on the new channel so streamed rows
+     * and turn completions keep flowing to the Client.
+     */
+    const replayAfterReconnect = (channel: ChannelClient<E>): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        const workspace = yield* Ref.get(workspaceRef);
+        if (Option.isSome(workspace)) {
+          yield* tolerate(channel.call("zcode-agent", "initialize", workspace.value, 30_000), (cause) =>
+            log.debug(`[session] post-reconnect initialize failed (continuing): ${renderError(cause)}`),
+          );
+        }
+        const session = yield* Ref.get(sessionRef);
+        if (Option.isSome(session)) {
+          yield* tolerate(
+            subscribeConversation(session.value.daemonSessionId, session.value.workspace, channel),
+            (cause) => log.debug(`[session] post-reconnect subscribe failed: ${renderError(cause)}`),
+          );
+        }
+      });
+
+    /**
+     * Lazy reconnection on a bounded budget (issue #5): invalidate, then re-run
+     * the attach workflow up to RECOVERY_ATTEMPTS times. If the Daemon stays
+     * unreachable, fail fast — the Bridge exits non-zero so the Client's own
+     * runtime recovery restarts it (a -32000 reply would only read as a
+     * provider failure). Never fails typed: exhaustion is the exit.
+     */
+    const reconnectChannel: Effect.Effect<ChannelClient<E>> = Effect.gen(function* () {
+      const staleEpoch = yield* Ref.get(connectionEpoch);
+      return yield* reconnectPermit.withPermit(
+        Effect.gen(function* () {
+          // Another fiber may have finished a reconnection while this caller
+          // waited on the permit — adopt its channel instead of dialing
+          // again. Without the epoch bump the check would adopt the very
+          // channel this caller just deemed stale.
+          const currentEpoch = yield* Ref.get(connectionEpoch);
+          const adopted = yield* Ref.get(channelRef);
+          if (currentEpoch !== staleEpoch && Option.isSome(adopted) && !adopted.value.isSettled) {
+            return adopted.value;
+          }
+          yield* invalidateConnection;
+          for (let attempt = 1; attempt <= RECOVERY_ATTEMPTS; attempt += 1) {
+            const outcome = yield* Effect.result(connectChannel);
+            if (Result.isSuccess(outcome)) {
+              yield* replayAfterReconnect(outcome.success);
+              yield* log.debug(`[session] channel re-established (attempt ${attempt}/${RECOVERY_ATTEMPTS})`);
+              return outcome.success;
+            }
+            yield* log.warn(
+              `[session] reconnect attempt ${attempt}/${RECOVERY_ATTEMPTS} failed: ${renderError(outcome.failure)}`,
+            );
+            if (attempt < RECOVERY_ATTEMPTS) yield* Effect.sleep(RECOVERY_RETRY_DELAY);
+          }
+          return yield* bridgeExit.exit(`zcode daemon unreachable after ${RECOVERY_ATTEMPTS} reconnect attempts`);
+        }),
+      );
+    });
+
+    const getChannel: Effect.Effect<ChannelClient<E>, ServeError> = Effect.gen(function* () {
+      const existing = yield* Ref.get(channelRef);
+      if (Option.isSome(existing)) {
+        const channel = existing.value;
+        // Watchdog (issue #5): a settled channel is never reused, and the
+        // memoized connection is dropped when the local status file reports a
+        // different or unready daemon.
+        const connection = yield* Ref.get(connectionRef);
+        if (!channel.isSettled && Option.isSome(connection) && (yield* connectionStillValid(connection.value))) {
+          return channel;
+        }
+        return yield* reconnectChannel;
+      }
+      // No cached channel. With a live daemon session this IS a reconnection
+      // (a close already invalidated the cache), so the bounded recovery
+      // budget applies; before the first createSession it is a plain first
+      // attach whose failure surfaces as a typed error to the caller.
+      const session = yield* Ref.get(sessionRef);
+      if (Option.isSome(session)) return yield* reconnectChannel;
+      return yield* connectChannel;
     });
 
     const call = (method: string, arg?: unknown, timeoutMs = 30_000) =>
@@ -289,11 +483,11 @@ const makeSession = <E>(
     const subscribeConversation = (
       daemonSessionId: string,
       workspace: WorkspaceInfo,
+      channel: ChannelClient<E>,
     ): Effect.Effect<void, ServeError> =>
       Effect.gen(function* () {
         if ((yield* Ref.get(subscribedRef)) === true) return;
         yield* Ref.set(subscribedRef, true);
-        const channel = yield* getChannel;
         yield* channel.call(
           "zcode-agent",
           "subscribeConversationV4",
@@ -402,8 +596,9 @@ const makeSession = <E>(
           });
         }
         yield* Ref.set(sessionRef, Option.some({ daemonSessionId: decoded.daemonSessionId, workspace }));
+        const channel = yield* getChannel;
         yield* Effect.forkDetach(
-          tolerate(subscribeConversation(decoded.daemonSessionId, workspace), (cause) =>
+          tolerate(subscribeConversation(decoded.daemonSessionId, workspace, channel), (cause) =>
             log.debug(`[session] subscribeConversationV4 failed: ${renderError(cause)}`),
           ),
         );
@@ -436,9 +631,30 @@ const makeSession = <E>(
         } satisfies CreateSessionResult;
       });
 
+    /**
+     * Pre-flight liveness probe before dispatching a Turn (issue #5): a
+     * sub-second round-trip on the channel catches silent half-open sockets
+     * that never fired an OS-level close event, so the prompt goes out on a
+     * channel that just answered us instead of dying with a -32000 error.
+     * Probe failure triggers the bounded reconnection — which either lands a
+     * fresh channel or exits the Bridge (never fails typed).
+     */
+    const preflight: Effect.Effect<void, ServeError> = Effect.gen(function* () {
+      const channel = yield* getChannel;
+      const probe = yield* Effect.result(
+        channel.call("zcode-agent", "helloConversationV4", undefined, PROBE_TIMEOUT_MS),
+      );
+      if (Result.isSuccess(probe)) return;
+      yield* log.warn(
+        `[session] pre-flight probe failed (${renderError(probe.failure)}) — reconnecting before dispatch`,
+      );
+      yield* reconnectChannel;
+    });
+
     const sendPrompt: ServeSession["sendPrompt"] = (text, modelSelection, attachments) =>
       Effect.gen(function* () {
         const { daemonSessionId, workspace } = yield* requireDaemonSession;
+        yield* preflight;
         const inputId = crypto.randomUUID();
         yield* call(
           "sendPrompt",
