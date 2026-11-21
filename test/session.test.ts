@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import * as BunSocket from "@effect/platform-bun/BunSocket";
-import { Deferred, Effect, Layer } from "effect";
+import { Deferred, Effect, Fiber, Layer } from "effect";
 import { Log } from "../src/log.ts";
 import { Daemon } from "../src/serve/daemon.ts";
 import { ServeSessionFactory } from "../src/serve/session.ts";
@@ -10,10 +10,13 @@ describe("ServeSession lifecycle and operations", () => {
   test("full session lifecycle: createSession, sendPrompt, setMode, resolveInteraction, sendCommand, frame filtering, and dispose", async () => {
     const framesReceived: any[] = [];
     const lifecyclesReceived: any[] = [];
+    const childFramesReceived: Array<{ childId: string; frame: any }> = [];
     const serverCalls: Array<{ channel: string; method: string; arg: any }> = [];
 
     const frameDone = Deferred.makeUnsafe<void>();
     const lifecycleDone = Deferred.makeUnsafe<void>();
+    const childFrameDone = Deferred.makeUnsafe<void>();
+    let framesListenId: number | undefined;
 
     const server = Bun.serve({
       port: 0,
@@ -65,6 +68,46 @@ describe("ServeSession lifecycle and operations", () => {
               );
             } else if (channel === "zcode-agent" && method === "subscribeConversationV4") {
               ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { subscribed: true }));
+              if (arg?.sessionId === "child-sess-1" && framesListenId !== undefined) {
+                // Child frame routed by topic; another session's frame stays dropped.
+                ws.send(
+                  encodeRpcMessage([MSG.EventFire, framesListenId], {
+                    topic: "conversation/child-sess-1",
+                    update: "child-token",
+                  }),
+                );
+                ws.send(
+                  encodeRpcMessage([MSG.EventFire, framesListenId], {
+                    topic: "conversation/other-sess",
+                    update: "still-ignored",
+                  }),
+                );
+              }
+            } else if (channel === "zcode-agent" && method === "unsubscribeConversationV4") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { unsubscribed: true }));
+            } else if (channel === "zcode-agent" && method === "listSessionSubagents") {
+              ws.send(
+                encodeRpcMessage([MSG.PromiseSuccess, id], {
+                  revision: 7,
+                  childSessionIds: ["child-sess-1"],
+                  running: [
+                    {
+                      childSessionId: "child-sess-1",
+                      toolCallId: "agent-tc-1",
+                      subagentType: "Explore",
+                      title: "Scan repo",
+                      status: "running",
+                    },
+                    { childSessionId: "no-type-or-status" },
+                  ],
+                  ended: {
+                    total: 2,
+                    items: [
+                      { childSessionId: "child-sess-0", subagentType: "general", title: "Done", status: "success" },
+                    ],
+                  },
+                }),
+              );
             } else if (channel === "skills" && method === "list") {
               ws.send(
                 encodeRpcMessage([MSG.PromiseSuccess, id], {
@@ -84,6 +127,7 @@ describe("ServeSession lifecycle and operations", () => {
           } else if (type === MSG.EventListen) {
             const eventName = decoded.header[3] as string;
             if (eventName === "onDynamicConversationFrame") {
+              framesListenId = id;
               // Push matching frame
               ws.send(
                 encodeRpcMessage([MSG.EventFire, id], {
@@ -137,6 +181,11 @@ describe("ServeSession lifecycle and operations", () => {
             framesReceived.push(frame);
             Deferred.doneUnsafe(frameDone, Effect.void);
           }),
+        onChildFrame: (childId, frame) =>
+          Effect.sync(() => {
+            childFramesReceived.push({ childId, frame });
+            Deferred.doneUnsafe(childFrameDone, Effect.void);
+          }),
         onLifecycle: (lc) =>
           Effect.sync(() => {
             lifecyclesReceived.push(lc);
@@ -173,6 +222,27 @@ describe("ServeSession lifecycle and operations", () => {
       expect(lifecyclesReceived.length).toBe(1);
       expect((lifecyclesReceived[0] as any).state).toBe("idle");
 
+      // 2b. subscribeChild → child-topic frames routed to onChildFrame;
+      // frames of never-subscribed sessions stay dropped.
+      yield* session.subscribeChild("child-sess-1");
+      yield* Deferred.await(childFrameDone);
+      expect(childFramesReceived.length).toBe(1);
+      expect(childFramesReceived[0]?.childId).toBe("child-sess-1");
+      expect((childFramesReceived[0]?.frame as any)?.update).toBe("child-token");
+      // idempotent: a second subscribe for the same child makes no extra RPC
+      const callsBefore = serverCalls.filter((c) => c.method === "subscribeConversationV4").length;
+      yield* session.subscribeChild("child-sess-1");
+      expect(serverCalls.filter((c) => c.method === "subscribeConversationV4").length).toBe(callsBefore);
+
+      // 2c. listSubagents decodes the snapshot tolerantly (bad entry dropped)
+      const snapshot = yield* session.listSubagents(20);
+      expect(snapshot.revision).toBe(7);
+      expect(snapshot.running.length).toBe(1);
+      expect(snapshot.running[0]?.childSessionId).toBe("child-sess-1");
+      expect(snapshot.running[0]?.toolCallId).toBe("agent-tc-1");
+      expect(snapshot.ended.total).toBe(2);
+      expect(snapshot.ended.items[0]?.title).toBe("Done");
+
       // 3. sendPrompt with model and attachments
       const promptRes = yield* session.sendPrompt(
         "Generate tests",
@@ -192,8 +262,13 @@ describe("ServeSession lifecycle and operations", () => {
       const cmdRes = yield* session.sendCommand("customCommand", { foo: "bar" }, "exec-1");
       expect(cmdRes).toEqual({ commandResult: "done" });
 
-      // 7. dispose
+      // 7. dispose — best-effort unsubscribe of the subscribed child first
       yield* session.dispose;
+      expect(
+        serverCalls.some(
+          (c) => c.method === "unsubscribeConversationV4" && (c.arg as any)?.sessionId === "child-sess-1",
+        ),
+      ).toBe(true);
     }).pipe(
       Effect.provide(ServeSessionFactory.layerNoDeps),
       Effect.provide(Layer.succeed(Daemon, mockDaemon)),
@@ -299,6 +374,7 @@ describe("ServeSession lifecycle and operations", () => {
       saveFails = true;
       const session1 = yield* factory.create("/ws1", {
         onConversationFrame: () => Effect.void,
+        onChildFrame: () => Effect.void,
         onLifecycle: () => Effect.void,
         onRequest: () => Effect.succeed(undefined),
         onClosed: () => Effect.void,
@@ -313,6 +389,7 @@ describe("ServeSession lifecycle and operations", () => {
       createFails = true;
       const session2 = yield* factory.create("/ws2", {
         onConversationFrame: () => Effect.void,
+        onChildFrame: () => Effect.void,
         onLifecycle: () => Effect.void,
         onRequest: () => Effect.succeed(undefined),
         onClosed: () => Effect.void,
@@ -327,6 +404,7 @@ describe("ServeSession lifecycle and operations", () => {
       createFails = false;
       const session3 = yield* factory.create("/ws3", {
         onConversationFrame: () => Effect.void,
+        onChildFrame: () => Effect.void,
         onLifecycle: () => Effect.void,
         onRequest: () => Effect.succeed(undefined),
         onClosed: () => Effect.void,
@@ -340,6 +418,7 @@ describe("ServeSession lifecycle and operations", () => {
       createFails = "throwShape";
       const session4 = yield* factory.create("/ws4", {
         onConversationFrame: () => Effect.void,
+        onChildFrame: () => Effect.void,
         onLifecycle: () => Effect.void,
         onRequest: () => Effect.succeed(undefined),
         onClosed: () => Effect.void,
@@ -356,6 +435,7 @@ describe("ServeSession lifecycle and operations", () => {
       skillsFails = true;
       const session5 = yield* factory.create("/ws5", {
         onConversationFrame: () => Effect.void,
+        onChildFrame: () => Effect.void,
         onLifecycle: () => Effect.void,
         onRequest: () => Effect.succeed(undefined),
         onClosed: () => Effect.void,
@@ -423,6 +503,7 @@ describe("ServeSession lifecycle and operations", () => {
       const factory = yield* ServeSessionFactory;
       const session = yield* factory.create("/test/workspace", {
         onConversationFrame: () => Effect.void,
+        onChildFrame: () => Effect.void,
         onLifecycle: () => Effect.void,
         onRequest: () => Effect.succeed({}),
         // The channel close surfaces this failure through `onClose`; dispose
@@ -503,6 +584,7 @@ describe("ServeSession teardown edge", () => {
       const factory = yield* ServeSessionFactory;
       const session = yield* factory.create("/dispose/ws", {
         onConversationFrame: () => Effect.void,
+        onChildFrame: () => Effect.void,
         onLifecycle: () => Effect.void,
         onRequest: () => Effect.succeed(undefined),
         onClosed: () => Effect.void,
@@ -523,5 +605,102 @@ describe("ServeSession teardown edge", () => {
     );
 
     await Effect.runPromise(prog);
+  });
+
+  test("listSubagents fails with SessionError on malformed RPC response, and subscribeChild handles in-flight unsubscribe", async () => {
+    const listSubagentsResponse: any = "not an object";
+    const serverCalls: string[] = [];
+
+    const server = Bun.serve({
+      port: 0,
+      fetch(req, s) {
+        if (s.upgrade(req)) return undefined;
+        return new Response("Upgrade failed", { status: 400 });
+      },
+      websocket: {
+        open(ws) {
+          ws.send(encodeRpcMessage([MSG.Initialize]));
+        },
+        message(ws, msg) {
+          const raw = typeof msg === "string" ? Buffer.from(msg) : new Uint8Array(msg);
+          const decoded = decodeRpcMessage(raw);
+          const type = decoded.header[0];
+          const id = decoded.header[1] as number;
+          if (type === MSG.Promise) {
+            const channel = decoded.header[2] as string;
+            const method = decoded.header[3] as string;
+            serverCalls.push(method);
+            if (channel === "project" && method === "saveProject") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { project: { id: "p-42" } }));
+            } else if (channel === "zcode-agent" && method === "initialize") {
+              ws.send(
+                encodeRpcMessage([MSG.PromiseSuccess, id], {
+                  workspace: { workspacePath: "/test", workspaceIdentity: "id" },
+                }),
+              );
+            } else if (channel === "zcode-session" && method === "createSession") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { sessionId: "sess-123" }));
+            } else if (channel === "zcode-agent" && method === "subscribeConversationV4") {
+              setTimeout(() => {
+                ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { subscribed: true }));
+              }, 15);
+            } else if (channel === "zcode-agent" && method === "unsubscribeConversationV4") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { unsubscribed: true }));
+            } else if (channel === "zcode-agent" && method === "listSessionSubagents") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], listSubagentsResponse));
+            } else {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], {}));
+            }
+          }
+        },
+      },
+    });
+
+    const mockDaemon: Daemon["Service"] = {
+      connect: Effect.succeed({
+        status: { host: "localhost", port: server.port ?? 0, state: "ready" },
+        token: "tok",
+        wsPath: "/ws",
+      }),
+      getCapability: () => Effect.succeed("cap"),
+    };
+
+    const prog = Effect.gen(function* () {
+      const factory = yield* ServeSessionFactory;
+      const session = yield* factory.create("/ws", {
+        onConversationFrame: () => Effect.void,
+        onChildFrame: () => Effect.void,
+        onLifecycle: () => Effect.void,
+        onRequest: () => Effect.succeed(undefined),
+        onClosed: () => Effect.void,
+      });
+      yield* session.createSession();
+
+      // Malformed listSubagents response
+      const err = yield* Effect.flip(session.listSubagents(20));
+      expect(err._tag).toBe("SessionError");
+
+      // In-flight subscribe followed immediately by unsubscribe
+      const fiber = yield* Effect.forkDetach(session.subscribeChild("child-race"));
+      yield* Effect.yieldNow;
+      yield* session.unsubscribeChild("child-race");
+      yield* Fiber.join(fiber);
+      expect(serverCalls).toContain("subscribeConversationV4");
+      expect(serverCalls).toContain("unsubscribeConversationV4");
+
+      yield* session.dispose;
+    }).pipe(
+      Effect.provide(ServeSessionFactory.layerNoDeps),
+      Effect.provide(Layer.succeed(Daemon, mockDaemon)),
+      Effect.provide(BunSocket.layerWebSocketConstructor),
+      Effect.provide(Log.layerQuiet),
+      Effect.scoped,
+    );
+
+    try {
+      await Effect.runPromise(prog);
+    } finally {
+      server.stop(true);
+    }
   });
 });

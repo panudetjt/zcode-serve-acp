@@ -59,6 +59,8 @@ interface BridgeSession {
   readonly handledInteractions: Set<string>;
   readonly turn: Ref.Ref<Option.Option<TurnState>>;
   readonly quietFiber: Ref.Ref<Option.Option<Fiber.Fiber<void, never>>>;
+  /** Debounced subagent batch-summary emission — armed on child sightings (see armSubagentsSummary). */
+  readonly summaryFiber: Ref.Ref<Option.Option<Fiber.Fiber<void, never>>>;
   readonly dumpRef: Ref.Ref<boolean>;
 }
 
@@ -141,6 +143,10 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
         // Fiber.interrupt never fails typed (Effect<void>) — no fallback needed.
         yield* Fiber.interrupt(quiet.value);
       }
+      const summary = yield* Ref.getAndSet(bridge.summaryFiber, Option.none());
+      if (Option.isSome(summary)) {
+        yield* Fiber.interrupt(summary.value);
+      }
       if (state.initialGuard !== undefined) {
         yield* Fiber.interrupt(state.initialGuard);
       }
@@ -185,6 +191,55 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
 
   // ---- frame / lifecycle / channel handlers ----
 
+  /**
+   * Debounced `session/subagents` refresh → one `agent_message_chunk` with a
+   * compact batch overview (running/finished children). Armed when a child is
+   * sighted (subagent row or RPC cross-fill); the 1.5s delay coalesces the
+   * spawn burst into one message. Skipped when the turn is already over — a
+   * content chunk after turn end would only confuse the client.
+   */
+  const armSubagentsSummary = (bridge: BridgeSession): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const pending = yield* Ref.get(bridge.summaryFiber);
+      if (Option.isSome(pending)) return;
+      const fiber = yield* Effect.forkDetach(
+        Effect.gen(function* () {
+          yield* Effect.sleep("1.5 seconds");
+          yield* Ref.set(bridge.summaryFiber, Option.none());
+          const turnNow = yield* Ref.get(bridge.turn);
+          if (Option.isNone(turnNow)) return;
+          const snapshot = yield* tolerate(bridge.serve.listSubagents(20), (cause) =>
+            log.debug(`[subagents] listSessionSubagents failed: ${renderError(cause)}`),
+          );
+          if (snapshot === undefined) return;
+          // Cross-fill: bind running children the subagent rows never told us
+          // about (rows carry childSessionId only optionally) and bring them
+          // live too; release any ended children reported by the snapshot.
+          for (const entry of snapshot.running) {
+            if (bridge.translator.bindChildSession(entry.childSessionId, entry.toolCallId)) {
+              yield* Effect.forkDetach(
+                tolerate(bridge.serve.subscribeChild(entry.childSessionId), (cause) =>
+                  log.debug(`[subagents] subscribeChild ${entry.childSessionId} failed: ${renderError(cause)}`),
+                ),
+              );
+            }
+          }
+          for (const entry of snapshot.ended.items) {
+            if (bridge.translator.settleChild(entry.childSessionId)) {
+              yield* Effect.forkDetach(bridge.serve.unsubscribeChild(entry.childSessionId));
+            }
+          }
+          const text = bridge.translator.formatSubagentsSummary(snapshot);
+          if (text === undefined) return;
+          yield* emitNotification("session/update", {
+            sessionId: bridge.id,
+            update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
+          });
+        }).pipe(Effect.catchCause((cause) => log.warn(`[subagents] summary refresh failed: ${renderError(cause)}`))),
+      );
+      yield* Ref.set(bridge.summaryFiber, Option.some(fiber));
+    });
+
   const onConversationFrame =
     (bridge: BridgeSession) =>
     (payload: unknown): Effect.Effect<void, PlatformError> =>
@@ -208,6 +263,21 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
         for (const update of result.updates) {
           yield* log.debug(`[frame] emit ${update.sessionUpdate}`);
           yield* emitNotification("session/update", { sessionId: bridge.id, update });
+        }
+        // Live subagent drill-down: rows surfaced child sessions — subscribe
+        // their conversations and refresh the batch overview; settled children
+        // are released the same way.
+        for (const childId of result.newChildren ?? []) {
+          yield* Effect.forkDetach(
+            tolerate(bridge.serve.subscribeChild(childId), (cause) =>
+              log.debug(`[frame] subscribeChild ${childId} failed: ${renderError(cause)}`),
+            ),
+          );
+          yield* armSubagentsSummary(bridge);
+        }
+        for (const childId of result.settledChildren ?? []) {
+          yield* Effect.forkDetach(bridge.serve.unsubscribeChild(childId));
+          yield* armSubagentsSummary(bridge);
         }
         for (const interaction of result.pendingInteractions ?? []) {
           yield* Effect.forkDetach(
@@ -238,6 +308,32 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
         if (result.assistantSettled) {
           yield* armQuietWindow(bridge);
           return;
+        }
+        if (result.updates.length > 0) {
+          yield* clearQuiet(bridge);
+        }
+      });
+
+  /**
+   * Frames of a subscribed child conversation → live activity on its parent
+   * subagent card. Pure card updates: child frames never touch turn lifecycle
+   * state (the parent conversation owns the turn) — they only mark sawUpdate
+   * and clear the quiet window, exactly like any other visible activity.
+   */
+  const onChildFrame =
+    (bridge: BridgeSession) =>
+    (childSessionId: string, payload: unknown): Effect.Effect<void, PlatformError> =>
+      Effect.gen(function* () {
+        yield* log.debug(`[child-frame] ${childSessionId}: ${JSON.stringify(payload).slice(0, 120)}`);
+        const result = bridge.translator.foldChild(childSessionId, payload);
+        if (result.updates.length === 0) return;
+        const turnNow = yield* Ref.get(bridge.turn);
+        if (Option.isSome(turnNow)) {
+          turnNow.value.sawUpdate = true;
+        }
+        for (const update of result.updates) {
+          yield* log.debug(`[child-frame] emit ${update.sessionUpdate} (${update.toolCallId ?? "-"})`);
+          yield* emitNotification("session/update", { sessionId: bridge.id, update });
         }
         if (result.updates.length > 0) {
           yield* clearQuiet(bridge);
@@ -401,10 +497,12 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
         handledInteractions: new Set<string>(),
         turn: Ref.makeUnsafe(Option.none()),
         quietFiber: Ref.makeUnsafe(Option.none()),
+        summaryFiber: Ref.makeUnsafe(Option.none()),
         dumpRef: Ref.makeUnsafe(false),
       };
       const serve = yield* deps.sessions.create(cwd, {
         onConversationFrame: onConversationFrame(bridge),
+        onChildFrame: onChildFrame(bridge),
         onLifecycle: onLifecycle(bridge),
         onRequest: onRequest(bridge),
         onClosed: onClosed(bridge),

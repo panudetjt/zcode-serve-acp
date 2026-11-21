@@ -33,6 +33,13 @@ _Avoid_: event, message, delta
 **Row**:
 One item in the daemon's conversation transcript: assistant text, thought, or tool call.
 
+**Subagent**:
+A child agent the Daemon spawns during a Turn. The parent conversation carries a single subagent row (`kind: "subagent"` — status, subagentType, summaryText, optional childSessionId); the child's own activity never appears inline in parent frames.
+_Avoid_: agent card, worker
+
+**Child session**:
+The Daemon-side conversation behind a Subagent (id = the row's `childSessionId`). The Daemon does not inline child rows, so the Bridge subscribes `conversation/<childSessionId>` itself and folds child frames into the parent's subagent card (`rawOutput`/content).
+
 **Turn**:
 One Client prompt plus the Daemon's streamed response, ending in a **Stop reason** (completed / cancelled / failed).
 _Avoid_: prompt, request
