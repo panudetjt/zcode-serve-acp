@@ -136,7 +136,7 @@ Consequences for every session in this repo:
 | Compile single binary | `mise run compile` |
 | Binary install / backup / restore | `scripts/install.sh` (flags: `--help`) |
 | E2E smoke (needs a real local daemon) | `mise run smoke` |
-| Release (bump + changelog + tag + draft GH release; maintainer-run, `--dry-run` previews) | `mise run release` |
+| Release (bump + changelog + tag + draft GH release; the release CI — tag-push trigger in `.github/workflows/release.yml` — then gates, cross-compiles the release targets from the tag (linux-x64 for now), and attaches binaries + `SHA256SUMS` to the draft; maintainer-run, `--dry-run` previews) | `mise run release` |
 | All tasks | `mise run ci` |
 | Format | `mise run fmt` |
 | Lint | `mise run lint` |

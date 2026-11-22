@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  assetName,
   buildChangelogSection,
   buildReleaseBody,
   categorizeCommits,
@@ -491,6 +492,16 @@ describe("parseRepoSlug", () => {
   })
 })
 
+describe("assetName", () => {
+  test("unix targets stay bare; the windows target carries .exe", () => {
+    expect(assetName("bun-linux-x64")).toBe("zcode-serve-acp-linux-x64")
+    expect(assetName("bun-linux-arm64")).toBe("zcode-serve-acp-linux-arm64")
+    expect(assetName("bun-darwin-x64")).toBe("zcode-serve-acp-darwin-x64")
+    expect(assetName("bun-darwin-arm64")).toBe("zcode-serve-acp-darwin-arm64")
+    expect(assetName("bun-windows-x64")).toBe("zcode-serve-acp-windows-x64.exe")
+  })
+})
+
 // --- the release flow ---------------------------------------------------------
 
 describe("runRelease (full path)", () => {
@@ -564,6 +575,18 @@ describe("runRelease (full path)", () => {
       "--compile",
       "--target=bun-darwin-arm64",
       "--outfile=/repo/dist/zcode-serve-acp-darwin-arm64",
+      "src/bin.ts"
+    ])
+  })
+
+  test("windows target compiles an .exe asset name", () => {
+    const fake = makeDeps()
+    expect(runRelease({ ...MINOR, targets: ["bun-windows-x64"] }, fake.deps)).toBe(0)
+    expect(fake.bunCalls).toContainEqual([
+      "build",
+      "--compile",
+      "--target=bun-windows-x64",
+      "--outfile=/repo/dist/zcode-serve-acp-windows-x64.exe",
       "src/bin.ts"
     ])
   })

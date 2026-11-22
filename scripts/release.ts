@@ -16,9 +16,14 @@
  *      `chore: bump version to X.Y.Z`,
  *   4. tags `vX.Y.Z` (annotated), pushes main + the tag,
  *   5. compiles the Bridge binary per target into
- *      `dist/zcode-serve-acp-<os>-<arch>` (default target: bun-linux-x64),
+ *      `dist/zcode-serve-acp-<os>-<arch>` (windows target: `.exe`; default
+ *      target: bun-linux-x64) — a local pre-publish sanity build; the assets
+ *      shipped on the release come from CI,
  *   6. creates a DRAFT GitHub release with the section plus a Contributors
- *      summary and a compare link — the maintainer reviews and publishes.
+ *      summary and a compare link — the release CI (tag-push trigger in
+ *      .github/workflows/release.yml) then runs the gates, cross-compiles
+ *      every target from the tag, and attaches binaries + SHA256SUMS to the
+ *      draft; the maintainer reviews and publishes.
  *
  * `--dry-run` prints the plan and the full release body without touching
  * anything (no gates, no gh, no commit/tag/push/install) — usable from any
@@ -320,6 +325,12 @@ export function buildReleaseBody(section: string, logins: string[], compareUrl: 
   return `${parts.join("\n")}\n`
 }
 
+/** Release asset filename for a bun target — windows targets carry `.exe`. */
+export function assetName(target: string): string {
+  const base = `zcode-serve-acp-${target.slice("bun-".length)}`
+  return target === "bun-windows-x64" ? `${base}.exe` : base
+}
+
 export function parseRepoSlug(remoteUrl: string): string | null {
   const ssh = /^git@[^:]+:([^/]+)\/(.+?)\.git$/.exec(remoteUrl)
   if (ssh !== null) return `${ssh[1]}/${ssh[2]}`
@@ -452,9 +463,7 @@ export function runRelease(options: ReleaseOptions, deps: ReleaseDeps): number {
     deps.log(`version: ${pkg.version} → ${version} (tag ${tag})`)
     deps.log(`base: ${oldTag ?? "no tags — first release, from the first commit"}`)
     deps.log(`gates would run: mise run ${GATES.join(", ")} (skipped)`)
-    deps.log(
-      `assets would be compiled: ${options.targets.map((t) => `dist/zcode-serve-acp-${t.slice("bun-".length)}`).join(", ")}`
-    )
+    deps.log(`assets would be compiled: ${options.targets.map((t) => `dist/${assetName(t)}`).join(", ")}`)
     deps.log("--- changelog section preview ---")
     deps.log(section)
     deps.log("--- release body preview ---")
@@ -485,7 +494,7 @@ export function runRelease(options: ReleaseOptions, deps: ReleaseDeps): number {
   deps.log(`pushed main + ${tag}`)
 
   for (const target of options.targets) {
-    const asset = path.join(deps.cwd, "dist", `zcode-serve-acp-${target.slice("bun-".length)}`)
+    const asset = path.join(deps.cwd, "dist", assetName(target))
     const build = deps.run("bun", ["build", "--compile", `--target=${target}`, `--outfile=${asset}`, "src/bin.ts"])
     ensure(build.code === 0, `compile ${target} failed:\n${(build.err || build.out).trim()}`)
     deps.chmod(asset, 0o755)

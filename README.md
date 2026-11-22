@@ -16,6 +16,12 @@ scripts/install.sh    # build + backup + atomic install/restore (flags: --help)
 bun scripts/probe-tools-load.mjs --bin dist/zcode-serve-acp   # tool-call + load probe
 ```
 
+## Releases
+
+`mise run release` bumps the version, tags `vX.Y.Z`, and opens a **draft** GitHub release with the changelog section. The release CI ([.github/workflows/release.yml](.github/workflows/release.yml), tag-push trigger) then runs the full gates, cross-compiles the binary from the tag, and attaches the assets to the draft — `linux-x64` for now (the target used here; more targets live in `BUN_TARGETS` in scripts/release.ts when needed) plus `SHA256SUMS`. Review the draft on GitHub and publish.
+
+Re-attach assets for an existing tag: Actions → Release → Run workflow, picking the tag.
+
 ## Use in T3 Code
 
 Settings → Providers → Add provider → Show more → **Local ACP command**:

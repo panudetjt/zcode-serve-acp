@@ -1,0 +1,76 @@
+name: Release
+
+# Attach release assets to the draft release that `mise run release` creates.
+# The script pushes the tag first and creates the draft after its local
+# compile, so this workflow (started by the tag push) runs the same gates as
+# ci.yml, cross-compiles the release targets from the tag, waits for the draft to
+# appear, and uploads the assets (linux-x64 only for now — the target
+# actually used here). workflow_dispatch lets a maintainer rebuild
+# and re-attach assets for an existing tag — dispatch on the tag ref.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v2
+        with:
+          version: 2026.11.2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type check
+        run: mise run check
+
+      - name: Unit tests (includes golden-replay parity gate and test coverage)
+        run: mise run test
+
+      - name: Format check
+        run: mise run fmt-check
+
+      - name: Lint
+        run: mise run lint
+
+      # linux-x64 only for now — the target actually used here, matching the
+      # release script's default targets. To add more, pull them from
+      # BUN_TARGETS in scripts/release.ts (bun cross-compiles all of them
+      # from this runner; windows assets carry .exe).
+      - name: Compile the release binary
+        run: |
+          bun build --compile --target=bun-linux-x64 --outfile=dist/zcode-serve-acp-linux-x64 src/bin.ts
+          chmod 755 dist/zcode-serve-acp-linux-x64
+          (cd dist && sha256sum zcode-serve-acp-* > SHA256SUMS)
+
+      # The draft is created by `mise run release` seconds-to-minutes after the
+      # tag push (it compiles locally first); the gates above cover that window.
+      - name: Wait for the draft release
+        run: |
+          for _ in $(seq 1 60); do
+            if gh release view "$TAG" --json id > /dev/null 2>&1; then
+              echo "release $TAG found"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "release $TAG not found after 5 minutes — did 'mise run release' create the draft?" >&2
+          exit 1
+
+      - name: Attach binaries and checksums to the draft release
+        run: gh release upload "$TAG" dist/zcode-serve-acp-* dist/SHA256SUMS --clobber
