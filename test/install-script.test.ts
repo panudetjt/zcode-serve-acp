@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import {
+  appendFileSync,
   chmodSync,
   copyFileSync,
   mkdirSync,
@@ -391,6 +392,19 @@ printf '%s\\n' "$*" > "$RECORD"
       expect(content).not.toContain("stale line")
       expect(content).toContain("mcp__t3-code__")
       expect(content.split(BEGIN).length - 1).toBe(1)
+    })
+
+    test("preserves user content after the managed block on refresh", () => {
+      const home = scratch()
+      runEnv(["--global-agents"], { HOME: home })
+      const file = agentsFile(home)
+      appendFileSync(file, "\n# My trailing notes\n")
+      const result = runEnv(["--global-agents"], { HOME: home })
+      expect(result.code).toBe(0)
+      const content = readFileSync(file, "utf8")
+      expect(content).toContain("# My trailing notes")
+      expect(content).toContain("mcp__t3-code__")
+      expect(content.indexOf(END)).toBeLessThan(content.indexOf("# My trailing notes"))
     })
 
     test("appends to existing user content and preserves it", () => {

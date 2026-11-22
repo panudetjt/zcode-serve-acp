@@ -460,9 +460,10 @@ init_global_agents_file() {
 #######################################
 write_global_agents() {
   mkdir -p "$(dirname "$global_agents_file")"
-  local tmp="$global_agents_file.tmp.$$"
+  tmp_file="$global_agents_file.tmp.$$"
+  trap 'rm -f -- "$tmp_file"' EXIT
   if [[ ! -e $global_agents_file ]]; then
-    { echo "$GLOBAL_AGENTS_BEGIN"; global_agents_body; echo "$GLOBAL_AGENTS_END"; } >"$tmp"
+    { echo "$GLOBAL_AGENTS_BEGIN"; global_agents_body; echo "$GLOBAL_AGENTS_END"; } >"$tmp_file"
   elif grep -qF -- "$GLOBAL_AGENTS_BEGIN" "$global_agents_file"; then
     # Replace the existing block in place, preserving everything around it.
     awk -v begin="$GLOBAL_AGENTS_BEGIN" -v end="$GLOBAL_AGENTS_END" \
@@ -473,10 +474,11 @@ write_global_agents() {
         if (!done) { for (i = 1; i <= n; i++) print block[i]; done = 1 }
         next
       }
+      inblock && $0 == end { inblock = 0; next }
       inblock { next }
       { print }
       END { if (!done) { for (i = 1; i <= n; i++) print block[i] } }
-    ' "$global_agents_file" >"$tmp"
+    ' "$global_agents_file" >"$tmp_file"
   else
     # Fresh append: normalize the trailing newline, then attach the block.
     {
@@ -485,9 +487,10 @@ write_global_agents() {
       echo "$GLOBAL_AGENTS_BEGIN"
       global_agents_body
       echo "$GLOBAL_AGENTS_END"
-    } >"$tmp"
+    } >"$tmp_file"
   fi
-  mv -f -- "$tmp" "$global_agents_file"
+  mv -f -- "$tmp_file" "$global_agents_file"
+  trap - EXIT
   echo "install: wrote T3 toolset note -> $global_agents_file"
 }
 
@@ -507,13 +510,16 @@ remove_global_agents() {
     echo "install: no managed T3 toolset note in $global_agents_file"
     return 0
   fi
+  tmp_file="$global_agents_file.tmp.$$"
+  trap 'rm -f -- "$tmp_file"' EXIT
   awk -v begin="$GLOBAL_AGENTS_BEGIN" -v end="$GLOBAL_AGENTS_END" '
     $0 == begin { inblock = 1; next }
     inblock && $0 == end { inblock = 0; next }
     inblock { next }
     { print }
-  ' "$global_agents_file" >"$global_agents_file.tmp.$$"
-  mv -f -- "$global_agents_file.tmp.$$" "$global_agents_file"
+  ' "$global_agents_file" >"$tmp_file"
+  mv -f -- "$tmp_file" "$global_agents_file"
+  trap - EXIT
   echo "install: removed T3 toolset note -> $global_agents_file"
 }
 
