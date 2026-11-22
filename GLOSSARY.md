@@ -61,3 +61,13 @@ The rewritten Bridge keeps binary name, env vars, and ACP surface identical, so 
 
 **Behavior-preserving port**:
 A rewrite that changes only the listed known bugs — never the feature set.
+
+## Release
+
+**Release**:
+The maintainer-run act of cutting `vX.Y.Z` (`scripts/release.ts` via `mise run release`): CI gates, a `chore: bump version to X.Y.Z` commit carrying the new CHANGELOG.md section, an annotated tag, a push, and a draft GitHub Release that the maintainer reviews and publishes by hand.
+_Avoid_: deploy, publish, ship
+
+**Release asset**:
+The prebuilt per-target Bridge binary (e.g. `zcode-serve-acp-linux-x64`) that the release script compiles and attaches to the draft Release.
+_Avoid_: artifact, build output
