@@ -71,6 +71,40 @@ of the contract (process lifecycle, timeouts, wire rules), read
 
 **Updating the clone** (rare, do only when asked): `git -C .repos/t3code pull`.
 
+## T3 toolset naming at runtime — agents, read before answering "do I have the toolset?"
+
+Sessions running under this Bridge receive T3 Code's toolsets (orchestration,
+PR/issue, preview, device, secrets, …) as MCP tools named
+**`mcp__t3-code__<shortName>`** — e.g. `mcp__t3-code__delegate_task`,
+`mcp__t3-code__t3_thread_launch`, `mcp__t3-code__pull_request_read`,
+`mcp__t3-code__html_render`. The `<t3_code_instructions>` block in the system
+prompt references those tools by the **bare short names, without the
+`mcp__t3-code__` prefix** (the same block ships to native providers whose tool
+names really are bare).
+
+Consequences for every session in this repo:
+
+- To **call** a tool the instructions name bare, prefix it:
+  `delegate_task` → `mcp__t3-code__delegate_task`. Do not report a call as
+  impossible because the bare name is not in the function list.
+- To **check presence**, search the function list for the `mcp__t3-code__`
+  prefix. Bare-name absence is NOT evidence the toolset is missing. The chain
+  T3 → Bridge (`session/new` + stdio `mcpServers`, PR #14) → Daemon (spawns
+  the `t3-code` MCP server) works; verified live via daemon log
+  `mcp.server.connected t3-code` (`~/.zcode/cli/log/zcode-*.jsonl`).
+- Shell env vars (`T3_ACP_MCP_NODE`, `T3CODE_THREAD_ID`) are NOT a reliable
+  signal either way: the client merges them into the Bridge spawn env from a
+  spawn-time context, while the MCP servers are re-read per runtime start
+  (`session/new`) — the two can diverge. Judge presence by the function
+  list, not by env.
+- Repo docs only cover sessions in THIS repo. The installer ships the same
+  note machine-wide: `scripts/install.sh --global-agents` writes a managed
+  block into `~/.zcode/AGENTS.md` (the daemon's global instructions file,
+  injected into every fresh session — verified live with a marker probe);
+  `--remove-global-agents` strips it. The daemon always wraps MCP tools as
+  `mcp__<server>__<tool>`, so a Bridge-side rename to the bare instruction
+  names is impossible — the note, not a rename, is the fix.
+
 ## Commands
 
 | Task | Command |

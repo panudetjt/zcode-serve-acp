@@ -6,6 +6,8 @@
 #   scripts/install.sh --restore [NAME|latest] [--dest PATH] [--restart]
 #                      [--verify]
 #   scripts/install.sh --list-backups [--dest PATH]
+#   scripts/install.sh --global-agents
+#   scripts/install.sh --remove-global-agents
 #
 # Flags:
 #   --dest PATH       install target (default: <repo>/dist/zcode-serve-acp)
@@ -16,6 +18,13 @@
 #   --list-backups    list saved binaries next to the target and exit
 #   --restore [NAME]  restore a backup (default: latest install backup);
 #                     NAME is a bare backup filename or a path
+#   --global-agents   add the T3 toolset-naming note to the daemon's global
+#                     agent instructions ($HOME/.zcode/AGENTS.md) and exit.
+#                     Idempotent; the note teaches every session on this
+#                     machine (all projects) that T3 tools surface as
+#                     mcp__t3-code__<name>. No build, no daemon contact.
+#   --remove-global-agents
+#                     remove that managed note again and exit
 #
 # Every install backs up the current binary as
 #   backups/<name>.<UTC timestamp>.<sha256[0:12]>
@@ -30,6 +39,7 @@
 #   scripts/install.sh --list-backups
 #   scripts/install.sh --dest ~/work/zcode-serve-acp/dist/zcode-serve-acp
 #   scripts/install.sh --restore latest --restart
+#   scripts/install.sh --global-agents
 set -euo pipefail
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -44,6 +54,30 @@ bakdir=""
 restore_src=""
 tmp_file=""
 pids_found=()
+
+readonly GLOBAL_AGENTS_BEGIN="<!-- zcode-serve-acp:begin (managed by scripts/install.sh) -->"
+readonly GLOBAL_AGENTS_END="<!-- zcode-serve-acp:end -->"
+
+#######################################
+# Print the managed global-agents note body (markers excluded).
+# Outputs:
+#   The note text to stdout.
+# Returns:
+#   0
+#######################################
+global_agents_body() {
+  cat <<'EOF'
+## T3 Code toolset naming (auto-added by zcode-serve-acp)
+
+If the conversation includes a `<t3_code_instructions>` block: the tools it
+names bare (`delegate_task`, `t3_thread_*`, `pull_request_*`, `preview_*`,
+`html_render`, `request_secret`, ...) appear in the function list with an
+`mcp__t3-code__` prefix. Call the prefixed name (`delegate_task` ->
+`mcp__t3-code__delegate_task`). Never conclude the toolset is missing because
+the bare names are absent from the function list, and do not use shell env
+vars as a presence signal.
+EOF
+}
 
 #######################################
 # Print this file's header as usage text.
@@ -103,6 +137,14 @@ parse_args() {
         ;;
       --list-backups)
         mode=list
+        shift
+        ;;
+      --global-agents)
+        mode=global-agents
+        shift
+        ;;
+      --remove-global-agents)
+        mode=remove-global-agents
         shift
         ;;
       --restore)
@@ -390,6 +432,92 @@ run_verify() {
 }
 
 #######################################
+# Resolve the global agent-instructions file path.
+# Globals:
+#   HOME
+# Outputs:
+#   None (sets global_agents_file on success).
+# Returns:
+#   0, or exits when HOME is unset.
+#######################################
+init_global_agents_file() {
+  if [[ -z ${HOME:-} ]]; then
+    die "HOME is not set; cannot locate ~/.zcode/AGENTS.md"
+  fi
+  global_agents_file="$HOME/.zcode/AGENTS.md"
+}
+
+#######################################
+# Add or refresh the managed note in the global agent-instructions file.
+# Globals:
+#   global_agents_file, GLOBAL_AGENTS_BEGIN, GLOBAL_AGENTS_END
+# Arguments:
+#   None
+# Outputs:
+#   Status lines on stdout.
+# Returns:
+#   0 on success.
+#######################################
+write_global_agents() {
+  mkdir -p "$(dirname "$global_agents_file")"
+  local tmp="$global_agents_file.tmp.$$"
+  if [[ ! -e $global_agents_file ]]; then
+    { echo "$GLOBAL_AGENTS_BEGIN"; global_agents_body; echo "$GLOBAL_AGENTS_END"; } >"$tmp"
+  elif grep -qF -- "$GLOBAL_AGENTS_BEGIN" "$global_agents_file"; then
+    # Replace the existing block in place, preserving everything around it.
+    awk -v begin="$GLOBAL_AGENTS_BEGIN" -v end="$GLOBAL_AGENTS_END" \
+      -v blocksrc=<( { echo "$GLOBAL_AGENTS_BEGIN"; global_agents_body; echo "$GLOBAL_AGENTS_END"; } ) '
+      BEGIN { while ((getline l < blocksrc) > 0) block[++n] = l }
+      $0 == begin {
+        inblock = 1
+        if (!done) { for (i = 1; i <= n; i++) print block[i]; done = 1 }
+        next
+      }
+      inblock { next }
+      { print }
+      END { if (!done) { for (i = 1; i <= n; i++) print block[i] } }
+    ' "$global_agents_file" >"$tmp"
+  else
+    # Fresh append: normalize the trailing newline, then attach the block.
+    {
+      cat -- "$global_agents_file"
+      [[ $(tail -c1 -- "$global_agents_file") == $'\n' ]] || echo
+      echo "$GLOBAL_AGENTS_BEGIN"
+      global_agents_body
+      echo "$GLOBAL_AGENTS_END"
+    } >"$tmp"
+  fi
+  mv -f -- "$tmp" "$global_agents_file"
+  echo "install: wrote T3 toolset note -> $global_agents_file"
+}
+
+#######################################
+# Remove the managed note from the global agent-instructions file.
+# Globals:
+#   global_agents_file, GLOBAL_AGENTS_BEGIN, GLOBAL_AGENTS_END
+# Arguments:
+#   None
+# Outputs:
+#   Status lines on stdout.
+# Returns:
+#   0 (also when the file or block is absent).
+#######################################
+remove_global_agents() {
+  if [[ ! -e $global_agents_file ]] || ! grep -qF -- "$GLOBAL_AGENTS_BEGIN" "$global_agents_file"; then
+    echo "install: no managed T3 toolset note in $global_agents_file"
+    return 0
+  fi
+  awk -v begin="$GLOBAL_AGENTS_BEGIN" -v end="$GLOBAL_AGENTS_END" '
+    $0 == begin { inblock = 1; next }
+    inblock && $0 == end { inblock = 0; next }
+    inblock { next }
+    { print }
+  ' "$global_agents_file" >"$global_agents_file.tmp.$$"
+  mv -f -- "$global_agents_file.tmp.$$" "$global_agents_file"
+  echo "install: removed T3 toolset note -> $global_agents_file"
+}
+
+#######################################
 # Entry point.
 # Globals:
 #   mode, dest, do_verify, tmp_file, restore_src
@@ -405,6 +533,15 @@ main() {
   init_paths
   if [[ $mode == list ]]; then
     list_backups
+    return 0
+  fi
+  if [[ $mode == global-agents || $mode == remove-global-agents ]]; then
+    init_global_agents_file
+    if [[ $mode == global-agents ]]; then
+      write_global_agents
+    else
+      remove_global_agents
+    fi
     return 0
   fi
   if ((do_verify)); then
