@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import {
+  appendFileSync,
   chmodSync,
   copyFileSync,
   mkdirSync,
@@ -349,5 +350,117 @@ printf '%s\\n' "$*" > "$RECORD"
     })
     expect(proc.exitCode).toBe(2)
     expect(proc.stderr.toString()).toContain("--bin not found")
+  })
+
+  describe("--global-agents", () => {
+    const BEGIN = "<!-- zcode-serve-acp:begin (managed by scripts/install.sh) -->"
+    const END = "<!-- zcode-serve-acp:end -->"
+
+    function agentsFile(home: string): string {
+      return path.join(home, ".zcode", "AGENTS.md")
+    }
+
+    test("creates the file with the managed note when it does not exist", () => {
+      const home = scratch()
+      const result = runEnv(["--global-agents"], { HOME: home })
+      expect(result.code).toBe(0)
+      const content = readFileSync(agentsFile(home), "utf8")
+      expect(content).toContain(BEGIN)
+      expect(content).toContain(END)
+      expect(content).toContain("mcp__t3-code__")
+      expect(content.indexOf(BEGIN)).toBeLessThan(content.indexOf(END))
+    })
+
+    test("is idempotent — a second run does not duplicate the block", () => {
+      const home = scratch()
+      runEnv(["--global-agents"], { HOME: home })
+      runEnv(["--global-agents"], { HOME: home })
+      const content = readFileSync(agentsFile(home), "utf8")
+      expect(content.split(BEGIN).length - 1).toBe(1)
+      expect(content.split(END).length - 1).toBe(1)
+    })
+
+    test("refreshes a stale managed block without touching surrounding content", () => {
+      const home = scratch()
+      runEnv(["--global-agents"], { HOME: home })
+      const file = agentsFile(home)
+      const original = readFileSync(file, "utf8")
+      writeFileSync(file, original.replace("mcp__t3-code__", "STALE-MARKER").replace(BEGIN, `${BEGIN}\nstale line`))
+      const result = runEnv(["--global-agents"], { HOME: home })
+      expect(result.code).toBe(0)
+      const content = readFileSync(file, "utf8")
+      expect(content).not.toContain("stale line")
+      expect(content).toContain("mcp__t3-code__")
+      expect(content.split(BEGIN).length - 1).toBe(1)
+    })
+
+    test("preserves user content after the managed block on refresh", () => {
+      const home = scratch()
+      runEnv(["--global-agents"], { HOME: home })
+      const file = agentsFile(home)
+      appendFileSync(file, "\n# My trailing notes\n")
+      const result = runEnv(["--global-agents"], { HOME: home })
+      expect(result.code).toBe(0)
+      const content = readFileSync(file, "utf8")
+      expect(content).toContain("# My trailing notes")
+      expect(content).toContain("mcp__t3-code__")
+      expect(content.indexOf(END)).toBeLessThan(content.indexOf("# My trailing notes"))
+    })
+
+    test("appends to existing user content and preserves it", () => {
+      const home = scratch()
+      const file = agentsFile(home)
+      mkdirSync(path.dirname(file), { recursive: true })
+      writeFileSync(file, "# My own global notes\n\nKeep this.\n")
+      const result = runEnv(["--global-agents"], { HOME: home })
+      expect(result.code).toBe(0)
+      const content = readFileSync(file, "utf8")
+      expect(content.startsWith("# My own global notes\n\nKeep this.\n")).toBe(true)
+      expect(content).toContain(BEGIN)
+    })
+
+    test("appends after content that lacks a trailing newline", () => {
+      const home = scratch()
+      const file = agentsFile(home)
+      mkdirSync(path.dirname(file), { recursive: true })
+      writeFileSync(file, "no trailing newline")
+      const result = runEnv(["--global-agents"], { HOME: home })
+      expect(result.code).toBe(0)
+      const content = readFileSync(file, "utf8")
+      expect(content).toContain("no trailing newline\n")
+      expect(content).toContain(BEGIN)
+    })
+
+    test("--remove-global-agents strips the block and keeps user content", () => {
+      const home = scratch()
+      const file = agentsFile(home)
+      mkdirSync(path.dirname(file), { recursive: true })
+      writeFileSync(file, "# Mine\n")
+      runEnv(["--global-agents"], { HOME: home })
+      const result = runEnv(["--remove-global-agents"], { HOME: home })
+      expect(result.code).toBe(0)
+      const content = readFileSync(file, "utf8")
+      expect(content).toContain("# Mine")
+      expect(content).not.toContain(BEGIN)
+      expect(content).not.toContain("mcp__t3-code__")
+    })
+
+    test("--remove-global-agents is a no-op when the file or block is absent", () => {
+      const home = scratch()
+      const result = runEnv(["--remove-global-agents"], { HOME: home })
+      expect(result.code).toBe(0)
+      expect(result.out).toContain("no managed")
+      mkdirSync(path.dirname(agentsFile(home)), { recursive: true })
+      writeFileSync(agentsFile(home), "# user only\n")
+      const again = runEnv(["--remove-global-agents"], { HOME: home })
+      expect(again.code).toBe(0)
+      expect(readFileSync(agentsFile(home), "utf8")).toBe("# user only\n")
+    })
+
+    test("fails clearly when HOME is unset", () => {
+      const result = runEnv(["--global-agents"], { HOME: "" })
+      expect(result.code).not.toBe(0)
+      expect(result.err).toContain("HOME")
+    })
   })
 })

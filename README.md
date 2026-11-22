@@ -25,6 +25,27 @@ Settings → Providers → Add provider → Show more → **Local ACP command**:
 
 The bridge discovers the daemon (`~/.zcode/server/run/status.json` → probe `/api/server-info` → `ingress-token` → `POST /api/rpc-host-capability`), spawns `zcode serve` detached if no ready daemon, and attaches over the binary WS channel (`/ws/host` + `x-zcode-rpc-host-capability`). It never kills the daemon.
 
+T3 Code's own toolsets reach the model end-to-end: the client sends its
+session-scoped MCP server in `session/new`, the bridge forwards it to the
+daemon (MCP integration, PR #14), and the daemon attaches it as a stdio MCP
+server named `t3-code` — so tools surface to agents as
+`mcp__t3-code__<name>` (e.g. `mcp__t3-code__delegate_task`). The T3
+instructions block references those tools by bare names; agents should treat
+bare name + `mcp__t3-code__` prefix as the same tool.
+
+For agents in **any** project (not just this repo), the installer ships the
+mapping note into the daemon's global instructions file — the daemon injects
+`~/.zcode/AGENTS.md` into every fresh session (verified live):
+
+```sh
+scripts/install.sh --global-agents      # add / refresh the managed note
+scripts/install.sh --remove-global-agents   # strip it again
+```
+
+The daemon always wraps MCP tools as `mcp__<server>__<tool>`, so the bridge
+cannot rename them to the bare instruction names — the note, not a rename,
+is the fix.
+
 ## Requirements
 
 - ZCode CLI ≥ 0.17.1 with server runtime (`~/.zcode/server/bin/zcode`) and `zcode login` done once
