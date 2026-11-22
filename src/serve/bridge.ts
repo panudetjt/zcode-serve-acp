@@ -9,8 +9,8 @@
  * Architecture contract: the daemon is NEVER killed by the bridge — this
  * exits only the Bridge process.
  */
-import { Context, Effect, Layer } from "effect";
-import { Log } from "../log.ts";
+import { Context, Effect, Layer } from "effect"
+import { Log } from "../log.ts"
 
 export class BridgeExit extends Context.Service<
   BridgeExit,
@@ -19,21 +19,21 @@ export class BridgeExit extends Context.Service<
      * Terminate the Bridge process with a non-zero exit code. Never returns
      * normally; the error channel is `never` because `process.exit` is total.
      */
-    readonly exit: (reason: string) => Effect.Effect<never>;
+    readonly exit: (reason: string) => Effect.Effect<never>
   }
 >()("zcode-serve-acp/BridgeExit") {
   static readonly layer: Layer.Layer<BridgeExit, never, Log> = Layer.effect(
     BridgeExit,
     Effect.gen(function* () {
-      const log = yield* Log;
+      const log = yield* Log
       return BridgeExit.of({
         exit: (reason) =>
           Effect.gen(function* () {
             // stderr only — stdout is the ACP wire.
-            yield* log.warn(`[bridge] ${reason} — exiting so the Client can restart the Bridge`);
-            return yield* Effect.sync(() => process.exit(1));
-          }),
-      });
-    }),
-  );
+            yield* log.warn(`[bridge] ${reason} — exiting so the Client can restart the Bridge`)
+            return yield* Effect.sync(() => process.exit(1))
+          })
+      })
+    })
+  )
 }

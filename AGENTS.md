@@ -65,7 +65,9 @@ mkdir -p .repos && git clone --depth 1 https://github.com/pingdotgg/t3code.git .
 [`agent-patterns/t3code.md`](./agent-patterns/t3code.md)** — the distilled
 facts (adapter-v2 subagent hooks, `_t3_unknown` channel, per-agent shim
 layout) extracted from `.repos/t3code/packages/provider-acp-registry/src/server/claudeAcp.ts`
-and `packages/provider-acp/src/server/adapter.ts`.
+and `packages/provider-acp/src/server/adapter.ts` — and, for the Client side
+of the contract (process lifecycle, timeouts, wire rules), read
+[`agent-patterns/t3code-client-contract.md`](./agent-patterns/t3code-client-contract.md).
 
 **Updating the clone** (rare, do only when asked): `git -C .repos/t3code pull`.
 

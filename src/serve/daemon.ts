@@ -19,28 +19,28 @@
  * a spawn failure surfaced only as the 30s readiness timeout — now the error
  * fails the connect immediately.
  */
-import { spawn as nodeSpawn } from "node:child_process";
-import os from "node:os";
-import path from "node:path";
-import { Clock, Context, Effect, Layer, Result, Schema } from "effect";
-import { FileSystem } from "effect/FileSystem";
-import { HttpClient, HttpClientRequest } from "effect/http";
-import { CapabilityError, DecodeError, DiscoveryError, SpawnError, renderError } from "../errors.ts";
-import { childEnv, envDataOverride, envHome, envServeBin, envServerRoot } from "../config.ts";
-import { Log } from "../log.ts";
+import { spawn as nodeSpawn } from "node:child_process"
+import os from "node:os"
+import path from "node:path"
+import { Clock, Context, Effect, Layer, Result, Schema } from "effect"
+import { FileSystem } from "effect/FileSystem"
+import { HttpClient, HttpClientRequest } from "effect/http"
+import { CapabilityError, DecodeError, DiscoveryError, SpawnError, renderError } from "../errors.ts"
+import { childEnv, envDataOverride, envHome, envServeBin, envServerRoot } from "../config.ts"
+import { Log } from "../log.ts"
 
 export interface ServerStatus {
-  state: string;
-  host: string;
-  port: number;
-  version?: string;
-  pid?: number;
+  state: string
+  host: string
+  port: number
+  version?: string
+  pid?: number
   /**
    * Daemon start epoch ms (status.json `startedAt`, observed live on runtime
    * 3.19.0). A restart mints a new pid AND startedAt — the session watchdog
    * compares both to detect a restarted daemon (issue #5).
    */
-  startedAt?: number;
+  startedAt?: number
 }
 
 export const ServerStatusSchema = Schema.Struct({
@@ -49,35 +49,35 @@ export const ServerStatusSchema = Schema.Struct({
   port: Schema.Finite,
   version: Schema.optional(Schema.String),
   pid: Schema.optional(Schema.Finite),
-  startedAt: Schema.optional(Schema.Finite),
-});
+  startedAt: Schema.optional(Schema.Finite)
+})
 
 export interface DaemonConnection {
-  readonly status: ServerStatus;
-  readonly token: string;
+  readonly status: ServerStatus
+  readonly token: string
   /** ws:// path — fetch a fresh capability right before each WS dial */
-  readonly wsPath: string;
+  readonly wsPath: string
 }
 
 class DaemonDeps extends Context.Service<
   DaemonDeps,
   {
-    readonly client: HttpClient.HttpClient;
-    readonly fs: FileSystem;
-    readonly serveBin: string;
+    readonly client: HttpClient.HttpClient
+    readonly fs: FileSystem
+    readonly serveBin: string
     /** spawn `serve` detached; resolves immediately, daemon keeps running */
-    readonly spawnServe: Effect.Effect<void, SpawnError>;
+    readonly spawnServe: Effect.Effect<void, SpawnError>
     /** first async spawn error, if the detached spawn already failed */
-    readonly spawnFailure: Effect.Effect<string | undefined>;
+    readonly spawnFailure: Effect.Effect<string | undefined>
   }
 >()("zcode-serve-acp/internal/DaemonDeps") {
   static readonly layer: Layer.Layer<DaemonDeps, never, HttpClient.HttpClient | FileSystem> = Layer.effect(
     DaemonDeps,
     Effect.gen(function* () {
-      const client = yield* HttpClient.HttpClient;
-      const fs = yield* FileSystem;
-      const serveBin = yield* resolveServeBinary(fs);
-      let spawnError: string | undefined;
+      const client = yield* HttpClient.HttpClient
+      const fs = yield* FileSystem
+      const serveBin = yield* resolveServeBinary(fs)
+      let spawnError: string | undefined
 
       // Effect-valued property (the `lazy-effect` fix): an Effect is already
       // lazy, so one value serves every run. `Effect.suspend` re-invokes the
@@ -90,118 +90,118 @@ class DaemonDeps extends Context.Service<
               const child = nodeSpawn(serveBin, ["serve"], {
                 env: childEnv(),
                 detached: true,
-                stdio: "ignore",
-              });
+                stdio: "ignore"
+              })
               // Pre-rewrite bug fix: record the async spawn error so the
               // readiness loop can fail fast instead of waiting out 30s.
               child.on("error", (error) => {
-                spawnError ??= error.message;
-              });
+                spawnError ??= error.message
+              })
               // The daemon must outlive the bridge — fully detach.
-              child.unref();
+              child.unref()
             },
-            catch: (cause) => new SpawnError({ bin: serveBin, message: renderError(cause) }),
-          });
-        }),
-      );
+            catch: (cause) => new SpawnError({ bin: serveBin, message: renderError(cause) })
+          })
+        })
+      )
 
       return DaemonDeps.of({
         client,
         fs,
         serveBin,
         spawnServe,
-        spawnFailure: Effect.sync(() => spawnError),
-      });
-    }),
-  );
+        spawnFailure: Effect.sync(() => spawnError)
+      })
+    })
+  )
 }
 
 export class Daemon extends Context.Service<
   Daemon,
   {
     /** Attach to a ready daemon, spawning one if none is up. */
-    readonly connect: Effect.Effect<DaemonConnection, DiscoveryError | SpawnError>;
+    readonly connect: Effect.Effect<DaemonConnection, DiscoveryError | SpawnError>
     /**
      * Latest daemon status from the local status file — `undefined` when the
      * file is absent, unreadable, or malformed (same tolerance as connect).
      * Issue #5 watchdog: the session layer compares this against its memoized
      * connection to detect a restarted daemon (pid/startedAt/port change).
      */
-    readonly readStatus: Effect.Effect<ServerStatus | undefined>;
+    readonly readStatus: Effect.Effect<ServerStatus | undefined>
     /** Fresh single-use host capability token (30s TTL) — call right before each WS dial. */
-    getCapability(connection: DaemonConnection): Effect.Effect<string, CapabilityError>;
+    getCapability(connection: DaemonConnection): Effect.Effect<string, CapabilityError>
   }
 >()("zcode-serve-acp/Daemon") {
   static readonly layer: Layer.Layer<Daemon, never, HttpClient.HttpClient | FileSystem | Log> = Layer.effect(
     Daemon,
     Effect.gen(function* () {
-      const deps = yield* DaemonDeps;
-      const log = yield* Log;
+      const deps = yield* DaemonDeps
+      const log = yield* Log
 
-      const readFile = (file: string) => deps.fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined));
+      const readFile = (file: string) => deps.fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined))
 
       // Malformed/unready status → undefined (tolerated, keeps polling).
       const readStatusFrom = Effect.fn("Daemon.readStatus")(function* (rootDir: string) {
-        const text = yield* readFile(path.join(rootDir, "run", "status.json"));
-        if (text === undefined) return undefined;
+        const text = yield* readFile(path.join(rootDir, "run", "status.json"))
+        if (text === undefined) return undefined
         // Typed catch per the taxonomy: the failure is swallowed into
         // "not ready" below, so the DecodeError is never rendered — it exists
         // to keep the channel typed instead of `unknown`.
         const parsed = yield* Effect.try({
           try: () => JSON.parse(text) as unknown,
-          catch: () => new DecodeError({ location: "daemon/status.json", message: "malformed daemon status JSON" }),
-        }).pipe(Effect.result);
-        if (!Result.isSuccess(parsed)) return undefined;
-        const result = yield* Effect.result(Schema.decodeUnknownEffect(ServerStatusSchema)(parsed.success));
-        return Result.isSuccess(result) ? result.success : undefined;
-      });
+          catch: () => new DecodeError({ location: "daemon/status.json", message: "malformed daemon status JSON" })
+        }).pipe(Effect.result)
+        if (!Result.isSuccess(parsed)) return undefined
+        const result = yield* Effect.result(Schema.decodeUnknownEffect(ServerStatusSchema)(parsed.success))
+        return Result.isSuccess(result) ? result.success : undefined
+      })
 
       const readToken = Effect.fn("Daemon.readToken")(function* (rootDir: string) {
-        const text = yield* readFile(path.join(rootDir, "run", "ingress-token"));
-        return text === undefined ? "" : text.trim();
-      });
+        const text = yield* readFile(path.join(rootDir, "run", "ingress-token"))
+        return text === undefined ? "" : text.trim()
+      })
 
       const probeServerInfo = (host: string, port: number, token: string) =>
         deps.client
           .execute(
             HttpClientRequest.get(`http://${host}:${port}/api/server-info`).pipe(
-              token ? HttpClientRequest.setHeaders({ authorization: `Bearer ${token}` }) : (request) => request,
-            ),
+              token ? HttpClientRequest.setHeaders({ authorization: `Bearer ${token}` }) : (request) => request
+            )
           )
           .pipe(
             Effect.map((response) => response.status >= 200 && response.status < 300),
             Effect.timeout("2 seconds"),
-            Effect.orElseSucceed(() => false),
-          );
+            Effect.orElseSucceed(() => false)
+          )
 
       const waitForReadyDaemon = Effect.fn("Daemon.waitForReady")(function* (): Effect.fn.Return<
         { status: ServerStatus; token: string },
         DiscoveryError | SpawnError
       > {
-        const rootDir = serverRoot();
-        const deadline = (yield* Clock.currentTimeMillis) + 30_000;
+        const rootDir = serverRoot()
+        const deadline = (yield* Clock.currentTimeMillis) + 30_000
         for (;;) {
-          const status = yield* readStatusFrom(rootDir);
-          const token = yield* readToken(rootDir);
+          const status = yield* readStatusFrom(rootDir)
+          const token = yield* readToken(rootDir)
           if (status !== undefined && (yield* probeServerInfo(status.host, status.port, token))) {
-            return { status, token };
+            return { status, token }
           }
           if ((yield* Clock.currentTimeMillis) > deadline) {
-            const spawnFailure = yield* deps.spawnFailure;
+            const spawnFailure = yield* deps.spawnFailure
             if (spawnFailure !== undefined) {
               return yield* new SpawnError({
                 bin: deps.serveBin,
-                message: `spawning ${deps.serveBin} serve failed: ${spawnFailure}`,
-              });
+                message: `spawning ${deps.serveBin} serve failed: ${spawnFailure}`
+              })
             }
-            return yield* new DiscoveryError({ message: "zcode serve did not report a ready daemon (30s)" });
+            return yield* new DiscoveryError({ message: "zcode serve did not report a ready daemon (30s)" })
           }
-          yield* Effect.sleep(250);
+          yield* Effect.sleep(250)
           if (status !== undefined) {
-            yield* log.debug(`[daemon] waiting: state=${status.state}`);
+            yield* log.debug(`[daemon] waiting: state=${status.state}`)
           }
         }
-      });
+      })
 
       // Effect-valued property, same shape as `spawnServe`: `Effect.suspend`
       // rebuilds the `Effect.fn` body per run, so repeated runs get fresh spans
@@ -209,21 +209,21 @@ export class Daemon extends Context.Service<
       const connect: Effect.Effect<DaemonConnection, DiscoveryError | SpawnError> = Effect.suspend(
         Effect.fn("Daemon.connect")(function* (): Effect.fn.Return<DaemonConnection, DiscoveryError | SpawnError> {
           // serverRoot() is always defined: env overrides or os.homedir() fallback.
-          const rootDir = serverRoot();
-          let status = yield* readStatusFrom(rootDir);
-          const token = yield* readToken(rootDir);
-          const ready = status !== undefined && (yield* probeServerInfo(status.host, status.port, token));
+          const rootDir = serverRoot()
+          let status = yield* readStatusFrom(rootDir)
+          const token = yield* readToken(rootDir)
+          const ready = status !== undefined && (yield* probeServerInfo(status.host, status.port, token))
 
           if (!ready) {
-            yield* deps.spawnServe;
-            const found = yield* waitForReadyDaemon();
-            return { status: found.status, token: found.token, wsPath: "/ws/host" } satisfies DaemonConnection;
+            yield* deps.spawnServe
+            const found = yield* waitForReadyDaemon()
+            return { status: found.status, token: found.token, wsPath: "/ws/host" } satisfies DaemonConnection
           }
 
-          yield* log.debug(`[daemon] attaching to ready daemon ${status!.host}:${status!.port}`);
-          return { status: status!, token, wsPath: "/ws/host" } satisfies DaemonConnection;
-        }),
-      );
+          yield* log.debug(`[daemon] attaching to ready daemon ${status!.host}:${status!.port}`)
+          return { status: status!, token, wsPath: "/ws/host" } satisfies DaemonConnection
+        })
+      )
 
       // Effect-valued property, same shape as `connect`: `Effect.suspend`
       // re-invokes the `Effect.fn` body per run, so every run re-reads the
@@ -231,75 +231,75 @@ export class Daemon extends Context.Service<
       // connection on every channel dispatch).
       const readStatus: Effect.Effect<ServerStatus | undefined> = Effect.suspend(
         Effect.fn("Daemon.readStatus.status")(function* (): Effect.fn.Return<ServerStatus | undefined> {
-          return yield* readStatusFrom(serverRoot());
-        }),
-      );
+          return yield* readStatusFrom(serverRoot())
+        })
+      )
 
       const getCapability = Effect.fn("Daemon.getCapability")(function* (
-        connection: DaemonConnection,
+        connection: DaemonConnection
       ): Effect.fn.Return<string, CapabilityError> {
         const response = yield* deps.client
           .execute(
             HttpClientRequest.post(
-              `http://${connection.status.host}:${connection.status.port}/api/rpc-host-capability`,
-            ).pipe(HttpClientRequest.bearerToken(connection.token)),
+              `http://${connection.status.host}:${connection.status.port}/api/rpc-host-capability`
+            ).pipe(HttpClientRequest.bearerToken(connection.token))
           )
           .pipe(
             Effect.mapError(
-              (cause) => new CapabilityError({ message: `capability request failed: ${formatCause(cause)}` }),
-            ),
-          );
+              (cause) => new CapabilityError({ message: `capability request failed: ${formatCause(cause)}` })
+            )
+          )
         if (response.status < 200 || response.status >= 300) {
           return yield* new CapabilityError({
             status: response.status,
-            message: `zcode server refused the host grant (HTTP ${response.status})`,
-          });
+            message: `zcode server refused the host grant (HTTP ${response.status})`
+          })
         }
         const body = yield* response.json.pipe(
           Effect.mapError(
-            (cause) => new CapabilityError({ message: `capability response unreadable: ${formatCause(cause)}` }),
-          ),
-        );
-        const capability = rec(body)?.["capability"];
+            (cause) => new CapabilityError({ message: `capability response unreadable: ${formatCause(cause)}` })
+          )
+        )
+        const capability = rec(body)?.["capability"]
         if (typeof capability !== "string" || capability === "") {
-          return yield* new CapabilityError({ message: "zcode server capability response missing capability" });
+          return yield* new CapabilityError({ message: "zcode server capability response missing capability" })
         }
-        return capability;
-      });
+        return capability
+      })
 
-      return Daemon.of({ connect, readStatus, getCapability });
-    }),
-  ).pipe(Layer.provide(DaemonDeps.layer));
+      return Daemon.of({ connect, readStatus, getCapability })
+    })
+  ).pipe(Layer.provide(DaemonDeps.layer))
 }
 
 const rec = (value: unknown): Record<string, unknown> | undefined =>
-  typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+  typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
 
-const formatCause = (cause: unknown): string => renderError(cause);
+const formatCause = (cause: unknown): string => renderError(cause)
 
 export function dataRoot(): string {
-  const override = envDataOverride();
-  if (override) return override;
-  return envHome() ?? os.homedir();
+  const override = envDataOverride()
+  if (override) return override
+  return envHome() ?? os.homedir()
 }
 
 export function serverRoot(): string {
-  const override = envServerRoot();
-  if (override) return override;
-  return path.join(dataRoot(), ".zcode", "server");
+  const override = envServerRoot()
+  if (override) return override
+  return path.join(dataRoot(), ".zcode", "server")
 }
 
 export const resolveServeBinary = (fs: FileSystem): Effect.Effect<string> =>
   Effect.gen(function* () {
-    const serveBin = envServeBin();
-    if (serveBin) return serveBin;
-    const candidates = [path.join(os.homedir(), ".zcode", "server", "bin", "zcode"), "/usr/local/bin/zcode"];
+    const serveBin = envServeBin()
+    if (serveBin) return serveBin
+    const candidates = [path.join(os.homedir(), ".zcode", "server", "bin", "zcode"), "/usr/local/bin/zcode"]
     for (const p of candidates) {
-      const exists = yield* fs.exists(p).pipe(Effect.orElseSucceed(() => false));
-      if (exists) return p;
+      const exists = yield* fs.exists(p).pipe(Effect.orElseSucceed(() => false))
+      if (exists) return p
     }
-    return "zcode"; // last resort: hope PATH has it
-  });
+    return "zcode" // last resort: hope PATH has it
+  })
 
 /**
  * Internal deps. The detached spawn is deliberately raw `node:child_process`:

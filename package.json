@@ -1,6 +1,6 @@
 {
   "name": "zcode-serve-acp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Standalone Agent Client Protocol (ACP) bridge that attaches a coding-agent client (e.g. T3 Code Local ACP command) to the `zcode serve` daemon — the daemon owns ZCode credentials; the bridge never reads the credential store.",
   "license": "MIT",
   "bin": {
@@ -22,7 +22,6 @@
   "devDependencies": {
     "@effect/tsgo": "^0.70.0",
     "bun-types": "^1.4.5",
-    "oxfmt": "^0.79.0",
     "oxlint": "^1.94.0",
     "oxlint-tsgolint": "^7.0.2007",
     "typescript": "^7.0.2"

@@ -3,7 +3,9 @@
 Distilled from the vendored clone in `.repos/t3code/` (pingdotgg/t3code).
 Read-only reference — never import from it; this doc is what the codebase
 remembers. Goal: when the T3 owner opens the door, a `zcodeAcp.ts` shim is a
-single-PR contribution, and this page is the spec.
+single-PR contribution, and this page is the spec. (For the Client side of
+the wire — lifecycle, timeouts, wire rules this bridge codes against — see
+[t3code-client-contract.md](./t3code-client-contract.md).)
 
 ## Where shims live
 

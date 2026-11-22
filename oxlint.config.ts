@@ -3,8 +3,8 @@
 // tsgolint — Effect Devtools docs, /docs/v4/getting-started/devtools). Generic families
 // below cover what Effect rules don't. Installed per docs: `effect-tsgo patch --oxlint`
 // in package.json prepare.
-import { recommended } from "@effect/tsgo/oxlint-presets";
-import { defineConfig } from "oxlint";
+import { recommended } from "@effect/tsgo/oxlint-presets"
+import { defineConfig } from "oxlint"
 
 const config = defineConfig({
   extends: [recommended],
@@ -12,7 +12,7 @@ const config = defineConfig({
   categories: {
     correctness: "warn",
     perf: "warn",
-    suspicious: "warn",
+    suspicious: "warn"
   },
   plugins: ["node"],
   rules: {
@@ -29,12 +29,12 @@ const config = defineConfig({
     "no-restricted-properties": [
       "warn",
       { object: "Date", property: "now", message: "use the Clock service instead" },
-      { object: "Date", property: "parse", message: "use Schema/DateTime instead" },
+      { object: "Date", property: "parse", message: "use Schema/DateTime instead" }
     ],
     // the platform surfaces (effect/FileSystem, effect/http, effect/socket, effect/Stdio)
     // are this project's chosen architecture (ADR 0002) — the unstable allowlist lives in
     // tsconfig.json plugins (LSP side); oxlint's rule has no per-API options, so it stays off here
-    "effecttsgo/unstable-api-usage": "off",
+    "effecttsgo/unstable-api-usage": "off"
   },
   overrides: [
     {
@@ -52,25 +52,25 @@ const config = defineConfig({
         "effecttsgo/effect-succeed-with-undefined": "off",
         "effecttsgo/prefer-typed-schema-decoder": "off",
         // typed error channels land with the errors refactor (deferred)
-        "effecttsgo/any-unknown-in-error-context": "off",
-      },
+        "effecttsgo/any-unknown-in-error-context": "off"
+      }
     },
     {
       // application entry point — the rule allows provide-at-entry
       files: ["src/bin.ts"],
-      rules: { "effecttsgo/strict-effect-provide": "off" },
+      rules: { "effecttsgo/strict-effect-provide": "off" }
     },
     {
       // the designated logging sink + the debug seam it reads at layer build time
       files: ["src/log.ts"],
-      rules: { "no-console": "off", "no-process-env": "off" },
+      rules: { "no-console": "off", "no-process-env": "off" }
     },
     {
       // the only file allowed to touch process.env (see its header)
       files: ["src/config.ts"],
-      rules: { "no-process-env": "off" },
-    },
-  ],
-});
+      rules: { "no-process-env": "off" }
+    }
+  ]
+})
 
-export default config;
+export default config
