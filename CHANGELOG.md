@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.1 — 2026-11-22
+
+### Bug Fixes
+- fix(serve): fallback to legacy sendPrompt on rejected V4 command ACK (47f15c8) — panudetjt
+
 ## v0.4.0 — 2026-11-22
 
 ### Features
