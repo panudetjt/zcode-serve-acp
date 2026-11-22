@@ -116,10 +116,16 @@ Consequences for every session in this repo:
 - Repo docs only cover sessions in THIS repo. The installer ships the same
   note machine-wide: `scripts/install.sh --global-agents` writes a managed
   block into `~/.zcode/AGENTS.md` (the daemon's global instructions file,
-  injected into every fresh session — verified live with a marker probe);
-  `--remove-global-agents` strips it. The daemon always wraps MCP tools as
-  `mcp__<server>__<tool>`, so a Bridge-side rename to the bare instruction
-  names is impossible — the note, not a rename, is the fix.
+  injected into every fresh session — verified live with a marker probe)
+  carrying the combined T3 toolset note — prefix naming, browser entry
+  points `preview_status`/`preview_open`/`preview_snapshot`/`preview_act`,
+  and the scan-the-function-list gate before any "tool X is unavailable"
+  claim (lean per the 2026-11-22 audit: no incident narration, no dated
+  counts); `--remove-global-agents` strips it. A pre-managed hand-added copy
+  of the superseded browser note is stripped on install and on removal, so
+  hand-pasted duplicates never accumulate. The daemon always wraps MCP tools
+  as `mcp__<server>__<tool>`, so a Bridge-side rename to the bare
+  instruction names is impossible — the note, not a rename, is the fix.
 
 ## Commands
 

@@ -355,6 +355,8 @@ printf '%s\\n' "$*" > "$RECORD"
   describe("--global-agents", () => {
     const BEGIN = "<!-- zcode-serve-acp:begin (managed by scripts/install.sh) -->"
     const END = "<!-- zcode-serve-acp:end -->"
+    const BROWSER_HEADING = "## Browser work in T3 Code sessions"
+    const LEGACY_RETRO = "<!-- retro 2026-11-22: browser-tool misfires (3x delegate_task probing a non-listed"
 
     function agentsFile(home: string): string {
       return path.join(home, ".zcode", "AGENTS.md")
@@ -369,6 +371,26 @@ printf '%s\\n' "$*" > "$RECORD"
       expect(content).toContain(END)
       expect(content).toContain("mcp__t3-code__")
       expect(content.indexOf(BEGIN)).toBeLessThan(content.indexOf(END))
+    })
+
+    test("installs the combined lean note (naming, browser entry points, scan gate)", () => {
+      const home = scratch()
+      const result = runEnv(["--global-agents"], { HOME: home })
+      expect(result.code).toBe(0)
+      const content = readFileSync(agentsFile(home), "utf8")
+      expect(content).toContain("## T3 Code toolset (auto-added by zcode-serve-acp)")
+      expect(content).toContain("mcp__t3-code__delegate_task")
+      expect(content).toContain("mcp__t3-code__preview_status")
+      expect(content).toContain("judge tool presence by the list alone")
+      // Audit 2026-11-22: no incident narration, no dated tool counts, no
+      // bare negations, and no hand-pasted browser heading reintroduced.
+      expect(content).not.toContain(LEGACY_RETRO)
+      expect(content).not.toContain("counted 2026-11-22")
+      expect(content).not.toContain("Never conclude")
+      expect(content).not.toContain(BROWSER_HEADING)
+      const heading = content.indexOf("## T3 Code toolset (auto-added by zcode-serve-acp)")
+      expect(content.indexOf(BEGIN)).toBeLessThan(heading)
+      expect(heading).toBeLessThan(content.indexOf(END))
     })
 
     test("is idempotent — a second run does not duplicate the block", () => {
@@ -431,6 +453,72 @@ printf '%s\\n' "$*" > "$RECORD"
       expect(content).toContain(BEGIN)
     })
 
+    test("migrates a hand-added browser note into the managed block without duplication", () => {
+      // Mirrors the real ~/.zcode/AGENTS.md state reported on 2026-11-22:
+      // managed naming block + the browser note hand-pasted below it.
+      const home = scratch()
+      const file = agentsFile(home)
+      mkdirSync(path.dirname(file), { recursive: true })
+      writeFileSync(
+        file,
+        [
+          BEGIN,
+          "## T3 Code toolset naming (auto-added by zcode-serve-acp)",
+          "",
+          "naming body",
+          END,
+          "",
+          LEGACY_RETRO,
+          '     tool; false "preview_* absent" claim made without scanning the function list) -->',
+          BROWSER_HEADING,
+          "",
+          "old browser body",
+          ""
+        ].join("\n")
+      )
+      const result = runEnv(["--global-agents"], { HOME: home })
+      expect(result.code).toBe(0)
+      const content = readFileSync(file, "utf8")
+      expect(content.split(BEGIN).length - 1).toBe(1)
+      // The merged note dropped the browser heading entirely, so zero
+      // occurrences prove both that the hand-added copy is gone and that the
+      // managed body does not reintroduce it.
+      expect(content.split(BROWSER_HEADING).length - 1).toBe(0)
+      expect(content).not.toContain("old browser body")
+      expect(content).toContain("mcp__t3-code__preview_status")
+      expect(content.trimEnd().endsWith(END)).toBe(true)
+    })
+
+    test("migrates the hand-added note even before the managed block exists", () => {
+      const home = scratch()
+      const file = agentsFile(home)
+      mkdirSync(path.dirname(file), { recursive: true })
+      writeFileSync(file, `# My notes\n\n${LEGACY_RETRO}\ncontinuation\n${BROWSER_HEADING}\n\nold body\n`)
+      const result = runEnv(["--global-agents"], { HOME: home })
+      expect(result.code).toBe(0)
+      const content = readFileSync(file, "utf8")
+      // The managed body carries no retro comment now, so the legacy-only
+      // lines prove the hand-added copy is gone.
+      expect(content.startsWith("# My notes\n<!-- zcode-serve-acp:begin")).toBe(true)
+      expect(content).not.toContain("continuation")
+      expect(content).not.toContain("old body")
+      expect(content.split(BROWSER_HEADING).length - 1).toBe(0)
+      expect(content).toContain(BEGIN)
+    })
+
+    test("strips only up to the next heading — content after the legacy note survives", () => {
+      const home = scratch()
+      const file = agentsFile(home)
+      mkdirSync(path.dirname(file), { recursive: true })
+      writeFileSync(file, `${LEGACY_RETRO}\ncontinuation\n${BROWSER_HEADING}\nold body\n# Still mine\nkeep\n`)
+      const result = runEnv(["--global-agents"], { HOME: home })
+      expect(result.code).toBe(0)
+      const content = readFileSync(file, "utf8")
+      expect(content).toContain("# Still mine\nkeep")
+      expect(content).not.toContain("old body")
+      expect(content.split(BROWSER_HEADING).length - 1).toBe(0)
+    })
+
     test("--remove-global-agents strips the block and keeps user content", () => {
       const home = scratch()
       const file = agentsFile(home)
@@ -443,6 +531,33 @@ printf '%s\\n' "$*" > "$RECORD"
       expect(content).toContain("# Mine")
       expect(content).not.toContain(BEGIN)
       expect(content).not.toContain("mcp__t3-code__")
+    })
+
+    test("--remove-global-agents also strips a hand-added note without the managed block", () => {
+      const home = scratch()
+      const file = agentsFile(home)
+      mkdirSync(path.dirname(file), { recursive: true })
+      writeFileSync(file, `# Mine\n\n${LEGACY_RETRO}\ncontinuation\n${BROWSER_HEADING}\n\nold body\n`)
+      const result = runEnv(["--remove-global-agents"], { HOME: home })
+      expect(result.code).toBe(0)
+      expect(readFileSync(file, "utf8")).toBe("# Mine\n")
+    })
+
+    test("--remove-global-agents strips both the block and a hand-added note beside it", () => {
+      const home = scratch()
+      const file = agentsFile(home)
+      mkdirSync(path.dirname(file), { recursive: true })
+      writeFileSync(file, "# Mine\n")
+      runEnv(["--global-agents"], { HOME: home })
+      appendFileSync(file, `\n${LEGACY_RETRO}\ncontinuation\n${BROWSER_HEADING}\n\nold body\n\n# Trailing user notes\n`)
+      const result = runEnv(["--remove-global-agents"], { HOME: home })
+      expect(result.code).toBe(0)
+      const content = readFileSync(file, "utf8")
+      expect(content).not.toContain(BEGIN)
+      expect(content).not.toContain("old body")
+      expect(content).not.toContain(LEGACY_RETRO)
+      expect(content).toContain("# Mine")
+      expect(content).toContain("# Trailing user notes")
     })
 
     test("--remove-global-agents is a no-op when the file or block is absent", () => {

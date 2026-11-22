@@ -18,13 +18,18 @@
 #   --list-backups    list saved binaries next to the target and exit
 #   --restore [NAME]  restore a backup (default: latest install backup);
 #                     NAME is a bare backup filename or a path
-#   --global-agents   add the T3 toolset-naming note to the daemon's global
+#   --global-agents   add or refresh the managed T3 toolset note (prefix
+#                     naming, browser entry points, and the
+#                     scan-the-function-list gate) in the daemon's global
 #                     agent instructions ($HOME/.zcode/AGENTS.md) and exit.
 #                     Idempotent; the note teaches every session on this
 #                     machine (all projects) that T3 tools surface as
-#                     mcp__t3-code__<name>. No build, no daemon contact.
+#                     mcp__t3-code__<name>. A pre-managed hand-added copy of
+#                     the superseded browser note is stripped so it is not
+#                     duplicated. No build, no daemon contact.
 #   --remove-global-agents
-#                     remove that managed note again and exit
+#                     remove the managed note again (including a
+#                     pre-managed hand-added browser-note copy) and exit
 #
 # Every install backs up the current binary as
 #   backups/<name>.<UTC timestamp>.<sha256[0:12]>
@@ -58,8 +63,20 @@ pids_found=()
 readonly GLOBAL_AGENTS_BEGIN="<!-- zcode-serve-acp:begin (managed by scripts/install.sh) -->"
 readonly GLOBAL_AGENTS_END="<!-- zcode-serve-acp:end -->"
 
+# The browser note circulated as a hand-pasted block (2026-11-22: retro
+# comment + "Browser work in T3 Code sessions") before it moved inside the
+# managed block. The installer recognizes that copy by these anchors and
+# strips it, so refreshes do not duplicate it and removal takes it too.
+readonly LEGACY_NOTE_RETRO='<!-- retro 2026-11-22: browser-tool misfires (3x delegate_task probing a non-listed'
+readonly LEGACY_NOTE_HEADING='## Browser work in T3 Code sessions'
+
 #######################################
-# Print the managed global-agents note body (markers excluded).
+# Print the managed global-agents note body (markers excluded): the combined
+# T3 toolset note — prefix naming, browser entry points, and the
+# scan-the-function-list gate. Lean per the 2026-11-22 writing-for-agents
+# audit: no incident narration, no dated tool counts, no bare negations, and
+# no restatement of the <t3_code_instructions> browser rules it must not
+# drift from.
 # Outputs:
 #   The note text to stdout.
 # Returns:
@@ -67,15 +84,19 @@ readonly GLOBAL_AGENTS_END="<!-- zcode-serve-acp:end -->"
 #######################################
 global_agents_body() {
   cat <<'EOF'
-## T3 Code toolset naming (auto-added by zcode-serve-acp)
+## T3 Code toolset (auto-added by zcode-serve-acp)
 
-If the conversation includes a `<t3_code_instructions>` block: the tools it
-names bare (`delegate_task`, `t3_thread_*`, `pull_request_*`, `preview_*`,
-`html_render`, `request_secret`, ...) appear in the function list with an
-`mcp__t3-code__` prefix. Call the prefixed name (`delegate_task` ->
-`mcp__t3-code__delegate_task`). Never conclude the toolset is missing because
-the bare names are absent from the function list, and do not use shell env
-vars as a presence signal.
+Applies when the conversation includes a `<t3_code_instructions>` block: the
+tools it names bare (`delegate_task`, `t3_thread_*`, `pull_request_*`, ...)
+appear in the function list with an `mcp__t3-code__` prefix. Call the
+prefixed name (`delegate_task` -> `mcp__t3-code__delegate_task`). The browser
+entry points are `mcp__t3-code__preview_status`, `mcp__t3-code__preview_open`,
+`mcp__t3-code__preview_snapshot`, `mcp__t3-code__preview_act`.
+
+Before any "tool X is unavailable" claim, scan the full function list for the
+`mcp__t3-code__` prefix and judge tool presence by the list alone. Emit only
+tool names present in the list; when one is truly absent, state that in the
+reply and use an available alternative (ZCode `browser-use`, shell browsers).
 EOF
 }
 
@@ -448,9 +469,52 @@ init_global_agents_file() {
 }
 
 #######################################
+# Filter global agent-instructions content in place of the managed block.
+# Always strips the legacy hand-added browser note when it sits OUTSIDE the
+# managed markers (so a refresh does not duplicate it); with drop_managed=1
+# the managed block itself is removed as well. The legacy section runs from
+# its retro comment or heading to the next ATX heading or HTML comment, so
+# user content after it survives. Lines are passed through a one-line hold
+# buffer to also drop a blank line left directly above the stripped note.
+# Globals:
+#   GLOBAL_AGENTS_BEGIN, GLOBAL_AGENTS_END, LEGACY_NOTE_RETRO,
+#   LEGACY_NOTE_HEADING
+# Arguments:
+#   $1 input file; $2 output file; $3 drop_managed (1 also removes the block).
+# Outputs:
+#   Writes the filtered content to $2.
+# Returns:
+#   0
+#######################################
+filter_global_notes() {
+  local src=$1 out=$2 drop=$3
+  awk -v begin="$GLOBAL_AGENTS_BEGIN" -v end="$GLOBAL_AGENTS_END" \
+    -v retro="$LEGACY_NOTE_RETRO" -v heading="$LEGACY_NOTE_HEADING" \
+    -v drop="$drop" '
+    BEGIN { drop = (drop == "1"); hold = ""; have = 0; skipping = 0; inmanaged = 0 }
+    $0 == begin { inmanaged = 1; if (drop) next }
+    inmanaged {
+      if ($0 == end) inmanaged = 0
+      if (drop) next
+    }
+    skipping {
+      if ($0 ~ /^#+ / || $0 ~ /^<!--/) skipping = 0
+      else next
+    }
+    !inmanaged && ($0 == retro || $0 == heading) {
+      skipping = 1
+      if (have && hold == "") have = 0
+      next
+    }
+    { if (have) print hold; hold = $0; have = 1 }
+    END { if (have) print hold }
+  ' "$src" >"$out"
+}
+
+#######################################
 # Add or refresh the managed note in the global agent-instructions file.
 # Globals:
-#   global_agents_file, GLOBAL_AGENTS_BEGIN, GLOBAL_AGENTS_END
+#   global_agents_file, GLOBAL_AGENTS_BEGIN, GLOBAL_AGENTS_END, tmp_file
 # Arguments:
 #   None
 # Outputs:
@@ -461,33 +525,41 @@ init_global_agents_file() {
 write_global_agents() {
   mkdir -p "$(dirname "$global_agents_file")"
   tmp_file="$global_agents_file.tmp.$$"
-  trap 'rm -f -- "$tmp_file"' EXIT
+  strip_tmp=""
+  trap 'rm -f -- "$tmp_file"; [[ -z $strip_tmp ]] || rm -f -- "$strip_tmp"' EXIT
   if [[ ! -e $global_agents_file ]]; then
     { echo "$GLOBAL_AGENTS_BEGIN"; global_agents_body; echo "$GLOBAL_AGENTS_END"; } >"$tmp_file"
-  elif grep -qF -- "$GLOBAL_AGENTS_BEGIN" "$global_agents_file"; then
-    # Replace the existing block in place, preserving everything around it.
-    awk -v begin="$GLOBAL_AGENTS_BEGIN" -v end="$GLOBAL_AGENTS_END" \
-      -v blocksrc=<( { echo "$GLOBAL_AGENTS_BEGIN"; global_agents_body; echo "$GLOBAL_AGENTS_END"; } ) '
-      BEGIN { while ((getline l < blocksrc) > 0) block[++n] = l }
-      $0 == begin {
-        inblock = 1
-        if (!done) { for (i = 1; i <= n; i++) print block[i]; done = 1 }
-        next
-      }
-      inblock && $0 == end { inblock = 0; next }
-      inblock { next }
-      { print }
-      END { if (!done) { for (i = 1; i <= n; i++) print block[i] } }
-    ' "$global_agents_file" >"$tmp_file"
   else
-    # Fresh append: normalize the trailing newline, then attach the block.
-    {
-      cat -- "$global_agents_file"
-      [[ $(tail -c1 -- "$global_agents_file") == $'\n' ]] || echo
-      echo "$GLOBAL_AGENTS_BEGIN"
-      global_agents_body
-      echo "$GLOBAL_AGENTS_END"
-    } >"$tmp_file"
+    # Drop any hand-added pre-managed copy of the browser note first, then
+    # place the block in the stripped content.
+    strip_tmp="$global_agents_file.strip.$$"
+    filter_global_notes "$global_agents_file" "$strip_tmp" 0
+    if grep -qF -- "$GLOBAL_AGENTS_BEGIN" "$strip_tmp"; then
+      # Replace the existing block in place, preserving everything around it.
+      awk -v begin="$GLOBAL_AGENTS_BEGIN" -v end="$GLOBAL_AGENTS_END" \
+        -v blocksrc=<( { echo "$GLOBAL_AGENTS_BEGIN"; global_agents_body; echo "$GLOBAL_AGENTS_END"; } ) '
+        BEGIN { while ((getline l < blocksrc) > 0) block[++n] = l }
+        $0 == begin {
+          inblock = 1
+          if (!done) { for (i = 1; i <= n; i++) print block[i]; done = 1 }
+          next
+        }
+        inblock && $0 == end { inblock = 0; next }
+        inblock { next }
+        { print }
+        END { if (!done) { for (i = 1; i <= n; i++) print block[i] } }
+      ' "$strip_tmp" >"$tmp_file"
+    else
+      # Fresh append: normalize the trailing newline, then attach the block.
+      # $(tail -c1) strips the newline, so empty output == file ends with one.
+      {
+        cat -- "$strip_tmp"
+        [[ -z $(tail -c1 -- "$strip_tmp") ]] || echo
+        echo "$GLOBAL_AGENTS_BEGIN"
+        global_agents_body
+        echo "$GLOBAL_AGENTS_END"
+      } >"$tmp_file"
+    fi
   fi
   mv -f -- "$tmp_file" "$global_agents_file"
   trap - EXIT
@@ -495,29 +567,31 @@ write_global_agents() {
 }
 
 #######################################
-# Remove the managed note from the global agent-instructions file.
+# Remove the managed note (and any hand-added pre-managed copy of the
+# browser note) from the global agent-instructions file.
 # Globals:
-#   global_agents_file, GLOBAL_AGENTS_BEGIN, GLOBAL_AGENTS_END
+#   global_agents_file, tmp_file
 # Arguments:
 #   None
 # Outputs:
 #   Status lines on stdout.
 # Returns:
-#   0 (also when the file or block is absent).
+#   0 (also when the file or note is absent).
 #######################################
 remove_global_agents() {
-  if [[ ! -e $global_agents_file ]] || ! grep -qF -- "$GLOBAL_AGENTS_BEGIN" "$global_agents_file"; then
-    echo "install: no managed T3 toolset note in $global_agents_file"
+  if [[ ! -e $global_agents_file ]]; then
+    echo "install: no managed T3 note in $global_agents_file"
     return 0
   fi
   tmp_file="$global_agents_file.tmp.$$"
   trap 'rm -f -- "$tmp_file"' EXIT
-  awk -v begin="$GLOBAL_AGENTS_BEGIN" -v end="$GLOBAL_AGENTS_END" '
-    $0 == begin { inblock = 1; next }
-    inblock && $0 == end { inblock = 0; next }
-    inblock { next }
-    { print }
-  ' "$global_agents_file" >"$tmp_file"
+  filter_global_notes "$global_agents_file" "$tmp_file" 1
+  if cmp -s -- "$tmp_file" "$global_agents_file"; then
+    rm -f -- "$tmp_file"
+    trap - EXIT
+    echo "install: no managed T3 note in $global_agents_file"
+    return 0
+  fi
   mv -f -- "$tmp_file" "$global_agents_file"
   trap - EXIT
   echo "install: removed T3 toolset note -> $global_agents_file"

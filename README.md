@@ -34,8 +34,8 @@ instructions block references those tools by bare names; agents should treat
 bare name + `mcp__t3-code__` prefix as the same tool.
 
 For agents in **any** project (not just this repo), the installer ships the
-mapping note into the daemon's global instructions file — the daemon injects
-`~/.zcode/AGENTS.md` into every fresh session (verified live):
+combined toolset note into the daemon's global instructions file — the
+daemon injects `~/.zcode/AGENTS.md` into every fresh session (verified live):
 
 ```sh
 scripts/install.sh --global-agents      # add / refresh the managed note
@@ -44,7 +44,9 @@ scripts/install.sh --remove-global-agents   # strip it again
 
 The daemon always wraps MCP tools as `mcp__<server>__<tool>`, so the bridge
 cannot rename them to the bare instruction names — the note, not a rename,
-is the fix.
+is the fix. A pre-managed hand-added copy of the superseded browser note is
+stripped on both install and removal, so hand-pasted duplicates never
+accumulate.
 
 ## Requirements
 
