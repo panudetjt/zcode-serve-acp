@@ -5,6 +5,7 @@ import {
   categorizeCommits,
   collectLogins,
   formatCredits,
+  parseNoreplyLogin,
   type ChangelogGroup,
   type CommitInfo,
   type ReleaseDeps,
@@ -396,6 +397,19 @@ describe("formatCredits", () => {
       LOGINS
     )
     expect(credits).toBe("Unmapped")
+  })
+
+  test("resolves GitHub noreply emails to @username without lookup", () => {
+    expect(parseNoreplyLogin("3482285+panudetjt@users.noreply.github.com")).toBe("panudetjt")
+    expect(parseNoreplyLogin("panudetjt@users.noreply.github.com")).toBe("panudetjt")
+    expect(parseNoreplyLogin("user@other.domain")).toBeNull()
+
+    const credits = formatCredits(
+      { name: "Panudet Thammawongsa", email: "3482285+panudetjt@users.noreply.github.com" },
+      [],
+      () => null
+    )
+    expect(credits).toBe("@panudetjt")
   })
 })
 

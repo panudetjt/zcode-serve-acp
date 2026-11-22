@@ -246,6 +246,11 @@ function isBot(person: Person, login: string | null): boolean {
   return person.name.endsWith("[bot]") || (login !== null && login.endsWith("[bot]"))
 }
 
+export function parseNoreplyLogin(email: string): string | null {
+  const match = /^(?:[0-9]+\+)?([^@]+)@users\.noreply\.github\.com$/i.exec(email)
+  return match?.[1] ?? null
+}
+
 export function formatCredits(author: Person, coAuthors: Person[], lookup: LoginLookup): string {
   const seenEmails = new Set<string>()
   const seenDisplays = new Set<string>()
@@ -254,7 +259,7 @@ export function formatCredits(author: Person, coAuthors: Person[], lookup: Login
     const emailKey = person.email.toLowerCase()
     if (seenEmails.has(emailKey)) continue
     seenEmails.add(emailKey)
-    const login = lookup(person.email)
+    const login = lookup(person.email) ?? parseNoreplyLogin(person.email)
     if (isBot(person, login)) continue
     const display = login === null ? person.name : `@${login}`
     if (seenDisplays.has(display)) continue // two emails, one GitHub login
@@ -268,7 +273,7 @@ export function collectLogins(commits: CommitInfo[], lookup: LoginLookup): strin
   const logins = new Set<string>()
   for (const commit of commits) {
     for (const person of [{ name: commit.authorName, email: commit.authorEmail }, ...parseCoAuthors(commit.body)]) {
-      const login = lookup(person.email)
+      const login = lookup(person.email) ?? parseNoreplyLogin(person.email)
       if (login === null || isBot(person, login)) continue
       logins.add(`@${login}`)
     }
@@ -358,6 +363,8 @@ function originSlug(deps: ReleaseDeps): string {
 }
 
 function ghLookupLogin(deps: ReleaseDeps, email: string): string | null {
+  const noreply = parseNoreplyLogin(email)
+  if (noreply !== null) return noreply
   const res = deps.run("gh", [
     "api",
     `search/users?q=${encodeURIComponent(`${email} in:email`)}`,
@@ -401,7 +408,14 @@ function runGates(deps: ReleaseDeps): void {
 function cachedLookup(deps: ReleaseDeps, dryRun: boolean): LoginLookup {
   const cache = new Map<string, string | null>()
   return (email) => {
-    if (!cache.has(email)) cache.set(email, dryRun ? null : ghLookupLogin(deps, email))
+    if (!cache.has(email)) {
+      const noreply = parseNoreplyLogin(email)
+      if (noreply !== null) {
+        cache.set(email, noreply)
+      } else {
+        cache.set(email, dryRun ? null : ghLookupLogin(deps, email))
+      }
+    }
     return cache.get(email) ?? null
   }
 }
