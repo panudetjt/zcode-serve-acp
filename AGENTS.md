@@ -114,6 +114,7 @@ Consequences for every session in this repo:
 | Compile single binary | `mise run compile` |
 | Binary install / backup / restore | `scripts/install.sh` (flags: `--help`) |
 | E2E smoke (needs a real local daemon) | `mise run smoke` |
+| Release (bump + changelog + tag + draft GH release; maintainer-run, `--dry-run` previews) | `mise run release` |
 | All tasks | `mise run ci` |
 | Format | `mise run fmt` |
 | Lint | `mise run lint` |

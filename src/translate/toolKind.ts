@@ -6,12 +6,12 @@
 
 /** ACP tool_call `kind` classification for the client's tool UI. */
 export function classifyToolKind(toolName?: string): string {
-  const raw = (toolName ?? "").toLowerCase();
+  const raw = (toolName ?? "").toLowerCase()
   // Strip MCP namespace prefix if present (e.g. "mcp__t3_code__preview_open" -> "preview_open", "mcp__read_file" -> "read_file")
-  let t = raw;
+  let t = raw
   if (t.startsWith("mcp__")) {
-    const secondSep = t.indexOf("__", 5);
-    t = secondSep !== -1 ? t.slice(secondSep + 2) : t.slice(5);
+    const secondSep = t.indexOf("__", 5)
+    t = secondSep !== -1 ? t.slice(secondSep + 2) : t.slice(5)
   }
 
   if (
@@ -30,7 +30,7 @@ export function classifyToolKind(toolName?: string): string {
     t === "run_scheduled_task_now" ||
     t === "t3_thread_interrupt"
   ) {
-    return "execute";
+    return "execute"
   }
   if (
     t === "readfile" ||
@@ -68,7 +68,7 @@ export function classifyToolKind(toolName?: string): string {
     t === "t3_thread_wait" ||
     t === "t3_pending_request"
   ) {
-    return "read";
+    return "read"
   }
   if (
     t === "editfile" ||
@@ -105,7 +105,7 @@ export function classifyToolKind(toolName?: string): string {
     t === "request_secret" ||
     t === "device_open"
   ) {
-    return "edit";
+    return "edit"
   }
   if (
     t === "delete" ||
@@ -123,10 +123,10 @@ export function classifyToolKind(toolName?: string): string {
     t === "task_cancel" ||
     t === "t3_workflow_stop"
   ) {
-    return "delete";
+    return "delete"
   }
   if (t === "grep" || t === "find" || t === "glob" || t === "search" || t === "search_web" || t === "rg") {
-    return "search";
+    return "search"
   }
   if (
     t === "fetch" ||
@@ -137,10 +137,10 @@ export function classifyToolKind(toolName?: string): string {
     t === "preview_navigate" ||
     t === "browser"
   ) {
-    return "fetch";
+    return "fetch"
   }
   if (t.startsWith("read_") || t.startsWith("list_") || t.startsWith("view_")) {
-    return "read";
+    return "read"
   }
   if (
     t.startsWith("write_") ||
@@ -152,24 +152,24 @@ export function classifyToolKind(toolName?: string): string {
     t.startsWith("append_") ||
     t.startsWith("set_")
   ) {
-    return "edit";
+    return "edit"
   }
   if (t.startsWith("delete_") || t.startsWith("remove_") || t.startsWith("unlink_")) {
-    return "delete";
+    return "delete"
   }
   if (t.startsWith("search_") || t.startsWith("find_")) {
-    return "search";
+    return "search"
   }
-  return "other";
+  return "other"
 }
 
 /** Map a daemon row `status`/`state` string to the ACP tool status set. */
 export function normalizeStatus(state: string | undefined): string {
-  const s = (state ?? "").toLowerCase();
-  if (s === "complete" || s === "completed" || s === "done" || s === "success") return "completed";
+  const s = (state ?? "").toLowerCase()
+  if (s === "complete" || s === "completed" || s === "done" || s === "success") return "completed"
   if (s === "failed" || s === "error" || s.includes("fail") || s.includes("cancel") || s.includes("interrupt")) {
-    return "failed";
+    return "failed"
   }
-  if (s === "pending" || s.includes("wait") || s === "inputstreaming" || s === "pendingapproval") return "pending";
-  return "in_progress";
+  if (s === "pending" || s.includes("wait") || s === "inputstreaming" || s === "pendingapproval") return "pending"
+  return "in_progress"
 }

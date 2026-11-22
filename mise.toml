@@ -14,17 +14,21 @@ run = "bun check"
 description = "Single-binary build → dist/zcode-serve-acp (OUTFILE overrides the target)"
 run = "bun build --compile --target=bun-linux-x64 --outfile \"${OUTFILE:-dist/zcode-serve-acp}\" src/bin.ts"
 
+[tasks.release]
+description = "Bump version + changelog + tag + push + compile + draft GitHub release (maintainer-run; --dry-run previews)"
+run = "bun scripts/release.ts"
+
 [tasks.smoke]
 description = "ACP handshake + session/new (models) + short prompt against the real daemon"
 run = "bun scripts/smoke.mjs"
 
 [tasks.fmt]
-description = "Format with oxfmt (writes in place)"
-run = "bun x oxfmt -c .oxfmtrc.ts"
+description = "Format with bun fmt (bunfig.toml [fmt] — mirrors .repos/effect dprint style; writes in place)"
+run = "bun fmt"
 
 [tasks.fmt-check]
 description = "Check formatting without writing"
-run = "bun x oxfmt -c .oxfmtrc.ts --check"
+run = "bun fmt --check"
 
 [tasks.lint]
 description = "Lint with oxlint (scoped: reference clone .repos/ carries its own config; excluded from lint)"

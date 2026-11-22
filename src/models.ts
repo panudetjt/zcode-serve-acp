@@ -12,38 +12,38 @@
  * store proves the login; no decryption needed. Reads go through the platform
  * FileSystem service; any failure yields no fallback models (never throws).
  */
-import { Effect, Schema } from "effect";
-import { FileSystem } from "effect/FileSystem";
-import { DecodeError, renderError } from "./errors.ts";
-import type { AvailableModel } from "./serve/session.ts";
-import { envDataOverride, envHome } from "./config.ts";
+import { Effect, Schema } from "effect"
+import { FileSystem } from "effect/FileSystem"
+import { DecodeError, renderError } from "./errors.ts"
+import type { AvailableModel } from "./serve/session.ts"
+import { envDataOverride, envHome } from "./config.ts"
 
 export interface AcpiModel {
-  modelId: string;
-  name: string;
+  modelId: string
+  name: string
   /** Gray secondary label next to the name in the picker (the account/plan). */
-  description?: string;
+  description?: string
   _meta?: {
-    supportsReasoningEffort: boolean;
-    reasoningEffort: string;
-    reasoningEfforts: Array<{ value: string; label: string }>;
-  };
+    supportsReasoningEffort: boolean
+    reasoningEffort: string
+    reasoningEfforts: Array<{ value: string; label: string }>
+  }
 }
 
 export interface ModelsToAcpResult {
-  currentModelId: string | null;
-  availableModels: AcpiModel[];
+  currentModelId: string | null
+  availableModels: AcpiModel[]
 }
 
 export function modelsToAcp(models: AvailableModel[], current?: string): ModelsToAcpResult {
   const availableModels: AcpiModel[] = models.map((m) => {
-    const modelId = `${m.providerId}/${m.modelId}`;
-    const name = m.providerLabel ? `${m.label ?? m.modelId} (${m.providerLabel})` : (m.label ?? m.modelId);
+    const modelId = `${m.providerId}/${m.modelId}`
+    const name = m.providerLabel ? `${m.label ?? m.modelId} (${m.providerLabel})` : (m.label ?? m.modelId)
     const reasoningLevels = (m.reasoningLevels ?? []).map((l) => ({
       value: l.value,
-      label: l.label ? l.label.charAt(0).toUpperCase() + l.label.slice(1) : l.value,
-    }));
-    const defaultEffort = m.reasoningDefaultLevel ?? reasoningLevels[0]?.value ?? "max";
+      label: l.label ? l.label.charAt(0).toUpperCase() + l.label.slice(1) : l.value
+    }))
+    const defaultEffort = m.reasoningDefaultLevel ?? reasoningLevels[0]?.value ?? "max"
     return {
       modelId,
       name,
@@ -51,28 +51,27 @@ export function modelsToAcp(models: AvailableModel[], current?: string): ModelsT
       _meta: {
         supportsReasoningEffort: reasoningLevels.length > 0,
         reasoningEffort: defaultEffort,
-        reasoningEfforts: reasoningLevels,
-      },
-    };
-  });
-  let currentId: string | null = null;
+        reasoningEfforts: reasoningLevels
+      }
+    }
+  })
+  let currentId: string | null = null
   if (current !== undefined && current !== "") {
-    currentId =
-      availableModels.find((m) => m.modelId === current || m.modelId.endsWith(`/${current}`))?.modelId ?? null;
+    currentId = availableModels.find((m) => m.modelId === current || m.modelId.endsWith(`/${current}`))?.modelId ?? null
   }
   if (!currentId && availableModels.length > 0) {
-    currentId = availableModels[0]?.modelId ?? null;
+    currentId = availableModels[0]?.modelId ?? null
   }
-  return { currentModelId: currentId, availableModels };
+  return { currentModelId: currentId, availableModels }
 }
 
 const ProviderSetting = Schema.Struct({
   providerFamilyConnectionSelections: Schema.optional(
-    Schema.Record(Schema.String, Schema.Struct({ kind: Schema.optional(Schema.String) })),
+    Schema.Record(Schema.String, Schema.Struct({ kind: Schema.optional(Schema.String) }))
   ),
-  modelProviderFamilyModes: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-});
-const ProviderCredentials = Schema.Record(Schema.String, Schema.Unknown);
+  modelProviderFamilyModes: Schema.optional(Schema.Record(Schema.String, Schema.String))
+})
+const ProviderCredentials = Schema.Record(Schema.String, Schema.Unknown)
 const ProviderTable = Schema.Struct({
   config: Schema.optional(
     Schema.Struct({
@@ -88,52 +87,52 @@ const ProviderTable = Schema.Struct({
                       Schema.Struct({
                         type: Schema.optional(Schema.String),
                         mode: Schema.optional(Schema.String),
-                        accountType: Schema.optional(Schema.String),
-                      }),
+                        accountType: Schema.optional(Schema.String)
+                      })
                     ),
-                    builtinModelIds: Schema.optional(Schema.Array(Schema.String)),
-                  }),
-                ),
-              }),
-            ),
-          ),
-        }),
-      ),
-    }),
-  ),
-});
+                    builtinModelIds: Schema.optional(Schema.Array(Schema.String))
+                  })
+                )
+              })
+            )
+          )
+        })
+      )
+    })
+  )
+})
 
-const decodeSetting = Schema.decodeUnknownSync(ProviderSetting);
-const decodeCreds = Schema.decodeUnknownSync(ProviderCredentials);
-const decodeTable = Schema.decodeUnknownSync(ProviderTable);
+const decodeSetting = Schema.decodeUnknownSync(ProviderSetting)
+const decodeCreds = Schema.decodeUnknownSync(ProviderCredentials)
+const decodeTable = Schema.decodeUnknownSync(ProviderTable)
 
 /** Presence-check fallback — never decrypts anything. */
 export const fallbackModels: Effect.Effect<AvailableModel[], never, FileSystem> = Effect.gen(function* () {
-  const root = envDataOverride() ?? envHome() ?? "";
-  const v2 = `${root}/.zcode/v2`;
-  const tablePath = `${v2}/runtime/provider/bundled/zcode-builtin.json`;
-  const settingPath = `${v2}/setting.json`;
-  const credsPath = `${v2}/credentials.json`;
-  const fs = yield* FileSystem;
+  const root = envDataOverride() ?? envHome() ?? ""
+  const v2 = `${root}/.zcode/v2`
+  const tablePath = `${v2}/runtime/provider/bundled/zcode-builtin.json`
+  const settingPath = `${v2}/setting.json`
+  const credsPath = `${v2}/credentials.json`
+  const fs = yield* FileSystem
 
   const readJson = (file: string): Effect.Effect<unknown | undefined> =>
     fs.readFileString(file).pipe(
       Effect.map((text) => {
         try {
-          return JSON.parse(text) as unknown;
+          return JSON.parse(text) as unknown
         } catch {
-          return undefined;
+          return undefined
         }
       }),
-      Effect.orElseSucceed(() => undefined),
-    );
+      Effect.orElseSucceed(() => undefined)
+    )
 
   const [settingRaw, credsRaw, tableRaw] = yield* Effect.all([
     readJson(settingPath),
     readJson(credsPath),
-    readJson(tablePath),
-  ]);
-  if (settingRaw === undefined || credsRaw === undefined || tableRaw === undefined) return [];
+    readJson(tablePath)
+  ])
+  if (settingRaw === undefined || credsRaw === undefined || tableRaw === undefined) return []
 
   // decodeUnknownSync throws on wrong shapes — route the throw through the
   // typed channel (agent-patterns/effect.md: Effect.try carries a `catch`)
@@ -141,26 +140,26 @@ export const fallbackModels: Effect.Effect<AvailableModel[], never, FileSystem> 
   const decode = <A>(location: string, run: () => A): Effect.Effect<A, DecodeError> =>
     Effect.try({
       try: run,
-      catch: (cause) => new DecodeError({ location, message: renderError(cause), cause }),
-    });
-  const setting = yield* decode("models/setting", () => decodeSetting(settingRaw));
-  const creds = yield* decode("models/credentials", () => decodeCreds(credsRaw));
-  const table = yield* decode("models/provider-table", () => decodeTable(tableRaw));
+      catch: (cause) => new DecodeError({ location, message: renderError(cause), cause })
+    })
+  const setting = yield* decode("models/setting", () => decodeSetting(settingRaw))
+  const creds = yield* decode("models/credentials", () => decodeCreds(credsRaw))
+  const table = yield* decode("models/provider-table", () => decodeTable(tableRaw))
 
-  const families: string[] = [];
+  const families: string[] = []
   for (const [family, selection] of Object.entries(setting.providerFamilyConnectionSelections ?? {})) {
-    if (selection?.kind !== "individual-coding-plan") continue;
-    if (setting.modelProviderFamilyModes?.[family] === "apiKey") continue;
-    const token = creds[`oauth:${family}:access_token`];
-    if (typeof token !== "string" || token.length === 0) continue;
-    families.push(family);
+    if (selection?.kind !== "individual-coding-plan") continue
+    if (setting.modelProviderFamilyModes?.[family] === "apiKey") continue
+    const token = creds[`oauth:${family}:access_token`]
+    if (typeof token !== "string" || token.length === 0) continue
+    families.push(family)
   }
 
-  const out: AvailableModel[] = [];
+  const out: AvailableModel[] = []
   for (const rule of table.config?.providerConfigRules?.providerRules ?? []) {
-    const access = rule.config?.access;
-    if (access?.type !== "zhipu-account" || access.mode !== "individual-coding-plan") continue;
-    if (!families.includes(access.accountType ?? "")) continue;
+    const access = rule.config?.access
+    if (access?.type !== "zhipu-account" || access.mode !== "individual-coding-plan") continue
+    if (!families.includes(access.accountType ?? "")) continue
     for (const modelId of rule.config?.builtinModelIds ?? []) {
       out.push({
         providerId: rule.providerId ?? "",
@@ -170,14 +169,14 @@ export const fallbackModels: Effect.Effect<AvailableModel[], never, FileSystem> 
         reasoningLevels: [
           { value: "low", label: "low" },
           { value: "high", label: "high" },
-          { value: "max", label: "max" },
+          { value: "max", label: "max" }
         ],
-        reasoningDefaultLevel: "max",
-      });
+        reasoningDefaultLevel: "max"
+      })
     }
   }
-  return out;
+  return out
 }).pipe(
   // The fallback path is best-effort: any decode/read failure yields nothing.
-  Effect.orElseSucceed((): AvailableModel[] => []),
-);
+  Effect.orElseSucceed((): AvailableModel[] => [])
+)

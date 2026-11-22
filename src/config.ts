@@ -8,17 +8,17 @@
  * through the helpers here so new call sites stay greppable in one place.
  */
 
-export const envDebug = (): boolean => process.env.ZCODE_SERVE_ACP_DEBUG === "1";
+export const envDebug = (): boolean => process.env.ZCODE_SERVE_ACP_DEBUG === "1"
 
-export const envDump = (): boolean => process.env.ZCODE_SERVE_ACP_DUMP === "1";
+export const envDump = (): boolean => process.env.ZCODE_SERVE_ACP_DUMP === "1"
 
-export const envDataOverride = (): string | undefined => process.env.ZCODE_DATA_BASE_DIR;
+export const envDataOverride = (): string | undefined => process.env.ZCODE_DATA_BASE_DIR
 
-export const envHome = (): string | undefined => process.env.HOME;
+export const envHome = (): string | undefined => process.env.HOME
 
-export const envServerRoot = (): string | undefined => process.env.ZCODE_SERVER_ROOT;
+export const envServerRoot = (): string | undefined => process.env.ZCODE_SERVER_ROOT
 
-export const envServeBin = (): string | undefined => process.env.ZCODE_SERVE_BIN;
+export const envServeBin = (): string | undefined => process.env.ZCODE_SERVE_BIN
 
 /** The env a spawned daemon inherits — passthrough, not a config read. */
-export const childEnv = (): NodeJS.ProcessEnv => process.env;
+export const childEnv = (): NodeJS.ProcessEnv => process.env
