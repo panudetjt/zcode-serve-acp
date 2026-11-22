@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.4.2 — 2026-11-23
+
+### Features
+- feat(install): refresh global-agents note and strip hand-added browser note (ecdae57) — @panudetjt
+
+### Chores
+- chore(release): format credits with @username for GitHub noreply emails (f84785c) — @panudetjt
+
 ## v0.4.1 — 2026-11-22
 
 ### Bug Fixes
