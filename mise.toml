@@ -14,6 +14,10 @@ run = "bun check"
 description = "Single-binary build → dist/zcode-serve-acp (OUTFILE overrides the target)"
 run = "bun build --compile --target=bun-linux-x64 --outfile \"${OUTFILE:-dist/zcode-serve-acp}\" src/bin.ts"
 
+[tasks.release]
+description = "Bump version + changelog + tag + push + compile + draft GitHub release (maintainer-run; --dry-run previews)"
+run = "bun scripts/release.ts"
+
 [tasks.smoke]
 description = "ACP handshake + session/new (models) + short prompt against the real daemon"
 run = "bun scripts/smoke.mjs"
