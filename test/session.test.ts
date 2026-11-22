@@ -1038,4 +1038,115 @@ describe("ServeSession teardown edge", () => {
       server.stop(true)
     }
   })
+
+  test("sendPrompt falls back to legacy sendPrompt when sendConversationCommandV4 returns failed ACK", async () => {
+    const serverCalls: Array<{ channel: string; method: string; arg: unknown }> = []
+    const server = Bun.serve({
+      port: 0,
+      fetch(req, server) {
+        if (server.upgrade(req)) return undefined
+        return new Response("Upgrade failed", { status: 400 })
+      },
+      websocket: {
+        open(ws) {
+          ws.send(encodeRpcMessage([MSG.Initialize]))
+        },
+        message(ws, msg) {
+          const raw = typeof msg === "string" ? Buffer.from(msg) : new Uint8Array(msg)
+          const decoded = decodeRpcMessage(raw)
+          const type = decoded.header[0]
+          const id = decoded.header[1] as number
+          const channel = decoded.header[2] as string
+          const method = decoded.header[3] as string
+
+          if (type === MSG.Promise) {
+            const arg = (decoded.body as any[])?.[0]
+            serverCalls.push({ channel, method, arg })
+
+            if (channel === "project" && method === "saveProject") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { project: { id: "p-43" } }))
+            } else if (channel === "zcode-agent" && method === "initialize") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { ok: true }))
+            } else if (channel === "zcode-session" && method === "createSession") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { sessionId: "sess-fallback-ack" }))
+            } else if (channel === "zcode-agent" && method === "subscribeConversationV4") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { subscribed: true }))
+            } else if (channel === "zcode-agent" && method === "helloConversationV4") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { hello: true }))
+            } else if (channel === "skills" && method === "list") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { skills: [] }))
+            } else if (channel === "zcode-agent" && method === "sendConversationCommandV4") {
+              // Simulate daemon returning a failed ACK (e.g. SQLite foreign key or admission failure)
+              ws.send(
+                encodeRpcMessage([MSG.PromiseSuccess, id], {
+                  status: "failed",
+                  reasonCode: "fault.command.executionFailed",
+                  message: "FOREIGN KEY constraint failed"
+                })
+              )
+            } else if (channel === "zcode-agent" && method === "sendPrompt") {
+              ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { ok: true }))
+            }
+          }
+        }
+      }
+    })
+
+    const mockDaemon: Daemon["Service"] = {
+      connect: Effect.succeed({
+        status: { host: "localhost", port: server.port ?? 12345, state: "ready", version: "3.19.0", pid: 999 },
+        token: "tok",
+        wsPath: "/ws/host"
+      }),
+      readStatus: Effect.succeed({
+        host: "localhost",
+        port: server.port ?? 12345,
+        state: "ready",
+        version: "3.19.0",
+        pid: 999
+      }),
+      getCapability: () => Effect.succeed("mock-cap")
+    }
+
+    const prog = Effect.gen(function* () {
+      const factory = yield* ServeSessionFactory
+      const session = yield* factory.create("/test/workspace", {
+        onConversationFrame: () => Effect.void,
+        onChildFrame: () => Effect.void,
+        onLifecycle: () => Effect.void,
+        onRequest: () => Effect.succeed(undefined),
+        onClosed: () => Effect.void
+      })
+
+      yield* session.createSession()
+
+      const promptRes = yield* session.sendPrompt("Fallback prompt text on failed ack", undefined, undefined)
+      expect(typeof promptRes.inputId).toBe("string")
+
+      // Both methods were called in order: v4 first, then fallback to sendPrompt
+      const v4Call = serverCalls.find((c) => c.method === "sendConversationCommandV4")
+      const legacyCall = serverCalls.find((c) => c.method === "sendPrompt")
+
+      expect(v4Call).toBeDefined()
+      expect(legacyCall).toBeDefined()
+      expect((v4Call?.arg as any)?.envelope?.payload?.text).toBe("Fallback prompt text on failed ack")
+      expect((legacyCall?.arg as any)?.content).toBe("Fallback prompt text on failed ack")
+      expect((legacyCall?.arg as any)?.inputId).toBe(promptRes.inputId)
+
+      yield* session.dispose
+    }).pipe(
+      Effect.provide(ServeSessionFactory.layerNoDeps),
+      Effect.provide(Layer.succeed(Daemon, mockDaemon)),
+      Effect.provide(Layer.succeed(BridgeExit, fakeBridgeExit)),
+      Effect.provide(BunSocket.layerWebSocketConstructor),
+      Effect.provide(Log.layerQuiet),
+      Effect.scoped
+    )
+
+    try {
+      await Effect.runPromise(prog)
+    } finally {
+      server.stop(true)
+    }
+  })
 })

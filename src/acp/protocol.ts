@@ -9,7 +9,7 @@ import { Effect, Option, Schema } from "effect"
 import { DecodeError } from "../errors.ts"
 import type { DiscoveredSkill } from "../serve/session.ts"
 
-export const BRIDGE_VERSION = "0.3.0"
+export const BRIDGE_VERSION = "0.4.1"
 
 export interface InitializeResult {
   protocolVersion: number

@@ -89,11 +89,12 @@ const fail = (msg) => {
   process.exit(1)
 }
 
-const init = await request("initialize", { protocolVersion: 1, clientCapabilities: {} })
+const init = await request("initialize", { protocolVersion: 2, clientCapabilities: {} })
 console.error(
   `[smoke] initialize → agentInfo=${JSON.stringify(init.agentInfo)} models-cap=${JSON.stringify(init.agentCapabilities)}`
 )
-if (Number(init.protocolVersion) !== 1) fail(`protocolVersion ${init.protocolVersion}`)
+if (Number(init.protocolVersion) !== 2 && Number(init.protocolVersion) !== 1)
+  fail(`protocolVersion ${init.protocolVersion}`)
 
 const session = await request("session/new", { cwd, mcpServers: [] })
 const models = session.models?.availableModels ?? []

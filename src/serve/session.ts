@@ -751,26 +751,36 @@ const makeSession = <E>(
         const { daemonSessionId, workspace } = yield* requireDaemonSession
         yield* preflight
         const inputId = crypto.randomUUID()
-        const v4Call = call(
-          "sendConversationCommandV4",
-          {
-            workspacePath: workspace.workspacePath,
-            workspaceIdentity: workspace.workspaceIdentity,
-            envelope: {
-              commandId: inputId,
-              clientId: CLIENT_ID,
-              sessionId: daemonSessionId,
-              type: "sendText",
-              payload: {
-                text,
-                attachments: attachments?.length ? attachments : undefined,
-                modelSelection: modelSelection?.modelId ? modelSelection : undefined
-              },
-              issuedAt: yield* Clock.currentTimeMillis
-            }
-          },
-          60_000
-        )
+        const v4Call = Effect.gen(function* () {
+          const raw = yield* call(
+            "sendConversationCommandV4",
+            {
+              workspacePath: workspace.workspacePath,
+              workspaceIdentity: workspace.workspaceIdentity,
+              envelope: {
+                commandId: inputId,
+                clientId: CLIENT_ID,
+                sessionId: daemonSessionId,
+                type: "sendText",
+                payload: {
+                  text,
+                  attachments: attachments?.length ? attachments : undefined,
+                  modelSelection: modelSelection?.modelId ? modelSelection : undefined
+                },
+                issuedAt: yield* Clock.currentTimeMillis
+              }
+            },
+            60_000
+          )
+          const ack = raw as { status?: string; message?: string; reasonCode?: string } | undefined
+          if (ack && ack.status !== "accepted" && ack.status !== "duplicate" && ack.status !== "noop") {
+            return yield* new RpcError({
+              channel: "zcode-agent",
+              method: "sendConversationCommandV4",
+              message: `v4 command sendText rejected (${ack.status}: ${ack.reasonCode ?? ""}${ack.message ? ` - ${ack.message}` : ""})`
+            })
+          }
+        })
         const legacyCall = call(
           "sendPrompt",
           {
