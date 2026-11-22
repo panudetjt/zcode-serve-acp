@@ -4,14 +4,27 @@ import { toDaemonMcpServer } from "../src/serve/session.ts"
 import { Schema } from "effect"
 
 describe("ACP protocol - MCP capabilities and schema", () => {
-  test("buildInitializeResult advertises mcpCapabilities: { http: true, sse: true }", () => {
+  test("buildInitializeResult advertises dual v1/v2 capabilities with protocolVersion 2", () => {
     const init = buildInitializeResult()
-    expect(init.protocolVersion).toBe(1)
-    expect(init.agentCapabilities.loadSession).toBe(true)
-    expect(init.agentCapabilities.mcpCapabilities).toEqual({
+    expect(init.protocolVersion).toBe(2)
+    expect("info" in init).toBe(true)
+    expect(init.info.name).toBe("zcode-serve-acp")
+    expect(init.info.title).toBe("ZCode (serve daemon)")
+    expect(init.capabilities.loadSession).toBe(true)
+    expect(init.capabilities.sessionCapabilities.resume).toBeDefined()
+    expect(init.capabilities.promptCapabilities).toEqual({
+      audio: false,
+      embeddedContext: false,
+      image: true
+    })
+    expect(init.capabilities.mcpCapabilities).toEqual({
       http: true,
       sse: true
     })
+
+    // v1 compat fields
+    expect(init.agentInfo).toEqual(init.info)
+    expect(init.agentCapabilities).toEqual(init.capabilities)
   })
 
   test("McpServerSchema validates HTTP, SSE, and Stdio schemas", () => {

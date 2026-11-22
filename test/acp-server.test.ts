@@ -59,11 +59,27 @@ describe("AcpServer Effect handler", () => {
   test("initialize handshake returns valid ACP agent info and capabilities", async () => {
     const res = (await Effect.runPromise(server.handle("initialize", {}))) as {
       protocolVersion: number
-      agentInfo: { name: string; version: string }
-      agentCapabilities: { loadSession: boolean; mcpCapabilities?: { http: boolean; sse: boolean } }
+      info: { name: string; title: string; version: string }
+      capabilities: {
+        loadSession: boolean
+        sessionCapabilities: { resume: Record<string, never> }
+        promptCapabilities: { audio: boolean; embeddedContext: boolean; image: boolean }
+        mcpCapabilities?: { http: boolean; sse: boolean }
+      }
+      agentInfo: { name: string; title: string; version: string }
+      agentCapabilities: {
+        loadSession: boolean
+        sessionCapabilities: { resume: Record<string, never> }
+        promptCapabilities: { audio: boolean; embeddedContext: boolean; image: boolean }
+        mcpCapabilities?: { http: boolean; sse: boolean }
+      }
     }
 
-    expect(res.protocolVersion).toBe(1)
+    expect(res.protocolVersion).toBe(2)
+    expect("info" in res).toBe(true)
+    expect(res.info.name).toBe("zcode-serve-acp")
+    expect(res.capabilities.loadSession).toBe(true)
+    expect(res.capabilities.mcpCapabilities).toEqual({ http: true, sse: true })
     expect(res.agentInfo.name).toBe("zcode-serve-acp")
     expect(res.agentCapabilities.loadSession).toBe(true)
     expect(res.agentCapabilities.mcpCapabilities).toEqual({ http: true, sse: true })
@@ -449,6 +465,37 @@ describe("AcpServer Effect handler", () => {
       })
     )
     await new Promise((r) => setTimeout(r, 40))
+
+    // Simulate onConversationFrame with soft-gated interactions (workspaceHookReview and pluginInstall)
+    const clientRequestsCountBefore = clientRequests.length
+    await Effect.runPromise(
+      capturedHandlers.onConversationFrame({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "state.updated",
+              patch: {
+                pendingInteractions: [
+                  {
+                    interactionId: "hook-1",
+                    kind: "workspaceHookReview",
+                    payload: { hookId: "pre-commit" }
+                  },
+                  {
+                    interactionId: "plugin-1",
+                    kind: "pluginInstall",
+                    payload: { pluginId: "zcode-browser" }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      })
+    )
+    await new Promise((r) => setTimeout(r, 40))
+    expect(clientRequests.length).toBe(clientRequestsCountBefore)
 
     // Simulate onConversationFrame with permission interaction
     await Effect.runPromise(

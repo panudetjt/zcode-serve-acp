@@ -71,6 +71,22 @@ of the contract (process lifecycle, timeouts, wire rules), read
 
 **Updating the clone** (rare, do only when asked): `git -C .repos/t3code pull`.
 
+## ZCode reference clone — read-only, gitignored
+
+`.repos/zcode/` is a gitignored local clone of the ZCode source repository
+(`zai-org/ZCode`). Same rules as the effect and t3code clones: read-only,
+never committed, never imported. It exists so the daemon and `server-core`
+protocol internals (e.g. `packages/zcode-server-cli/src/server-core`,
+`apps/zcode-cli`) can be cross-referenced against original TypeScript source
+instead of relying solely on minified/bundled `server-core.js` or reverse
+engineering. If it is missing, create it on demand:
+
+```sh
+mkdir -p .repos && git clone --depth 1 https://github.com/zai-org/ZCode.git .repos/zcode
+```
+
+**Updating the clone** (rare, do only when asked): `git -C .repos/zcode pull`.
+
 ## T3 toolset naming at runtime — agents, read before answering "do I have the toolset?"
 
 Sessions running under this Bridge receive T3 Code's toolsets (orchestration,
