@@ -39,6 +39,7 @@ import {
   extractElicitationQuestions,
   extractPermissionOptionId,
   isElicitation,
+  isSoftGate,
   mapPermissionOptions,
   readPermissionServerRequest
 } from "./interactions.ts"
@@ -413,6 +414,12 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       if (bridge.handledInteractions.has(interaction.interactionId)) return
       bridge.handledInteractions.add(interaction.interactionId)
       yield* log.debug(`[interaction] pending interaction ${interaction.interactionId} (kind=${interaction.kind})`)
+      if (isSoftGate(interaction)) {
+        yield* log.debug(
+          `[interaction] ignored soft-gated interaction ${interaction.interactionId} (kind=${interaction.kind})`
+        )
+        return
+      }
       const rawPayload = (interaction.payload ?? {}) as Record<string, unknown>
       if (isElicitation(interaction)) {
         yield* runElicitation(bridge, interaction.interactionId, rawPayload)

@@ -8,10 +8,10 @@ import {
   buildElicitationParams,
   buildElicitationResolve,
   buildPermissionParams,
-  DEFAULT_ALLOW_OPTION_ID,
   extractElicitationQuestions,
   extractPermissionOptionId,
   isElicitation,
+  isSoftGate,
   mapPermissionOptions,
   readPermissionServerRequest,
   type ExtractedQuestion
@@ -38,6 +38,20 @@ describe("isElicitation routing", () => {
         interaction({ toolName: "Bash", options: [{ optionId: "allow", kind: "allowOnce" }] }, "permission")
       )
     ).toBe(false)
+  })
+
+  it("recognizes workspaceHookReview and pluginInstall as soft-gates and not elicitation", () => {
+    expect(isSoftGate(interaction({}, "workspaceHookReview"))).toBe(true)
+    expect(isSoftGate(interaction({ kind: "workspaceHookReview" }, "other"))).toBe(true)
+    expect(isSoftGate(interaction({}, "pluginInstall"))).toBe(true)
+    expect(isSoftGate(interaction({ kind: "pluginInstall" }, "other"))).toBe(true)
+    expect(isSoftGate(interaction({}, "userInput"))).toBe(false)
+    expect(isSoftGate(interaction({ toolName: "Bash" }, "permission"))).toBe(false)
+
+    expect(isElicitation(interaction({}, "workspaceHookReview"))).toBe(false)
+    expect(isElicitation(interaction({ questions: [{ header: "q" }] }, "workspaceHookReview"))).toBe(false)
+    expect(isElicitation(interaction({}, "pluginInstall"))).toBe(false)
+    expect(isElicitation(interaction({ questions: [{ header: "q" }] }, "pluginInstall"))).toBe(false)
   })
 })
 

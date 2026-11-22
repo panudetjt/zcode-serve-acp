@@ -97,8 +97,24 @@ export function extractPermissionOptionId(
   return chosenOptionId
 }
 
+/**
+ * Soft-gated interactions (workspaceHookReview, pluginInstall) are non-blocking
+ * notifications in ZCode V4 that must not trigger turn-interrupting ACP permission
+ * or elicitation dialogs.
+ */
+export function isSoftGate(interaction: PendingInteraction): boolean {
+  const rawPayload = (interaction.payload ?? {}) as Record<string, unknown>
+  return (
+    interaction.kind === "workspaceHookReview" ||
+    interaction.kind === "pluginInstall" ||
+    rawPayload.kind === "workspaceHookReview" ||
+    rawPayload.kind === "pluginInstall"
+  )
+}
+
 /** Frame-driven interactions route to elicitation/create or request_permission. */
 export function isElicitation(interaction: PendingInteraction): boolean {
+  if (isSoftGate(interaction)) return false
   const rawPayload = (interaction.payload ?? {}) as Record<string, unknown>
   const input = rec(rawPayload.input)
   return (

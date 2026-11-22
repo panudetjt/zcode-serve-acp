@@ -20,26 +20,39 @@ export interface InitializeResult {
     promptCapabilities: { audio: boolean; embeddedContext: boolean; image: boolean }
     mcpCapabilities: { http: boolean; sse: boolean }
   }
+  info: { name: string; title: string; version: string }
+  capabilities: {
+    loadSession: boolean
+    sessionCapabilities: { resume: Record<string, never> }
+    promptCapabilities: { audio: boolean; embeddedContext: boolean; image: boolean }
+    mcpCapabilities: { http: boolean; sse: boolean }
+  }
   authMethods: Array<{ id: string; name: string; description: string }>
 }
 
-export const buildInitializeResult = (): InitializeResult => ({
-  protocolVersion: 1,
-  agentInfo: { name: "zcode-serve-acp", title: "ZCode (serve daemon)", version: BRIDGE_VERSION },
-  agentCapabilities: {
+export const buildInitializeResult = (): InitializeResult => {
+  const info = { name: "zcode-serve-acp", title: "ZCode (serve daemon)", version: BRIDGE_VERSION }
+  const capabilities = {
     loadSession: true,
     sessionCapabilities: { resume: {} },
     promptCapabilities: { audio: false, embeddedContext: false, image: true },
     mcpCapabilities: { http: true, sse: true }
-  },
-  authMethods: [
-    {
-      id: "zcode-cli-login",
-      name: "ZCode CLI login (owned by the zcode serve daemon)",
-      description: "Run `zcode login` once; the daemon reads credentials itself."
-    }
-  ]
-})
+  }
+  return {
+    protocolVersion: 2,
+    agentInfo: info,
+    agentCapabilities: capabilities,
+    info,
+    capabilities,
+    authMethods: [
+      {
+        id: "zcode-cli-login",
+        name: "ZCode CLI login (owned by the zcode serve daemon)",
+        description: "Run `zcode login` once; the daemon reads credentials itself."
+      }
+    ]
+  }
+}
 
 // ---------- MCP servers ----------
 

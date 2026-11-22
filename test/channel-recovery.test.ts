@@ -207,7 +207,7 @@ describe("Channel recovery (issue #5)", () => {
     ])
     expect(methods2).toContain("subscribeConversationV4")
     expect(methods2).toContain("helloConversationV4")
-    expect(methods2).toContain("sendPrompt")
+    expect(methods2).toContain("sendConversationCommandV4")
   })
 
   test("watchdog invalidates a live channel when the status file reports a restarted daemon", async () => {

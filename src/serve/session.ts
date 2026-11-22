@@ -751,7 +751,27 @@ const makeSession = <E>(
         const { daemonSessionId, workspace } = yield* requireDaemonSession
         yield* preflight
         const inputId = crypto.randomUUID()
-        yield* call(
+        const v4Call = call(
+          "sendConversationCommandV4",
+          {
+            workspacePath: workspace.workspacePath,
+            workspaceIdentity: workspace.workspaceIdentity,
+            envelope: {
+              commandId: inputId,
+              clientId: CLIENT_ID,
+              sessionId: daemonSessionId,
+              type: "sendText",
+              payload: {
+                text,
+                attachments: attachments?.length ? attachments : undefined,
+                modelSelection: modelSelection?.modelId ? modelSelection : undefined
+              },
+              issuedAt: yield* Clock.currentTimeMillis
+            }
+          },
+          60_000
+        )
+        const legacyCall = call(
           "sendPrompt",
           {
             sessionId: daemonSessionId,
@@ -763,6 +783,16 @@ const makeSession = <E>(
             ...(modelSelection !== undefined && modelSelection.modelId !== "" ? { modelSelection } : {})
           },
           60_000
+        )
+        yield* v4Call.pipe(
+          Effect.catchTag("RpcError", (cause) =>
+            Effect.gen(function* () {
+              yield* log.debug(
+                `[session] sendConversationCommandV4 rejected (${renderError(cause)}) — falling back to legacy sendPrompt`
+              )
+              yield* legacyCall
+            })
+          )
         )
         return { inputId }
       })

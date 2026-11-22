@@ -14,6 +14,13 @@
       "icon": "configure",
       "runOnWorktreeCreate": true,
       "async": false
+    },
+    {
+      "name": "Setup Worktree (zcode vendor)",
+      "command": "[ -d .repos/zcode/.git ] || { rm -rf .repos/zcode; mkdir -p .repos && git clone --depth 1 https://github.com/zai-org/ZCode.git .repos/zcode; }",
+      "icon": "configure",
+      "runOnWorktreeCreate": true,
+      "async": false
     }
   ]
 }
