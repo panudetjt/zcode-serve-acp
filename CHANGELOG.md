@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.3 — 2026-11-23
+
+### Features
+- feat(ci): build and attach release binaries to every draft release (d8de96e) — @panudetjt
+
+### Bug Fixes
+- fix(models): discover active runtime provider table with highest revision (7d7d5ac) — @panudetjt
+
+### Chores
+- style(models): format src/models.ts with bun fmt (1d7f4b9) — @panudetjt
+
 ## v0.4.2 — 2026-11-23
 
 ### Features
