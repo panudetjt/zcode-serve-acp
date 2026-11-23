@@ -6,11 +6,13 @@
  * picker problem of the old bridge disappears).
  *
  * Fallback (CLI 0.17.1 model-provisioning bug, per PR #34713 docs): enumerate
- * the CLI's bundled provider table (`~/.zcode/v2/runtime/provider/bundled/
- * zcode-builtin.json`) filtered by OAuth-selection presence in setting.json —
- * the #33684 extraction: presence of `oauth:<family>:access_token` in the
- * store proves the login; no decryption needed. Reads go through the platform
- * FileSystem service; any failure yields no fallback models (never throws).
+ * the CLI's active runtime provider table (`~/.zcode/v2/runtime/provider/
+ * <platform>/<version>/endpoint-<hash>/zcode-builtin.json` with highest
+ * revision, falling back to the bundled baseline `bundled/zcode-builtin.json`)
+ * filtered by OAuth-selection presence in setting.json — the #33684 extraction:
+ * presence of `oauth:<family>:access_token` in the store proves the login;
+ * no decryption needed. Reads go through the platform FileSystem service;
+ * any failure yields no fallback models (never throws).
  */
 import { Effect, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
@@ -106,31 +108,77 @@ const decodeSetting = Schema.decodeUnknownSync(ProviderSetting)
 const decodeCreds = Schema.decodeUnknownSync(ProviderCredentials)
 const decodeTable = Schema.decodeUnknownSync(ProviderTable)
 
+const readJson = (fs: FileSystem, file: string): Effect.Effect<unknown | undefined> =>
+  fs.readFileString(file).pipe(
+    Effect.map((text) => {
+      try {
+        return JSON.parse(text) as unknown
+      } catch {
+        return undefined
+      }
+    }),
+    Effect.orElseSucceed(() => undefined)
+  )
+
+/**
+ * Resolves the raw provider table JSON from `<v2>/runtime/provider/`.
+ * Discovers active downloaded releases under `<platform>/<version>/endpoint-<hash>/zcode-builtin.json`
+ * alongside the bundled baseline (`bundled/zcode-builtin.json`), selecting the candidate with the highest revision.
+ */
+export const resolveActiveProviderTable = (
+  fs: FileSystem,
+  v2: string
+): Effect.Effect<unknown | undefined> =>
+  Effect.gen(function* () {
+    const providerDir = `${v2}/runtime/provider`
+    const bundledPath = `${providerDir}/bundled/zcode-builtin.json`
+
+    const entries =
+      typeof fs.readDirectory === "function"
+        ? yield* fs.readDirectory(providerDir, { recursive: true }).pipe(Effect.orElseSucceed(() => []))
+        : []
+
+    const candidateFiles = entries
+      .filter((e) => e.endsWith("zcode-builtin.json"))
+      .map((e) => `${providerDir}/${e}`)
+
+    if (!candidateFiles.includes(bundledPath)) {
+      candidateFiles.push(bundledPath)
+    }
+
+    let bestTable: unknown | undefined = undefined
+    let highestRevision = -1
+
+    for (const file of candidateFiles) {
+      const raw = yield* readJson(fs, file)
+      if (typeof raw === "object" && raw !== null) {
+        const rev = "revision" in raw && typeof raw.revision === "number" ? raw.revision : 0
+        if (rev > highestRevision) {
+          highestRevision = rev
+          bestTable = raw
+        }
+      }
+    }
+
+    if (bestTable === undefined) {
+      bestTable = yield* readJson(fs, bundledPath)
+    }
+
+    return bestTable
+  })
+
 /** Presence-check fallback — never decrypts anything. */
 export const fallbackModels: Effect.Effect<AvailableModel[], never, FileSystem> = Effect.gen(function* () {
   const root = envDataOverride() ?? envHome() ?? ""
   const v2 = `${root}/.zcode/v2`
-  const tablePath = `${v2}/runtime/provider/bundled/zcode-builtin.json`
   const settingPath = `${v2}/setting.json`
   const credsPath = `${v2}/credentials.json`
   const fs = yield* FileSystem
 
-  const readJson = (file: string): Effect.Effect<unknown | undefined> =>
-    fs.readFileString(file).pipe(
-      Effect.map((text) => {
-        try {
-          return JSON.parse(text) as unknown
-        } catch {
-          return undefined
-        }
-      }),
-      Effect.orElseSucceed(() => undefined)
-    )
-
   const [settingRaw, credsRaw, tableRaw] = yield* Effect.all([
-    readJson(settingPath),
-    readJson(credsPath),
-    readJson(tablePath)
+    readJson(fs, settingPath),
+    readJson(fs, credsPath),
+    resolveActiveProviderTable(fs, v2)
   ])
   if (settingRaw === undefined || credsRaw === undefined || tableRaw === undefined) return []
 

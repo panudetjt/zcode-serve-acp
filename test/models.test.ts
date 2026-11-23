@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { Effect } from "effect"
 import { FileSystem } from "effect/FileSystem"
-import { fallbackModels, modelsToAcp } from "../src/models.ts"
+import { fallbackModels, modelsToAcp, resolveActiveProviderTable } from "../src/models.ts"
 import {
   buildAvailableCommands,
   buildConfigOptions,
@@ -202,6 +202,147 @@ describe("fallbackModels", () => {
     expect(res.length).toBe(1)
     expect(res[0]?.modelId).toBe("GLM-5.3")
     expect(res[0]?.providerId).toBe("zai-provider")
+  })
+
+  it("discovers the active runtime provider table with highest revision over bundled", async () => {
+    const settingJson = JSON.stringify({
+      providerFamilyConnectionSelections: {
+        zai: { kind: "individual-coding-plan" }
+      },
+      modelProviderFamilyModes: {}
+    })
+    const credsJson = JSON.stringify({
+      "oauth:zai:access_token": "valid-token-123"
+    })
+    const bundledTableJson = JSON.stringify({
+      revision: 44,
+      config: {
+        providerConfigRules: {
+          providerRules: [
+            {
+              providerId: "account:zai-individual-coding-plan",
+              config: {
+                access: {
+                  type: "zhipu-account",
+                  mode: "individual-coding-plan",
+                  accountType: "zai"
+                },
+                builtinModelIds: ["GLM-5.3"]
+              }
+            }
+          ]
+        }
+      }
+    })
+    const activeTableJson = JSON.stringify({
+      revision: 48,
+      config: {
+        providerConfigRules: {
+          providerRules: [
+            {
+              providerId: "account:zai-individual-coding-plan",
+              config: {
+                access: {
+                  type: "zhipu-account",
+                  mode: "individual-coding-plan",
+                  accountType: "zai"
+                },
+                builtinModelIds: ["GLM-5.4", "GLM-5.3"]
+              }
+            }
+          ]
+        }
+      }
+    })
+
+    const fakeFs = {
+      readDirectory: () =>
+        Effect.succeed([
+          "bundled/zcode-builtin.json",
+          "linux-x86_64/3.19.1/endpoint-78d7c3bef4024722642626fe3669a799/zcode-builtin.json"
+        ]),
+      readFileString: (path: string) => {
+        if (path.includes("setting.json")) return Effect.succeed(settingJson)
+        if (path.includes("credentials.json")) return Effect.succeed(credsJson)
+        if (path.includes("3.19.1")) return Effect.succeed(activeTableJson)
+        if (path.includes("bundled")) return Effect.succeed(bundledTableJson)
+        return Effect.fail(new Error("ENOENT"))
+      }
+    } as unknown as FileSystem
+
+    const res = await Effect.runPromise(fallbackModels.pipe(Effect.provideService(FileSystem, fakeFs)))
+    expect(res.length).toBe(2)
+    expect(res[0]?.modelId).toBe("GLM-5.4")
+    expect(res[1]?.modelId).toBe("GLM-5.3")
+    expect(res[0]?.providerId).toBe("account:zai-individual-coding-plan")
+  })
+
+  it("falls back to bundled table when active runtime entries are missing or empty", async () => {
+    const settingJson = JSON.stringify({
+      providerFamilyConnectionSelections: {
+        zai: { kind: "individual-coding-plan" }
+      },
+      modelProviderFamilyModes: {}
+    })
+    const credsJson = JSON.stringify({
+      "oauth:zai:access_token": "valid-token-123"
+    })
+    const bundledTableJson = JSON.stringify({
+      revision: 44,
+      config: {
+        providerConfigRules: {
+          providerRules: [
+            {
+              providerId: "account:zai-individual-coding-plan",
+              config: {
+                access: {
+                  type: "zhipu-account",
+                  mode: "individual-coding-plan",
+                  accountType: "zai"
+                },
+                builtinModelIds: ["GLM-5.3"]
+              }
+            }
+          ]
+        }
+      }
+    })
+
+    const fakeFs = {
+      readDirectory: () => Effect.succeed([]),
+      readFileString: (path: string) => {
+        if (path.includes("setting.json")) return Effect.succeed(settingJson)
+        if (path.includes("credentials.json")) return Effect.succeed(credsJson)
+        if (path.includes("bundled/zcode-builtin.json")) return Effect.succeed(bundledTableJson)
+        return Effect.fail(new Error("ENOENT"))
+      }
+    } as unknown as FileSystem
+
+    const res = await Effect.runPromise(fallbackModels.pipe(Effect.provideService(FileSystem, fakeFs)))
+    expect(res.length).toBe(1)
+    expect(res[0]?.modelId).toBe("GLM-5.3")
+  })
+
+  it("resolves the table object with the highest revision directly", async () => {
+    const fakeFs = {
+      readDirectory: () =>
+        Effect.succeed([
+          "bundled/zcode-builtin.json",
+          "linux-x86_64/3.19.1/endpoint-78d7c3bef4024722642626fe3669a799/zcode-builtin.json"
+        ]),
+      readFileString: (path: string) => {
+        if (path.includes("3.19.1")) return Effect.succeed(JSON.stringify({ revision: 48, name: "active" }))
+        if (path.includes("bundled")) return Effect.succeed(JSON.stringify({ revision: 44, name: "bundled" }))
+        return Effect.fail(new Error("ENOENT"))
+      }
+    } as unknown as FileSystem
+
+    const table = (await Effect.runPromise(resolveActiveProviderTable(fakeFs, "/root/.zcode/v2"))) as {
+      revision: number
+      name: string
+    }
+    expect(table.revision).toBe(48)
+    expect(table.name).toBe("active")
   })
 })
 

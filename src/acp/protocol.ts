@@ -6,10 +6,11 @@
  * see the pre-rewrite acp/server.ts for where each quirk comes from.
  */
 import { Effect, Option, Schema } from "effect"
+import pkg from "../../package.json"
 import { DecodeError } from "../errors.ts"
 import type { DiscoveredSkill } from "../serve/session.ts"
 
-export const BRIDGE_VERSION = "0.4.1"
+export const BRIDGE_VERSION = pkg.version
 
 export interface InitializeResult {
   protocolVersion: number
