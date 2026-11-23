@@ -125,10 +125,7 @@ const readJson = (fs: FileSystem, file: string): Effect.Effect<unknown | undefin
  * Discovers active downloaded releases under `<platform>/<version>/endpoint-<hash>/zcode-builtin.json`
  * alongside the bundled baseline (`bundled/zcode-builtin.json`), selecting the candidate with the highest revision.
  */
-export const resolveActiveProviderTable = (
-  fs: FileSystem,
-  v2: string
-): Effect.Effect<unknown | undefined> =>
+export const resolveActiveProviderTable = (fs: FileSystem, v2: string): Effect.Effect<unknown | undefined> =>
   Effect.gen(function* () {
     const providerDir = `${v2}/runtime/provider`
     const bundledPath = `${providerDir}/bundled/zcode-builtin.json`
@@ -138,9 +135,7 @@ export const resolveActiveProviderTable = (
         ? yield* fs.readDirectory(providerDir, { recursive: true }).pipe(Effect.orElseSucceed(() => []))
         : []
 
-    const candidateFiles = entries
-      .filter((e) => e.endsWith("zcode-builtin.json"))
-      .map((e) => `${providerDir}/${e}`)
+    const candidateFiles = entries.filter((e) => e.endsWith("zcode-builtin.json")).map((e) => `${providerDir}/${e}`)
 
     if (!candidateFiles.includes(bundledPath)) {
       candidateFiles.push(bundledPath)
