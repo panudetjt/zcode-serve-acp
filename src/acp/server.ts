@@ -12,7 +12,7 @@
  * flag feeding the 180s initial-response guard, and a quiet-window fiber —
  * interrupt on take, exactly the old clear-timers-then-resolve order.
  */
-import { Context, Deferred, Effect, Fiber, Layer, Option, Ref } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Ref } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
 import type { DiscoveredSkill } from "../serve/session.ts"
@@ -64,12 +64,29 @@ interface BridgeSession {
   /** Debounced subagent batch-summary emission — armed on child sightings (see armSubagentsSummary). */
   readonly summaryFiber: Ref.Ref<Option.Option<Fiber.Fiber<void, never>>>
   readonly dumpRef: Ref.Ref<boolean>
+  /** A Turn the daemon started on its own (e.g. on a background task's completion) is in flight — its open tool parts are not orphans. */
+  readonly foreignTurn: Ref.Ref<boolean>
+  /** A runtime restart this Bridge asked for is in progress: the lifecycle events it causes are expected. */
+  readonly recovering: Ref.Ref<boolean>
+}
+
+/** What one attempt of a `session/prompt` sends to the daemon. */
+interface PromptAttempt {
+  readonly prompt: string
+  readonly modelSelection: ModelSelection | undefined
+  readonly attachments: PromptAttachment[] | undefined
 }
 
 interface TurnState {
   readonly deferred: Deferred.Deferred<string, AcpMethodError>
   sawUpdate: boolean
   initialGuard?: Fiber.Fiber<void, never>
+  /** The prompt of this Turn — what a transparent retry re-sends. */
+  readonly attempt: PromptAttempt
+  /** The assistant showed something (text, thought, tool call): a retry would repeat it. */
+  emittedContent: boolean
+  /** The single transparent retry of issue #21 has been used. */
+  retried: boolean
 }
 
 export interface AcpServerDeps {
@@ -153,6 +170,10 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       if (state.initialGuard !== undefined) {
         yield* Fiber.interrupt(state.initialGuard)
       }
+      // The Turn is over: no runtime restart is pending any more and, whatever
+      // was running, the session's active Turn was this one.
+      yield* Ref.set(bridge.recovering, false)
+      yield* Ref.set(bridge.foreignTurn, false)
     })
 
   const endTurn = (bridge: BridgeSession, stopReason: string): Effect.Effect<void> =>
@@ -174,6 +195,114 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       yield* log.debug(`[acp] failTurn: ${message}`)
       Deferred.doneUnsafe(state.deferred, Effect.fail(new AcpMethodError({ method: "session/prompt", message })))
     })
+
+  /**
+   * `session/update` kinds through which the assistant did visible work. A Turn
+   * that emitted any of them is never retried: what it showed and the tools it
+   * ran must not be repeated under one prompt.
+   */
+  const CONTENT_UPDATES: ReadonlySet<string> = new Set([
+    "agent_message_chunk",
+    "agent_thought_chunk",
+    "tool_call",
+    "tool_call_update"
+  ])
+
+  /**
+   * Turn-failure texts a heal can act on. "Model request failed." is the
+   * wrapper the runtime puts on `AI_MissingToolResultsError` — a tool call
+   * without a result in the history, which is what a crashed Turn leaves
+   * behind; the next two name that error as the daemon logs it; and
+   * "database is locked" is the contention that leaves open tool parts behind
+   * in the first place.
+   */
+  const RECOVERABLE_TURN_FAILURES: readonly string[] = [
+    "Model request failed",
+    "MissingToolResults",
+    "Tool result is missing",
+    "database is locked"
+  ]
+
+  /**
+   * Whether a Turn of this session may still be running: one this Bridge
+   * started, or one the daemon started on its own. Open tool parts of a
+   * running Turn are not orphans, so a heal must not run until this is false
+   * (issue #21: "the turn has already concluded").
+   */
+  const turnMayBeInFlight = (bridge: BridgeSession): Effect.Effect<boolean> =>
+    Effect.gen(function* () {
+      if (Option.isSome(yield* Ref.get(bridge.turn))) return true
+      return yield* Ref.get(bridge.foreignTurn)
+    })
+
+  /**
+   * Closes the session's open tool parts in the daemon's store and, when that
+   * closed anything, restarts the session's runtime so the daemon rebuilds its
+   * history from the healed rows (a live Turn never re-reads the store — see
+   * serve/recovery.ts). Never fails; every step is logged. Resolves to true
+   * only when both happened.
+   */
+  const recoverSession = (bridge: BridgeSession, cause: string): Effect.Effect<boolean> =>
+    Effect.gen(function* () {
+      if (deps.recovery === undefined) return false
+      const daemonSessionId = yield* bridge.serve.getDaemonSessionId
+      if (daemonSessionId === undefined) return false
+      // exit, not result: a defect in the heal must not escape into a Turn either.
+      const healed = yield* Effect.exit(deps.recovery.healSession(daemonSessionId))
+      if (Exit.isFailure(healed)) {
+        yield* log.debug(`[orphan-heal] ${cause}: heal failed — ${renderError(Cause.squash(healed.cause))}`)
+        return false
+      }
+      const parts = healed.value.healedParts
+      if (parts.length === 0) return false
+      const callIds = parts.map((part) => part.callId).join(", ")
+      yield* Ref.set(bridge.recovering, true)
+      const restarted = yield* Effect.exit(bridge.serve.restartRuntime)
+      if (Exit.isFailure(restarted)) {
+        yield* Ref.set(bridge.recovering, false)
+        yield* log.warn(
+          `[orphan-heal] ${cause}: closed ${parts.length} tool part(s) (${callIds}) but the runtime restart failed — ${renderError(Cause.squash(restarted.cause))}`
+        )
+        return false
+      }
+      yield* log.warn(
+        `[orphan-heal] ${cause}: closed ${parts.length} open tool part(s) (${callIds}) in daemon session ${daemonSessionId} and restarted its runtime`
+      )
+      return true
+    })
+
+  /**
+   * The transparent retry of issue #21: after a Turn failed before it showed
+   * anything, recover the session and send the same prompt once more under the
+   * same `session/prompt`. It awaits daemon RPCs, so it runs detached — the
+   * channel's event pump that schedules it has to stay free to deliver their
+   * responses. Whatever goes wrong here still ends the Turn.
+   */
+  const recoverAndRetry = (bridge: BridgeSession, state: TurnState, failure: string): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      if (!(yield* recoverSession(bridge, `turn failed (${failure})`))) {
+        return yield* failTurn(bridge, failure)
+      }
+      bridge.handledInteractions.clear()
+      bridge.translator.startTurn()
+      state.sawUpdate = false
+      const sent = yield* Effect.exit(
+        bridge.serve.sendPrompt(state.attempt.prompt, state.attempt.modelSelection, state.attempt.attachments)
+      )
+      if (Exit.isFailure(sent)) {
+        return yield* failTurn(bridge, String(Cause.squash(sent.cause)))
+      }
+      yield* log.debug(`[orphan-heal] turn retried (inputId=${sent.value.inputId})`)
+    }).pipe(
+      // Detached: nothing else observes a defect here, and the prompt must not
+      // be left waiting on a Turn that will never end.
+      Effect.catchCause((cause) =>
+        Effect.gen(function* () {
+          yield* log.warn(`[orphan-heal] recovery defect: ${renderError(cause)}`)
+          yield* failTurn(bridge, `Session recovery failed: ${renderError(cause)}`)
+        })
+      )
+    )
 
   const clearQuiet = (bridge: BridgeSession): Effect.Effect<void> =>
     Effect.gen(function* () {
@@ -262,10 +391,20 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
         const turnNow = yield* Ref.get(bridge.turn)
         if (Option.isSome(turnNow)) {
           turnNow.value.sawUpdate = true
+        } else {
+          // Outside a Turn this Bridge started, only the frames tell whether
+          // the daemon is running one of its own.
+          yield* Ref.set(
+            bridge.foreignTurn,
+            result.hasActiveWork && !result.turnComplete && !result.turnFailed && result.turnCancelled !== true
+          )
         }
         for (const update of result.updates) {
           yield* log.debug(`[frame] emit ${update.sessionUpdate}`)
           yield* emitNotification("session/update", { sessionId: bridge.id, update })
+          if (Option.isSome(turnNow) && CONTENT_UPDATES.has(update.sessionUpdate)) {
+            turnNow.value.emittedContent = true
+          }
         }
         // Live subagent drill-down: rows surfaced child sessions — subscribe
         // their conversations and refresh the batch overview; settled children
@@ -294,17 +433,20 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
         }
         if (result.turnFailed) {
           const msg = result.errorMessage ?? "Turn execution failed in daemon"
-          if (deps.recovery) {
-            const isRecoverable =
-              msg.includes("Model request failed") ||
-              msg.includes("database is locked") ||
-              msg.includes("MissingToolResults")
-            const daemonSessionId = yield* bridge.serve.getDaemonSessionId
-            if (isRecoverable && daemonSessionId) {
-              yield* tolerate(deps.recovery.healSession(daemonSessionId), (err) =>
-                log.warn(`[recovery] turn-fail heal failed: ${err.message}`)
-              )
-            }
+          const active = yield* Ref.get(bridge.turn)
+          if (
+            Option.isSome(active) &&
+            deps.recovery !== undefined &&
+            !active.value.emittedContent &&
+            !active.value.retried &&
+            RECOVERABLE_TURN_FAILURES.some((signature) => msg.includes(signature))
+          ) {
+            // Transparent single retry (issue #21): a Turn that failed before
+            // it showed anything gets one more attempt once the session is
+            // recovered — or its failure, when recovery finds nothing to do.
+            active.value.retried = true
+            yield* Effect.forkDetach(recoverAndRetry(bridge, active.value, msg))
+            return
           }
           yield* failTurn(bridge, msg)
           return
@@ -362,12 +504,21 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
       Effect.gen(function* () {
         const raw = JSON.stringify(payload)
         yield* log.debug(`[lifecycle] ${raw.slice(0, 300)}`)
+        // A runtime state change ends whatever Turn the daemon was running on
+        // its own.
+        yield* Ref.set(bridge.foreignTurn, false)
         const p = payload as { state?: string; lastError?: { message?: string; code?: string } | null; error?: string }
         if (p.state === "faulted" || p.lastError) {
           const msg = p.lastError?.message || p.error || "daemon session faulted"
           yield* failTurn(bridge, `Daemon error: ${msg}`)
           return
         }
+        if (p.state === "ready") {
+          // The restart this Bridge asked for is done; lifecycle is the daemon's own again.
+          yield* Ref.set(bridge.recovering, false)
+          return
+        }
+        if (yield* Ref.get(bridge.recovering)) return
         if (p.state === "stopping" || p.state === "unloaded") {
           yield* endTurn(bridge, "end_turn")
         }
@@ -377,6 +528,7 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
     (bridge: BridgeSession) =>
     (reason: string): Effect.Effect<void> =>
       Effect.gen(function* () {
+        yield* Ref.set(bridge.foreignTurn, false)
         const turnNow = yield* Ref.get(bridge.turn)
         if (Option.isSome(turnNow) && !turnNow.value.sawUpdate) {
           yield* failTurn(bridge, `Connection closed before response: ${reason}`)
@@ -520,7 +672,9 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
         turn: Ref.makeUnsafe(Option.none()),
         quietFiber: Ref.makeUnsafe(Option.none()),
         summaryFiber: Ref.makeUnsafe(Option.none()),
-        dumpRef: Ref.makeUnsafe(false)
+        dumpRef: Ref.makeUnsafe(false),
+        foreignTurn: Ref.makeUnsafe(false),
+        recovering: Ref.makeUnsafe(false)
       }
       const serve = yield* deps.sessions.create(cwd, {
         onConversationFrame: onConversationFrame(bridge),
@@ -720,28 +874,31 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
                   ...(bridge.thoughtLevel !== undefined ? { options: { reasoningLevel: bridge.thoughtLevel } } : {})
                 }
               : undefined
+          const attempt: PromptAttempt = {
+            prompt: promptPayload,
+            modelSelection,
+            attachments: attachments.length > 0 ? attachments : undefined
+          }
+          // Pre-flight (issue #21): a Turn that crashed earlier may have left
+          // open tool parts behind. Before startTurn(), so that anything the
+          // recovery makes the daemon emit lands in the finished Turn's state
+          // rather than the new one's. Skipped while a Turn may still be
+          // running — its open tool parts are not orphans.
+          if (!(yield* turnMayBeInFlight(bridge))) {
+            yield* recoverSession(bridge, "pre-flight")
+          }
           bridge.handledInteractions.clear()
           bridge.translator.startTurn()
-          if (deps.recovery) {
-            const daemonSessionId = yield* bridge.serve.getDaemonSessionId
-            if (daemonSessionId) {
-              const healed = yield* tolerate(deps.recovery.healSession(daemonSessionId), (err) =>
-                log.warn(`[recovery] pre-flight heal check failed: ${err.message}`)
-              )
-              if (healed && healed.healedCount > 0) {
-                yield* log.warn(
-                  `[recovery] pre-flight healed ${healed.healedCount} orphan tool part(s) in session ${daemonSessionId}: ${healed.healedParts.map((p) => p.callId).join(", ")}`
-                )
-              }
-            }
-          }
           const sendResult = yield* bridge.serve
-            .sendPrompt(promptPayload, modelSelection, attachments.length > 0 ? attachments : undefined)
+            .sendPrompt(attempt.prompt, attempt.modelSelection, attempt.attachments)
             .pipe(Effect.mapError((cause) => new AcpMethodError({ method, message: cause.message })))
           // Turn lifecycle: the Deferred is completed from frame handlers.
           const state: TurnState = {
             deferred: Deferred.makeUnsafe<string, AcpMethodError>(),
-            sawUpdate: false
+            sawUpdate: false,
+            attempt,
+            emittedContent: false,
+            retried: false
           }
           yield* Ref.set(bridge.turn, Option.some(state))
           state.initialGuard = yield* Effect.forkScoped(

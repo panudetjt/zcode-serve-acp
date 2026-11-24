@@ -44,6 +44,14 @@ The Daemon-side conversation behind a Subagent (id = the row's `childSessionId`)
 One Client prompt plus the Daemon's streamed response, ending in a **Stop reason** (completed / cancelled / failed).
 _Avoid_: prompt, request
 
+**Orphan tool part**:
+A tool call a crashed Turn left open in the Daemon's conversation store (`state.status` `pending` or `running`, no result). Every later Turn of that runtime fails at request serialisation until the runtime rebuilds its history from the store.
+_Avoid_: pending tool part, stuck tool, zombie tool call
+
+**Heal**:
+Closing Orphan tool parts in the Daemon's store (`SessionRecovery`) and, when that closed anything, restarting the session's runtime so the Daemon stops sending the model the dangling call. Distinct from channel recovery (issue #5), which reconnects the Bridge to a restarted Daemon.
+_Avoid_: recovery (reads as channel recovery), fix, repair
+
 **Pending interaction**:
 A Daemon request that needs a human decision, surfacing as either a Permission request or an Elicitation.
 _Avoid_: approval, prompt request

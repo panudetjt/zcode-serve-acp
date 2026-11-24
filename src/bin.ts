@@ -35,6 +35,7 @@ import { BridgeExit } from "./serve/bridge.ts"
 import { Daemon } from "./serve/daemon.ts"
 import { SessionRecovery } from "./serve/recovery.ts"
 import { ServeSessionFactory } from "./serve/session.ts"
+import { BunSqlite } from "./serve/sqlite-bun.ts"
 
 const CLIENT_REQUEST_TIMEOUT_MS = 600_000
 
@@ -43,7 +44,8 @@ const PlatformLayer = Layer.mergeAll(
   FetchHttpClient.layer,
   BunFileSystem.layer,
   BunSocket.layerWebSocketConstructor,
-  BunStdio.layer
+  BunStdio.layer,
+  BunSqlite.layer
 )
 
 const Main = Effect.gen(function* () {

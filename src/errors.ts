@@ -112,6 +112,13 @@ export class RecoveryError extends Schema.TaggedError<RecoveryError, { readonly 
   }
 ) {}
 
+/** A SQLite driver failure (open, lock timeout, constraint, unexpected schema). `code` is the SQLite result-code name. */
+export class SqliteError extends Schema.TaggedError<SqliteError, { readonly brand: unique symbol }>()("SqliteError", {
+  path: Schema.String,
+  code: Schema.String,
+  message: Schema.String
+}) {}
+
 /** Failure while driving a permission/elicitation interaction. */
 export class InteractionError extends Schema.TaggedError<InteractionError, { readonly brand: unique symbol }>()(
   "InteractionError",

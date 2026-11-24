@@ -152,6 +152,13 @@ Bun version is pinned via `mise.toml` (1.4.4).
 - **The daemon is never killed** by the bridge; the bridge never reads or
   decrypts credentials (token *presence* checks are allowed, decryption is
   not).
+- Two things the bridge does beyond driving Turns, recorded here because they
+  reach past the ACP surface: it may ask the Daemon to restart **one
+  session's runtime** (`ServeSession.restartRuntime`: daemon RPC
+  `session/lifecycle/stop`, then `session/resume` carrying the Client's MCP
+  servers) to unwedge that session — never the Daemon itself — and it closes
+  open tool parts in the Daemon's conversation store (`SessionRecovery`, the
+  only writer of that store outside the Daemon).
 - Protocol knowledge is reverse-engineered from `server-core.js` (runtime
   3.18.2, re-verified unchanged against 3.19.0 via the endpoint/constant diff
   and `scripts/probe-tools-load.mjs`) and recorded in provenance comments.
@@ -159,12 +166,15 @@ Bun version is pinned via `mise.toml` (1.4.4).
   documentation.
 - Wire codec (`src/serve/wire.ts`) is intentionally hand-rolled (13-byte frame
   header, VQL varints) — do not try to express it in `Schema`. JSON boundaries
-  (daemon frames, RPC results, ACP messages, config files) all go through
-  `Schema`.
+  (daemon frames, RPC results, ACP messages, config files, daemon store rows)
+  all go through `Schema`.
 - Bun builtins are reached only through platform services (`FileSystem`,
   `HttpClient`, `ChildProcessSpawner`, `Stdio`, `Socket`/`WebSocketConstructor`),
   never imported directly in domain code — see
-  [agent-patterns/effect.md](./agent-patterns/effect.md).
+  [agent-patterns/effect.md](./agent-patterns/effect.md). `Sqlite` is the
+  bridge's own such port (`src/serve/sqlite.ts`; Bun driver
+  `src/serve/sqlite-bun.ts`, provided by `bin.ts`) because
+  `@effect/platform-bun` ships none.
 
 ## Tests
 

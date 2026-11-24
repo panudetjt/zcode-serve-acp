@@ -206,6 +206,24 @@ export interface ServeSession {
   /** Retrieve the daemon session ID if already created or loaded. */
   readonly getDaemonSessionId: Effect.Effect<string | undefined>
   /**
+   * Restarts this session's runtime in the daemon: stops it and resumes the
+   * session, which recreates the runtime. The runtime then rebuilds its
+   * history from the store — the only way a live session stops seeing a
+   * crashed Turn's dangling tool call, because a live Turn never re-reads the
+   * store (see serve/recovery.ts). In-flight work of that session (background
+   * tasks) is interrupted. The resume carries the Client's MCP servers, which
+   * live in the runtime instance and are not restored by the daemon (verified
+   * live 2026-11-24 on runtime 3.19.1: after a bare
+   * `session/lifecycle/restart` the session had lost them, and a resume sent
+   * afterwards did not bring them back). The conversation subscription is
+   * made again too: the old one was registered against the old runtime and
+   * stops delivering frames.
+   * server-core.js 3.19.1: channel `zcode-agent`, `stopSessionRuntime` →
+   * `session/lifecycle/stop`; channel `zcode-session`, `resumeSession` →
+   * `session/resume`.
+   */
+  readonly restartRuntime: Effect.Effect<void, SessionError | RpcError | RpcTimeout | ChannelClosed>
+  /**
    * Best-effort teardown of the session's channel scope — used by
    * session/unload. Effect-valued property (Effect is already lazy; a
    * zero-arg method adds indirection): every step — listener disposal,
@@ -978,6 +996,46 @@ const makeSession = <E>(
       workspaceIdentity: session.workspace.workspaceIdentity,
       mcpServers
     })
+    /** The same request without MCP servers — when the Client configured none. */
+    const resumeArgsWithoutMcp = (session: { daemonSessionId: string; workspace: WorkspaceInfo }) => ({
+      sessionId: session.daemonSessionId,
+      workspacePath: session.workspace.workspacePath,
+      workspaceIdentity: session.workspace.workspaceIdentity
+    })
+
+    const restartRuntime: ServeSession["restartRuntime"] = Effect.gen(function* () {
+      const session = yield* requireDaemonSession
+      const channel = yield* getChannel
+      const workspace = {
+        sessionId: session.daemonSessionId,
+        workspacePath: session.workspace.workspacePath,
+        workspaceIdentity: session.workspace.workspaceIdentity
+      }
+      // Stopping and recreating a runtime (MCP servers reconnect) takes
+      // seconds; createSession allows the same 150s.
+      yield* channel.call("zcode-agent", "stopSessionRuntime", workspace, 150_000)
+      // The resume is what recreates the runtime, so it is not optional and
+      // not tolerated: without it the session would stay unloaded.
+      const mcpServers = yield* Ref.get(mcpServersRef)
+      yield* callSession(
+        "resumeSession",
+        Option.isSome(mcpServers) && mcpServers.value.length > 0
+          ? resumeArgs(session, mcpServers.value)
+          : resumeArgsWithoutMcp(session),
+        150_000
+      )
+      // Register the conversation again, the way a reconnect does.
+      yield* Ref.set(subscribedRef, false)
+      for (const disposer of listenerDisposers.splice(0)) {
+        yield* disposer
+      }
+      yield* tolerate(channel.call("zcode-agent", "unsubscribeConversationV4", workspace, 15_000), (cause) =>
+        log.debug(`[session] unsubscribeConversationV4 after runtime restart skipped: ${renderError(cause)}`)
+      )
+      yield* subscribeConversation(session.daemonSessionId, session.workspace, channel)
+      yield* log.debug(`[session] restarted runtime of ${session.daemonSessionId}`)
+    })
+
     return {
       createSession,
       setMcpServers,
@@ -989,6 +1047,7 @@ const makeSession = <E>(
       subscribeChild,
       unsubscribeChild,
       getDaemonSessionId,
+      restartRuntime,
       dispose
     } satisfies ServeSession
   })
