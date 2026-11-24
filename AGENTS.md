@@ -103,11 +103,14 @@ Consequences for every session in this repo:
 - To **call** a tool the instructions name bare, prefix it:
   `delegate_task` → `mcp__t3-code__delegate_task`. Do not report a call as
   impossible because the bare name is not in the function list.
-- To **check presence**, search the function list for the `mcp__t3-code__`
-  prefix. Bare-name absence is NOT evidence the toolset is missing. The chain
-  T3 → Bridge (`session/new` + stdio `mcpServers`, PR #14) → Daemon (spawns
-  the `t3-code` MCP server) works; verified live via daemon log
-  `mcp.server.connected t3-code` (`~/.zcode/cli/log/zcode-*.jsonl`).
+- To **check presence**, search the function list for the tool's short name
+  under whatever prefix the harness applies — `mcp__t3-code__` under ZCode,
+  `t3-code-<id>` in other harnesses — and judge presence by the list alone.
+  A prefix miss is NOT evidence the toolset is missing. The chain T3 → Bridge
+  (`session/new` + stdio `mcpServers`, PR #14) → Daemon (spawns the
+  `t3-code` MCP server) works; verified live via daemon log
+  `mcp.server.connected t3-code` with the full tool count
+  (`~/.zcode/cli/log/zcode-*.jsonl`).
 - Shell env vars (`T3_ACP_MCP_NODE`, `T3CODE_THREAD_ID`) are NOT a reliable
   signal either way: the client merges them into the Bridge spawn env from a
   spawn-time context, while the MCP servers are re-read per runtime start

@@ -94,9 +94,12 @@ entry points are `mcp__t3-code__preview_status`, `mcp__t3-code__preview_open`,
 `mcp__t3-code__preview_snapshot`, `mcp__t3-code__preview_act`.
 
 Before any "tool X is unavailable" claim, scan the full function list for the
-`mcp__t3-code__` prefix and judge tool presence by the list alone. Emit only
-tool names present in the list; when one is truly absent, state that in the
-reply and use an available alternative (ZCode `browser-use`, shell browsers).
+short name the instructions use (`delegate_task`, `link_pull_request`, ...)
+under whatever prefix the harness applies — `mcp__t3-code__` under ZCode,
+`t3-code-<id>` in other harnesses — and judge tool presence by the list alone.
+Emit only tool names present in the list; when one is truly absent, state that
+in the reply and use an available alternative (ZCode `browser-use`, shell
+browsers).
 EOF
 }
 
