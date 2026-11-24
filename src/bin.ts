@@ -13,22 +13,14 @@ import * as BunFileSystem from "@effect/platform-bun/BunFileSystem"
 import * as BunRuntime from "@effect/platform-bun/BunRuntime"
 import * as BunSocket from "@effect/platform-bun/BunSocket"
 import * as BunStdio from "@effect/platform-bun/BunStdio"
-import { Effect, Layer, Deferred, Result, Stream } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { Stdio } from "effect/Stdio"
 import { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
 import { AcpServer } from "./acp/server.ts"
-import { ClientRequestError } from "./errors.ts"
-import {
-  errorPayload,
-  encodeLine,
-  errorResponse,
-  clientRequest,
-  notification,
-  parseLine,
-  successResponse
-} from "./jsonrpc.ts"
+import { makeTransport, runInboundLoop } from "./acp/transport.ts"
+import { notification } from "./jsonrpc.ts"
 import { Log } from "./log.ts"
 import { fallbackModels } from "./models.ts"
 import { BridgeExit } from "./serve/bridge.ts"
@@ -55,95 +47,26 @@ const Main = Effect.gen(function* () {
   const fs = yield* FileSystem
   const recovery = yield* SessionRecovery
 
-  const writeLine = (message: unknown) => Stream.fromIterable([encodeLine(message)]).pipe(Stream.run(stdio.stdout()))
-
-  // client→server requests WE send (permission/elicitation asks): id ↔ Deferred map
-  const pending = new Map<number, Deferred.Deferred<unknown, ClientRequestError>>()
-  let nextRequestId = 900_000
+  // One serialized writer for every outbound frame, plus the pending map for
+  // client→server requests we send (permission/elicitation asks).
+  const transport = makeTransport({
+    write: (line) => Stream.fromIterable([line]).pipe(Stream.run(stdio.stdout())),
+    log,
+    timeoutMs: CLIENT_REQUEST_TIMEOUT_MS
+  })
 
   const acp = AcpServer.make({
     sessions,
     log,
     recovery,
-    emitNotification: (method, params) => writeLine(notification(method, params)),
-    clientRequest: (method, params) =>
-      Effect.gen(function* () {
-        const id = nextRequestId++
-        yield* writeLine(clientRequest(id, method, params))
-        const deferred = Deferred.makeUnsafe<unknown, ClientRequestError>()
-        pending.set(id, deferred)
-        return yield* Deferred.await(deferred).pipe(
-          Effect.timeoutOrElse({
-            duration: CLIENT_REQUEST_TIMEOUT_MS,
-            orElse: () =>
-              Effect.fail(
-                new ClientRequestError({ message: `client request ${method} timed out (client never answered)` })
-              )
-          }),
-          Effect.ensuring(Effect.sync(() => pending.delete(id)))
-        )
-      }),
+    emitNotification: (method, params) => transport.writeLine(notification(method, params)),
+    clientRequest: transport.clientRequest,
     fallbackModels: fallbackModels.pipe(Effect.provideService(FileSystem, fs))
   })
 
-  // Line-level failures never escape this loop: decode errors become a
-  // stderr note (Malformed) or a JSON-RPC error response / warn log
-  // (handle failures), per the pre-rewrite wire contract. The only channel
-  // left is PlatformError from the stdin stream and stdout writes, which
-  // genuinely ends the process (runMain logs it and exits non-zero).
-  const handleLine = (line: string): Effect.Effect<void, PlatformError> =>
-    Effect.gen(function* () {
-      const trimmed = line.trim()
-      if (trimmed === "") return
-      const outcome = yield* parseLine(trimmed).pipe(Effect.orElseSucceed(() => ({ _tag: "Malformed" as const })))
-      if (outcome._tag === "Malformed") {
-        yield* log.warn("[bin] non-JSON line on stdin (ignored)")
-        return
-      }
-      if (outcome._tag !== "Message") return
-      const inbound = outcome.inbound
-
-      // response to one of our client-side requests (permission asks)
-      if (inbound._tag === "Response") {
-        const numId = typeof inbound.response.id === "number" ? inbound.response.id : Number(inbound.response.id)
-        const entry = pending.get(numId)
-        if (entry !== undefined) {
-          pending.delete(numId)
-          if (inbound.response.error !== undefined) {
-            Deferred.doneUnsafe(
-              entry,
-              Effect.fail(
-                new ClientRequestError({ message: inbound.response.error.message ?? "client returned error" })
-              )
-            )
-          } else {
-            Deferred.doneUnsafe(entry, Effect.succeed(inbound.response.result))
-          }
-        }
-        return
-      }
-
-      const isRequest = inbound._tag === "Request"
-      const method = inbound._tag === "Request" ? inbound.request.method : inbound.notification.method
-      const params = inbound._tag === "Request" ? inbound.request.params : inbound.notification.params
-      const id = inbound._tag === "Request" ? inbound.request.id : undefined
-
-      const outcomeResult = yield* acp.handle(method, params).pipe(Effect.result)
-      if (!Result.isSuccess(outcomeResult)) {
-        const error = outcomeResult.failure
-        if (isRequest && id !== undefined) {
-          yield* writeLine(errorResponse(id, errorPayload(error.message)))
-        } else {
-          yield* log.warn(`[bin] notification ${method} failed: ${error.message}`)
-        }
-        return
-      }
-      if (isRequest && id !== undefined) {
-        yield* writeLine(successResponse(id, outcomeResult.success))
-      }
-    })
-
-  yield* Stream.runForEach(Stream.splitLines(Stream.decodeText(stdio.stdin)), handleLine)
+  // Concurrent per-line dispatch: a Turn in flight must not block
+  // `session/cancel` or the Client's answer to a permission ask (transport.ts).
+  yield* runInboundLoop({ stdin: stdio.stdin, transport, log, handle: acp.handle })
 })
 
 const AppLayer = Layer.mergeAll(ServeSessionFactory.layerNoDeps, SessionRecovery.layerNoDeps).pipe(
