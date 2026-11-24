@@ -203,6 +203,8 @@ export interface ServeSession {
   ) => Effect.Effect<void, SessionError | RpcError | RpcTimeout | ChannelClosed>
   /** Best-effort unsubscribe once the child settles. Never fails. */
   readonly unsubscribeChild: (childSessionId: string) => Effect.Effect<void>
+  /** Retrieve the daemon session ID if already created or loaded. */
+  readonly getDaemonSessionId: Effect.Effect<string | undefined>
   /**
    * Best-effort teardown of the session's channel scope — used by
    * session/unload. Effect-valued property (Effect is already lazy; a
@@ -978,6 +980,10 @@ const makeSession = <E>(
       yield* ScopeType.close(scope, Exit.succeed(undefined))
     })
 
+    const getDaemonSessionId: Effect.Effect<string | undefined> = Ref.get(sessionRef).pipe(
+      Effect.map((opt) => (Option.isSome(opt) ? opt.value.daemonSessionId : undefined))
+    )
+
     return {
       createSession,
       setMcpServers,
@@ -988,6 +994,7 @@ const makeSession = <E>(
       listSubagents,
       subscribeChild,
       unsubscribeChild,
+      getDaemonSessionId,
       dispose
     } satisfies ServeSession
   })

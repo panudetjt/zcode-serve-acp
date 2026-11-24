@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Fiber } from "effect"
+import { Effect, Exit, Fiber } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { AcpServer, type AcpServerDeps } from "../src/acp/server.ts"
+import { RecoveryError } from "../src/errors.ts"
 import { Log } from "../src/log.ts"
+import type { SessionRecovery } from "../src/serve/recovery.ts"
 import { ServeSessionFactory, type ServeSession } from "../src/serve/session.ts"
 
 /**
@@ -58,6 +60,7 @@ interface SessionScript {
   skills?: Array<{ name: string; description?: string; path?: string }>
   /** clientRequest behaviour, swap between calls */
   clientAnswer?: unknown
+  daemonSessionId?: string
 }
 
 const makeFixture = (script: SessionScript = {}, depsOverride: Partial<AcpServerDeps> = {}): ServerFixture => {
@@ -97,6 +100,7 @@ const makeFixture = (script: SessionScript = {}, depsOverride: Partial<AcpServer
     listSubagents: () => Effect.succeed({ revision: 0, running: [], ended: { total: 0, items: [] } }),
     subscribeChild: () => Effect.void,
     unsubscribeChild: () => Effect.void,
+    getDaemonSessionId: Effect.succeed(script.daemonSessionId),
     dispose: Effect.void
   } as ServeSession
 
@@ -682,5 +686,112 @@ describe("AcpServer edge branches", () => {
     await new Promise((r) => setTimeout(r, 15))
     await settleFrame(handlers)
     expect(await joinStopReason(fiber)).toBe("end_turn")
+  })
+
+  test("recovery service: pre-flight healing runs on session/prompt and logs healed parts", async () => {
+    let healedSessionId = ""
+    const fakeRecovery: SessionRecovery["Service"] = {
+      healSession: (sessionId) => {
+        healedSessionId = sessionId
+        return Effect.succeed({
+          checked: true,
+          healedCount: 1,
+          healedParts: [{ id: "p1", callId: "c1", tool: "TodoWrite" }]
+        })
+      }
+    }
+    const fx = makeFixture({ daemonSessionId: "sess-healed-1" }, { recovery: fakeRecovery })
+    await Effect.runPromise(fx.server.handle("session/new", { sessionId: "s-rec-1" }))
+    const fiber = await promptFiber(fx, "s-rec-1")
+    await new Promise((r) => setTimeout(r, 15))
+    await settleFrame(fx.handlers())
+    expect(await joinStopReason(fiber)).toBe("end_turn")
+    expect(healedSessionId).toBe("sess-healed-1")
+    expect(fx.capture.warnCalls.some((l) => l.includes("pre-flight healed 1 orphan tool part(s)"))).toBe(true)
+  })
+
+  test("recovery service: pre-flight healing failure is tolerated and logged", async () => {
+    const fakeRecovery: SessionRecovery["Service"] = {
+      healSession: (sessionId) => Effect.fail(new RecoveryError({ sessionId, message: "disk locked" }))
+    }
+    const fx = makeFixture({ daemonSessionId: "sess-healed-err" }, { recovery: fakeRecovery })
+    await Effect.runPromise(fx.server.handle("session/new", { sessionId: "s-rec-err" }))
+    const fiber = await promptFiber(fx, "s-rec-err")
+    await new Promise((r) => setTimeout(r, 15))
+    await settleFrame(fx.handlers())
+    expect(await joinStopReason(fiber)).toBe("end_turn")
+    expect(fx.capture.warnCalls.some((l) => l.includes("pre-flight heal check failed: disk locked"))).toBe(true)
+  })
+
+  test("recovery service: turn-fail heals on recoverable Model request failed error", async () => {
+    let healCalls = 0
+    const fakeRecovery: SessionRecovery["Service"] = {
+      healSession: (_sessionId) => {
+        healCalls++
+        return Effect.succeed({ checked: true, healedCount: 0, healedParts: [] })
+      }
+    }
+    const fx = makeFixture({ daemonSessionId: "sess-healed-fail" }, { recovery: fakeRecovery })
+    await Effect.runPromise(fx.server.handle("session/new", { sessionId: "s-rec-fail" }))
+    const fiber = await promptFiber(fx, "s-rec-fail")
+    await new Promise((r) => setTimeout(r, 15))
+    expect(healCalls).toBe(1) // pre-flight called
+
+    await Effect.runPromise(
+      (fx.handlers().onConversationFrame as (p: unknown) => Effect.Effect<void, unknown>)({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.upserted",
+              row: { rowId: 0, kind: "turnHeader", state: "failed", error: { message: "Model request failed." } }
+            }
+          ]
+        }
+      })
+    )
+
+    const exit = await Effect.runPromiseExit(Fiber.join(fiber))
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(healCalls).toBe(2) // turn-fail called again on recoverable error
+  })
+
+  test("recovery service: turn-fail heal failure is tolerated and logged", async () => {
+    let calls = 0
+    const fakeRecovery: SessionRecovery["Service"] = {
+      healSession: (sessionId) => {
+        calls++
+        if (calls === 1) {
+          // pre-flight succeeds
+          return Effect.succeed({ checked: true, healedCount: 0, healedParts: [] })
+        }
+        // turn-fail heal fails
+        return Effect.fail(new RecoveryError({ sessionId, message: "recovery failed on turn-fail" }))
+      }
+    }
+    const fx = makeFixture({ daemonSessionId: "sess-healed-fail-err" }, { recovery: fakeRecovery })
+    await Effect.runPromise(fx.server.handle("session/new", { sessionId: "s-rec-fail-err" }))
+    const fiber = await promptFiber(fx, "s-rec-fail-err")
+    await new Promise((r) => setTimeout(r, 15))
+
+    await Effect.runPromise(
+      (fx.handlers().onConversationFrame as (p: unknown) => Effect.Effect<void, unknown>)({
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "row.upserted",
+              row: { rowId: 0, kind: "turnHeader", state: "failed", error: { message: "database is locked" } }
+            }
+          ]
+        }
+      })
+    )
+
+    const exit = await Effect.runPromiseExit(Fiber.join(fiber))
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(fx.capture.warnCalls.some((l) => l.includes("turn-fail heal failed: recovery failed on turn-fail"))).toBe(
+      true
+    )
   })
 })

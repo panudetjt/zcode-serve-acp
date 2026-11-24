@@ -16,6 +16,7 @@ import { Context, Deferred, Effect, Fiber, Layer, Option, Ref } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import type { PlatformError } from "effect/PlatformError"
 import type { DiscoveredSkill } from "../serve/session.ts"
+import type { SessionRecovery } from "../serve/recovery.ts"
 import { envDump } from "../config.ts"
 import { ServeSessionFactory, type AvailableModel, type PromptAttachment, type ServeSession } from "../serve/session.ts"
 import { AcpMethodError, ClientRequestError, renderError, tolerate } from "../errors.ts"
@@ -74,6 +75,7 @@ interface TurnState {
 export interface AcpServerDeps {
   readonly sessions: ServeSessionFactory["Service"]
   readonly log: Log["Service"]
+  readonly recovery?: SessionRecovery["Service"]
   /** JSON-RPC notification to the client over stdout — the only genuine failure escape. */
   readonly emitNotification: (method: string, params: unknown) => Effect.Effect<void, PlatformError>
   /** request TO the ACP client (elicitation/create, session/request_permission) */
@@ -291,7 +293,20 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
           )
         }
         if (result.turnFailed) {
-          yield* failTurn(bridge, result.errorMessage ?? "Turn execution failed in daemon")
+          const msg = result.errorMessage ?? "Turn execution failed in daemon"
+          if (deps.recovery) {
+            const isRecoverable =
+              msg.includes("Model request failed") ||
+              msg.includes("database is locked") ||
+              msg.includes("MissingToolResults")
+            const daemonSessionId = yield* bridge.serve.getDaemonSessionId
+            if (isRecoverable && daemonSessionId) {
+              yield* tolerate(deps.recovery.healSession(daemonSessionId), (err) =>
+                log.warn(`[recovery] turn-fail heal failed: ${err.message}`)
+              )
+            }
+          }
+          yield* failTurn(bridge, msg)
           return
         }
         if (result.turnCancelled === true) {
@@ -707,6 +722,19 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
               : undefined
           bridge.handledInteractions.clear()
           bridge.translator.startTurn()
+          if (deps.recovery) {
+            const daemonSessionId = yield* bridge.serve.getDaemonSessionId
+            if (daemonSessionId) {
+              const healed = yield* tolerate(deps.recovery.healSession(daemonSessionId), (err) =>
+                log.warn(`[recovery] pre-flight heal check failed: ${err.message}`)
+              )
+              if (healed && healed.healedCount > 0) {
+                yield* log.warn(
+                  `[recovery] pre-flight healed ${healed.healedCount} orphan tool part(s) in session ${daemonSessionId}: ${healed.healedParts.map((p) => p.callId).join(", ")}`
+                )
+              }
+            }
+          }
           const sendResult = yield* bridge.serve
             .sendPrompt(promptPayload, modelSelection, attachments.length > 0 ? attachments : undefined)
             .pipe(Effect.mapError((cause) => new AcpMethodError({ method, message: cause.message })))

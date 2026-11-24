@@ -103,6 +103,15 @@ export class SessionError extends Schema.TaggedError<SessionError, { readonly br
   }
 ) {}
 
+/** Failure during session auto-recovery / database self-healing. */
+export class RecoveryError extends Schema.TaggedError<RecoveryError, { readonly brand: unique symbol }>()(
+  "RecoveryError",
+  {
+    sessionId: Schema.String,
+    message: Schema.String
+  }
+) {}
+
 /** Failure while driving a permission/elicitation interaction. */
 export class InteractionError extends Schema.TaggedError<InteractionError, { readonly brand: unique symbol }>()(
   "InteractionError",

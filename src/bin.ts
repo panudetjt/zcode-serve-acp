@@ -33,6 +33,7 @@ import { Log } from "./log.ts"
 import { fallbackModels } from "./models.ts"
 import { BridgeExit } from "./serve/bridge.ts"
 import { Daemon } from "./serve/daemon.ts"
+import { SessionRecovery } from "./serve/recovery.ts"
 import { ServeSessionFactory } from "./serve/session.ts"
 
 const CLIENT_REQUEST_TIMEOUT_MS = 600_000
@@ -50,6 +51,7 @@ const Main = Effect.gen(function* () {
   const sessions = yield* ServeSessionFactory
   const log = yield* Log
   const fs = yield* FileSystem
+  const recovery = yield* SessionRecovery
 
   const writeLine = (message: unknown) => Stream.fromIterable([encodeLine(message)]).pipe(Stream.run(stdio.stdout()))
 
@@ -60,6 +62,7 @@ const Main = Effect.gen(function* () {
   const acp = AcpServer.make({
     sessions,
     log,
+    recovery,
     emitNotification: (method, params) => writeLine(notification(method, params)),
     clientRequest: (method, params) =>
       Effect.gen(function* () {
@@ -141,7 +144,7 @@ const Main = Effect.gen(function* () {
   yield* Stream.runForEach(Stream.splitLines(Stream.decodeText(stdio.stdin)), handleLine)
 })
 
-const AppLayer = ServeSessionFactory.layerNoDeps.pipe(
+const AppLayer = Layer.mergeAll(ServeSessionFactory.layerNoDeps, SessionRecovery.layerNoDeps).pipe(
   Layer.provide(Daemon.layer),
   Layer.provide(BridgeExit.layer),
   Layer.provide(PlatformLayer)
@@ -149,7 +152,7 @@ const AppLayer = ServeSessionFactory.layerNoDeps.pipe(
 
 const program: Effect.Effect<void, PlatformError, never> = Effect.provide(
   Main,
-  Layer.merge(AppLayer, PlatformLayer) as Layer.Layer<Stdio | ServeSessionFactory | Log | FileSystem>
+  Layer.merge(AppLayer, PlatformLayer) as Layer.Layer<Stdio | ServeSessionFactory | Log | FileSystem | SessionRecovery>
 )
 
 BunRuntime.runMain(program)
