@@ -430,19 +430,7 @@ const makeSession = <E>(
           const mcpServers = yield* Ref.get(mcpServersRef)
           if (Option.isSome(mcpServers) && mcpServers.value.length > 0) {
             yield* tolerate(
-              channel.call(
-                "zcode-session",
-                "resumeSession",
-                {
-                  sessionId: session.value.daemonSessionId,
-                  workspace: {
-                    workspacePath: session.value.workspace.workspacePath,
-                    workspaceIdentity: session.value.workspace.workspaceIdentity
-                  },
-                  mcpServers: mcpServers.value
-                },
-                30_000
-              ),
+              channel.call("zcode-session", "resumeSession", resumeArgs(session.value, mcpServers.value), 30_000),
               (cause) => log.debug(`[session] post-reconnect resumeSession failed (continuing): ${renderError(cause)}`)
             )
           }
@@ -710,20 +698,8 @@ const makeSession = <E>(
         yield* Ref.set(mcpServersRef, daemonMcpServers.length > 0 ? Option.some(daemonMcpServers) : Option.none())
         const session = yield* Ref.get(sessionRef)
         if (Option.isSome(session)) {
-          yield* tolerate(
-            callSession(
-              "resumeSession",
-              {
-                sessionId: session.value.daemonSessionId,
-                workspace: {
-                  workspacePath: session.value.workspace.workspacePath,
-                  workspaceIdentity: session.value.workspace.workspaceIdentity
-                },
-                mcpServers: daemonMcpServers
-              },
-              30_000
-            ),
-            (cause) => log.debug(`[session] resumeSession with mcpServers failed: ${renderError(cause)}`)
+          yield* tolerate(callSession("resumeSession", resumeArgs(session.value, daemonMcpServers), 30_000), (cause) =>
+            log.debug(`[session] resumeSession with mcpServers failed: ${renderError(cause)}`)
           )
         }
       })
@@ -984,6 +960,24 @@ const makeSession = <E>(
       Effect.map((opt) => (Option.isSome(opt) ? opt.value.daemonSessionId : undefined))
     )
 
+    /**
+     * One request everywhere the daemon is asked to (re)activate the session
+     * with the Client's MCP servers. Flat, like createSession: the daemon's
+     * `resumeSession(params)` reads `params.workspacePath` and
+     * `params.workspaceIdentity` itself (server-core.js 3.19.1). A nested
+     * `workspace` object leaves both undefined and the call fails before the
+     * daemon logs it — seen live on 2026-11-24 as "Cannot read properties of
+     * undefined (reading 'trim')", tolerated into silence.
+     */
+    const resumeArgs = (
+      session: { daemonSessionId: string; workspace: WorkspaceInfo },
+      mcpServers: readonly DaemonMcpServer[]
+    ) => ({
+      sessionId: session.daemonSessionId,
+      workspacePath: session.workspace.workspacePath,
+      workspaceIdentity: session.workspace.workspaceIdentity,
+      mcpServers
+    })
     return {
       createSession,
       setMcpServers,
