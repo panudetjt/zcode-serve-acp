@@ -44,6 +44,10 @@ The Daemon-side conversation behind a Subagent (id = the row's `childSessionId`)
 One Client prompt plus the Daemon's streamed response, ending in a **Stop reason** (completed / cancelled / failed).
 _Avoid_: prompt, request
 
+**Session runtime** (short: runtime):
+The Daemon-side machinery a session's Turn runs on. The Daemon makes one when the session is created or resumed, and stops or remakes it on its own (idle eviction, plugin reload). Distinct from the Channel, which can stay up while the runtime comes and goes.
+_Avoid_: instance, worker
+
 **Orphan tool part**:
 A tool call a crashed Turn left open in the Daemon's conversation store (`state.status` `pending` or `running`, no result). Every later Turn of that runtime fails at request serialisation until the runtime rebuilds its history from the store.
 _Avoid_: pending tool part, stuck tool, zombie tool call

@@ -758,9 +758,8 @@ describe("ServeSession teardown edge", () => {
     }
   })
 
-  test("createSession formats and forwards mcpServers in createSession and resumeSession RPC payloads", async () => {
+  test("createSession formats and forwards mcpServers; setMcpServers only remembers them", async () => {
     const serverCalls: Array<{ channel: string; method: string; arg: unknown }> = []
-    let resumeCallCount = 0
 
     const server = Bun.serve({
       port: 0,
@@ -805,13 +804,6 @@ describe("ServeSession teardown edge", () => {
               ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { subscribed: true }))
             } else if (channel === "skills" && method === "list") {
               ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { skills: [] }))
-            } else if (channel === "zcode-session" && method === "resumeSession") {
-              resumeCallCount++
-              if (resumeCallCount === 1) {
-                ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], { ok: true }))
-              } else {
-                ws.send(encodeRpcMessage([MSG.PromiseError, id], { message: "resumeSession failed" }))
-              }
             } else {
               ws.send(encodeRpcMessage([MSG.PromiseSuccess, id], {}))
             }
@@ -880,41 +872,20 @@ describe("ServeSession teardown edge", () => {
         }
       ])
 
-      // Test setMcpServers sends resumeSession with updated mcpServers
-      const updatedMcp = [
+      // setMcpServers only remembers the list, and an empty one is no change
+      // (issue #26): a live runtime keeps the servers it was created with, so
+      // nothing is sent until a Turn puts a changed list into the runtime
+      // (test/mcp-toolset.test.ts).
+      const callsBefore = serverCalls.length
+      yield* session.setMcpServers([
         {
           type: "http" as const,
           name: "t3-code-new",
           url: "http://127.0.0.1:4001"
         }
-      ]
-      yield* session.setMcpServers(updatedMcp)
-
-      const resumeCall = serverCalls.find((c) => c.channel === "zcode-session" && c.method === "resumeSession")
-      expect(resumeCall).toBeDefined()
-      const resumeArg = resumeCall?.arg as { sessionId?: string; mcpServers?: unknown } | undefined
-      expect(resumeArg?.sessionId).toBe("daemon-sess-mcp-99")
-      expect(resumeArg?.mcpServers).toEqual([
-        {
-          name: "t3-code-new",
-          type: "http",
-          url: "http://127.0.0.1:4001",
-          headers: [],
-          isolation: "session",
-          alwaysLoad: true
-        }
       ])
-
-      // Calling setMcpServers again when daemon returns an error exercises the tolerate failure branch
-      yield* session.setMcpServers(updatedMcp)
-
-      // Calling setMcpServers with empty array clears servers
       yield* session.setMcpServers([])
-      const clearCall = serverCalls[serverCalls.length - 1]
-      expect(clearCall?.channel).toBe("zcode-session")
-      expect(clearCall?.method).toBe("resumeSession")
-      const clearArg = clearCall?.arg as { sessionId?: string; mcpServers?: unknown } | undefined
-      expect(clearArg?.mcpServers).toEqual([])
+      expect(serverCalls.length).toBe(callsBefore)
 
       yield* session.dispose
     }).pipe(

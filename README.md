@@ -39,6 +39,11 @@ server named `t3-code` — so tools surface to agents as
 instructions block references those tools by bare names; agents should treat
 bare name + `mcp__t3-code__` prefix as the same tool.
 
+The bridge keeps those servers in the session's runtime and puts them back
+before any Turn that would otherwise run without them, so the toolset
+survives a daemon restart or an idle-session unload. The mechanism is in
+[AGENTS.md](./AGENTS.md) under "Architecture contracts".
+
 For agents in **any** project (not just this repo), the installer ships the
 combined toolset note into the daemon's global instructions file — the
 daemon injects `~/.zcode/AGENTS.md` into every fresh session (verified live):
