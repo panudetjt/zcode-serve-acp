@@ -28,7 +28,7 @@ import * as Socket from "effect/socket/Socket"
 import { ChannelClosed, RpcError, RpcTimeout, SessionError, renderError, tolerate } from "../errors.ts"
 import { Log } from "../log.ts"
 import { ChannelClient, type ServerRequestHandler } from "./channel.ts"
-import { Daemon, type DaemonConnection } from "./daemon.ts"
+import { Daemon, type DaemonConnection, type ServerStatus } from "./daemon.ts"
 import { BridgeExit } from "./bridge.ts"
 import type { McpServer } from "../acp/protocol.ts"
 
@@ -137,6 +137,82 @@ export interface DaemonMcpServerStdio {
 
 export type DaemonMcpServer = DaemonMcpServerHttp | DaemonMcpServerStdio
 
+/**
+ * Result of `getSessionLifecycle` (channel `zcode-agent`): the daemon's
+ * `session/lifecycle/getState`, `sessionLifecycleSnapshotSchema`. The host
+ * handler ships in server-core.js 3.19.1 and 4.0.0 and answers null for a
+ * daemon that has no such call. `state` is one of unloaded | starting |
+ * ready | stopping | faulted.
+ *
+ * `generation` counts the runtimes this session has had in the current daemon
+ * process: every creation runs through the lifecycle owner's `activate`,
+ * which increments it (SessionLifecycleController, ZCode source v3.18.2), so
+ * equal generations name the same runtime. A restarted daemon counts from 1
+ * again.
+ */
+const LifecycleState = Schema.Literals(["unloaded", "starting", "ready", "stopping", "faulted"])
+const LifecycleSnapshot = Schema.Struct({
+  state: LifecycleState,
+  generation: Schema.Finite
+})
+type LifecycleSnapshot = typeof LifecycleSnapshot.Type
+const decodeLifecycleSnapshot = Schema.decodeUnknownOption(LifecycleSnapshot)
+
+/**
+ * Which daemon process a runtime lives in. `daemonKey` is its only
+ * constructor — the phantom field makes a bare string impossible.
+ */
+type DaemonKey = string & { readonly _daemonKey: never }
+
+/** A runtime the Bridge put the Client's MCP servers into: the daemon process it lives in and its lifecycle generation. */
+interface McpAssertion {
+  daemon: DaemonKey
+  generation: number
+}
+
+/**
+ * A daemon process, by what its status file says of it: a restart mints a new
+ * pid and start time, and may a new port. A status that does not say both
+ * cannot be told apart from a restarted one by its fields, so it is keyed by
+ * the Bridge's connection epoch instead: the same connection keeps trusting
+ * the runtime, and a reconnect — the only way a restart reaches the Bridge —
+ * distrusts it.
+ */
+const daemonKey = (status: ServerStatus, connectionEpoch: number): DaemonKey =>
+  (status.pid !== undefined && status.startedAt !== undefined
+    ? `${status.host}:${status.port}|${status.pid}|${status.startedAt}`
+    : `connection:${connectionEpoch}`) as DaemonKey
+
+/**
+ * The log line for a live runtime the Bridge is about to replace because it
+ * cannot be trusted to hold the Client's MCP servers. Only what the Bridge
+ * recorded tells why, and a wrong reason is worse than a broad one: the
+ * runtime the Client's changed list leaves behind did not "come back".
+ */
+const replacingRuntime = (
+  sessionId: string,
+  count: number,
+  asserted: Option.Option<McpAssertion>,
+  daemon: DaemonKey,
+  now: LifecycleSnapshot
+): string => {
+  const servers = `the Client's ${count} MCP server(s)`
+  if (Option.isNone(asserted)) {
+    return `[mcp] the runtime of session ${sessionId} was not made with ${servers} — their list changed since it was, or the Bridge never recorded it — replacing it`
+  }
+  const generations = `(generation ${asserted.value.generation} → ${now.generation})`
+  return asserted.value.daemon === daemon
+    ? `[mcp] the daemon replaced the runtime of session ${sessionId} ${generations}, without ${servers} — replacing it`
+    : `[mcp] the daemon restarted, and session ${sessionId} came back ${generations} without ${servers} — replacing that runtime`
+}
+
+/** Stopping and recreating a runtime (MCP servers reconnect) takes seconds; createSession allows the same 150s. */
+const RUNTIME_TIMEOUT_MS = 150_000
+const LIFECYCLE_TIMEOUT_MS = 15_000
+/** How long a runtime another party is creating or releasing gets to settle before the Bridge acts on it. */
+const LIFECYCLE_SETTLE_BUDGET_MS = 20_000
+const LIFECYCLE_SETTLE_POLL_MS = 250
+
 export function toDaemonMcpServer(server: McpServer): DaemonMcpServer {
   if ("type" in server && (server.type === "http" || server.type === "sse")) {
     return {
@@ -163,6 +239,11 @@ export interface ServeSession {
     modelSelection?: unknown,
     mcpServers?: readonly McpServer[]
   ) => Effect.Effect<CreateSessionResult, SessionError | RpcError | RpcTimeout | ChannelClosed>
+  /**
+   * Remembers a non-empty list as the Client's MCP servers; an empty list
+   * changes nothing. Sends nothing — the servers reach the runtime with the
+   * next Turn (see `ensureMcpServers`).
+   */
   readonly setMcpServers: (
     mcpServers: readonly McpServer[]
   ) => Effect.Effect<void, SessionError | RpcError | RpcTimeout | ChannelClosed>
@@ -268,6 +349,12 @@ interface WorkspaceInfo {
   projectId: string
 }
 
+/** A daemon session together with the workspace it was created against — what `sessionRef` holds. */
+interface AttachedSession {
+  daemonSessionId: string
+  workspace: WorkspaceInfo
+}
+
 const makeSession = <E>(
   daemon: Daemon["Service"],
   log: Log["Service"],
@@ -283,10 +370,16 @@ const makeSession = <E>(
     const workspaceRef = Ref.makeUnsafe<Option.Option<WorkspaceInfo>>(Option.none())
     // One invariant, one ref: a daemon session always rides with the workspace
     // it was created against (both are set together by createSession).
-    const sessionRef = Ref.makeUnsafe<Option.Option<{ daemonSessionId: string; workspace: WorkspaceInfo }>>(
-      Option.none()
-    )
+    const sessionRef = Ref.makeUnsafe<Option.Option<AttachedSession>>(Option.none())
     const mcpServersRef = Ref.makeUnsafe<Option.Option<DaemonMcpServer[]>>(Option.none())
+    /**
+     * The runtime the Client's MCP servers were last put into: which daemon
+     * process (`daemonKey` — a restarted daemon counts generations from 1
+     * again) and which of that session's runtimes (lifecycle generation).
+     * None whenever they are not known to be in whatever runtime exists now,
+     * which is what makes the next Turn put them back.
+     */
+    const mcpAssertedRef = Ref.makeUnsafe<Option.Option<McpAssertion>>(Option.none())
     const subscribedRef = Ref.makeUnsafe(false)
     // Child conversation topics subscribed for live subagent drill-down — also
     // the routing table for the frame listener below.
@@ -320,6 +413,14 @@ const makeSession = <E>(
     // fresh channel instead of dialing a second one on top of the in-flight
     // recovery.
     const reconnectPermit = Semaphore.makeUnsafe(1)
+    /**
+     * One runtime replacement at a time (issue #26). Two Turns that both find
+     * the Client's MCP servers unasserted — a steer arriving with its prompt —
+     * would each replace the runtime, the second stopping the one the first
+     * Turn had just gone out on. Serialized, the second finds the runtime the
+     * first recorded and leaves it.
+     */
+    const mcpPermit = Semaphore.makeUnsafe(1)
 
     /**
      * Drop every cached connection artifact (issue #5 state invalidation).
@@ -431,9 +532,12 @@ const makeSession = <E>(
     /**
      * Best-effort replays after a fresh channel: `initialize` is per-channel
      * daemon state (the project itself persists across daemon restarts, so
-     * the cached workspace/project id stays valid), and the conversation
-     * subscription must be re-registered on the new channel so streamed rows
-     * and turn completions keep flowing to the Client.
+     * the cached workspace/project id stays valid), the Client's MCP servers
+     * go into whatever runtime the session has now (`ensureMcpServers` — a
+     * restarted daemon has none, and one that came back on its own has no
+     * servers), and the conversation subscription must be re-registered on
+     * the new channel so streamed rows and turn completions keep flowing to
+     * the Client.
      */
     const replayAfterReconnect = (channel: ChannelClient<E>): Effect.Effect<void> =>
       Effect.gen(function* () {
@@ -445,13 +549,7 @@ const makeSession = <E>(
         }
         const session = yield* Ref.get(sessionRef)
         if (Option.isSome(session)) {
-          const mcpServers = yield* Ref.get(mcpServersRef)
-          if (Option.isSome(mcpServers) && mcpServers.value.length > 0) {
-            yield* tolerate(
-              channel.call("zcode-session", "resumeSession", resumeArgs(session.value, mcpServers.value), 30_000),
-              (cause) => log.debug(`[session] post-reconnect resumeSession failed (continuing): ${renderError(cause)}`)
-            )
-          }
+          yield* ensureMcpServers(channel, true)
           yield* tolerate(
             subscribeConversation(session.value.daemonSessionId, session.value.workspace, channel),
             (cause) => log.debug(`[session] post-reconnect subscribe failed: ${renderError(cause)}`)
@@ -644,14 +742,13 @@ const makeSession = <E>(
         )
       })
 
-    const requireDaemonSession: Effect.Effect<{ daemonSessionId: string; workspace: WorkspaceInfo }, SessionError> =
-      Effect.gen(function* () {
-        const session = yield* Ref.get(sessionRef)
-        if (Option.isNone(session)) {
-          return yield* new SessionError({ message: "no daemon session — call createSession first" })
-        }
-        return session.value
-      })
+    const requireDaemonSession: Effect.Effect<AttachedSession, SessionError> = Effect.gen(function* () {
+      const session = yield* Ref.get(sessionRef)
+      if (Option.isNone(session)) {
+        return yield* new SessionError({ message: "no daemon session — call createSession first" })
+      }
+      return session.value
+    })
 
     const createSession: ServeSession["createSession"] = (modelSelection, mcpServers) =>
       Effect.gen(function* () {
@@ -666,6 +763,7 @@ const makeSession = <E>(
           const daemonMcpServers = mcpServers.map(toDaemonMcpServer)
           arg.mcpServers = daemonMcpServers
           yield* Ref.set(mcpServersRef, Option.some(daemonMcpServers))
+          yield* Ref.set(mcpAssertedRef, Option.none())
         }
         const result = yield* callSession("createSession", arg, 150_000)
         const decoded = decodeCreateSession(result)
@@ -676,6 +774,11 @@ const makeSession = <E>(
         }
         yield* Ref.set(sessionRef, Option.some({ daemonSessionId: decoded.daemonSessionId, workspace }))
         const channel = yield* getChannel
+        // The runtime just created is the one holding the servers.
+        const knownServers = yield* Ref.get(mcpServersRef)
+        if (Option.isSome(knownServers) && knownServers.value.length > 0) {
+          yield* rememberRuntime(channel, knownServers.value)
+        }
         yield* Effect.forkDetach(
           tolerate(subscribeConversation(decoded.daemonSessionId, workspace, channel), (cause) =>
             log.debug(`[session] subscribeConversationV4 failed: ${renderError(cause)}`)
@@ -710,16 +813,26 @@ const makeSession = <E>(
         } satisfies CreateSessionResult
       })
 
+    /**
+     * Remembers a non-empty list as the Client's MCP servers; an empty list
+     * changes nothing (issue #26: a Client that sends none — a `session/load`
+     * without the field, or with an empty one — keeps the last known set,
+     * which is the only record of them).
+     *
+     * Nothing is sent. A live runtime keeps the servers it was created with —
+     * a resume would leave it as it is — so a changed list is left
+     * unasserted and the next Turn puts it into the runtime
+     * (`ensureMcpServers`). The same list again is no change: the Client
+     * re-sends it on every `session/load`.
+     */
     const setMcpServers: ServeSession["setMcpServers"] = (mcpServers) =>
       Effect.gen(function* () {
+        if (mcpServers.length === 0) return
         const daemonMcpServers = mcpServers.map(toDaemonMcpServer)
-        yield* Ref.set(mcpServersRef, daemonMcpServers.length > 0 ? Option.some(daemonMcpServers) : Option.none())
-        const session = yield* Ref.get(sessionRef)
-        if (Option.isSome(session)) {
-          yield* tolerate(callSession("resumeSession", resumeArgs(session.value, daemonMcpServers), 30_000), (cause) =>
-            log.debug(`[session] resumeSession with mcpServers failed: ${renderError(cause)}`)
-          )
-        }
+        const known = yield* Ref.get(mcpServersRef)
+        if (Option.isSome(known) && JSON.stringify(known.value) === JSON.stringify(daemonMcpServers)) return
+        yield* Ref.set(mcpServersRef, Option.some(daemonMcpServers))
+        yield* Ref.set(mcpAssertedRef, Option.none())
       })
 
     /**
@@ -746,6 +859,7 @@ const makeSession = <E>(
       Effect.gen(function* () {
         const { daemonSessionId, workspace } = yield* requireDaemonSession
         yield* preflight
+        yield* ensureMcpServers(yield* getChannel)
         const inputId = crypto.randomUUID()
         const v4Call = Effect.gen(function* () {
           const raw = yield* call(
@@ -979,62 +1093,313 @@ const makeSession = <E>(
     )
 
     /**
-     * One request everywhere the daemon is asked to (re)activate the session
-     * with the Client's MCP servers. Flat, like createSession: the daemon's
-     * `resumeSession(params)` reads `params.workspacePath` and
-     * `params.workspaceIdentity` itself (server-core.js 3.19.1). A nested
-     * `workspace` object leaves both undefined and the call fails before the
-     * daemon logs it — seen live on 2026-11-24 as "Cannot read properties of
-     * undefined (reading 'trim')", tolerated into silence.
+     * The session, named the way every lifecycle call names it. Flat, like
+     * createSession: the daemon's `resumeSession(params)` reads
+     * `params.workspacePath` and `params.workspaceIdentity` itself
+     * (server-core.js 3.19.1). A nested `workspace` object leaves both
+     * undefined and the call fails before the daemon logs it — seen live on
+     * 2026-11-24 as "Cannot read properties of undefined (reading 'trim')",
+     * tolerated into silence.
      */
-    const resumeArgs = (
-      session: { daemonSessionId: string; workspace: WorkspaceInfo },
-      mcpServers: readonly DaemonMcpServer[]
-    ) => ({
-      sessionId: session.daemonSessionId,
-      workspacePath: session.workspace.workspacePath,
-      workspaceIdentity: session.workspace.workspaceIdentity,
-      mcpServers
-    })
-    /** The same request without MCP servers — when the Client configured none. */
-    const resumeArgsWithoutMcp = (session: { daemonSessionId: string; workspace: WorkspaceInfo }) => ({
+    const lifecycleArgs = (session: AttachedSession) => ({
       sessionId: session.daemonSessionId,
       workspacePath: session.workspace.workspacePath,
       workspaceIdentity: session.workspace.workspaceIdentity
     })
+    /** The same request with the Client's MCP servers — for the resume that creates a runtime. */
+    const resumeArgs = (session: AttachedSession, mcpServers: readonly DaemonMcpServer[]) => ({
+      ...lifecycleArgs(session),
+      mcpServers
+    })
 
-    const restartRuntime: ServeSession["restartRuntime"] = Effect.gen(function* () {
-      const session = yield* requireDaemonSession
-      const channel = yield* getChannel
-      const workspace = {
-        sessionId: session.daemonSessionId,
-        workspacePath: session.workspace.workspacePath,
-        workspaceIdentity: session.workspace.workspaceIdentity
-      }
-      // Stopping and recreating a runtime (MCP servers reconnect) takes
-      // seconds; createSession allows the same 150s.
-      yield* channel.call("zcode-agent", "stopSessionRuntime", workspace, 150_000)
-      // The resume is what recreates the runtime, so it is not optional and
-      // not tolerated: without it the session would stay unloaded.
-      const mcpServers = yield* Ref.get(mcpServersRef)
-      yield* callSession(
-        "resumeSession",
-        Option.isSome(mcpServers) && mcpServers.value.length > 0
-          ? resumeArgs(session, mcpServers.value)
-          : resumeArgsWithoutMcp(session),
-        150_000
+    /**
+     * The session runtime's lifecycle, or None when the daemon does not tell:
+     * it answers null when it has no such call, and a failed one (a session it
+     * just discarded, a daemon going away) is no evidence either way.
+     */
+    const readLifecycle = Effect.fn("Session.readLifecycle")(function* (channel: ChannelClient<E>) {
+      const session = yield* Ref.get(sessionRef)
+      if (Option.isNone(session)) return Option.none()
+      const raw = yield* tolerate(
+        channel.call("zcode-agent", "getSessionLifecycle", lifecycleArgs(session.value), LIFECYCLE_TIMEOUT_MS),
+        (cause) => log.debug(`[session] getSessionLifecycle failed: ${renderError(cause)}`)
       )
-      // Register the conversation again, the way a reconnect does.
+      return raw === undefined ? Option.none() : decodeLifecycleSnapshot(raw)
+    })
+
+    /**
+     * Records a runtime the Bridge made as the one holding `known` servers —
+     * the lifecycle generation read after making it. Skipped when the Client's
+     * list changed while that runtime was being made: the runtime holds the
+     * list read before, and recording the newer one would let the next Turn
+     * skip the replacement the changed list needs (issue #26).
+     */
+    const rememberAssertion = Effect.fn("Session.rememberAssertion")(function* (
+      known: readonly DaemonMcpServer[],
+      generation: Option.Option<number>
+    ) {
+      const servers = yield* Ref.get(mcpServersRef)
+      const connection = yield* Ref.get(connectionRef)
+      const epoch = yield* Ref.get(connectionEpoch)
+      yield* Ref.set(
+        mcpAssertedRef,
+        Option.isSome(generation) && Option.isSome(servers) && servers.value === known && Option.isSome(connection)
+          ? Option.some({ daemon: daemonKey(connection.value.status, epoch), generation: generation.value })
+          : Option.none()
+      )
+    })
+
+    /**
+     * Records the runtime that exists now — when the daemon says which — as
+     * the one holding `known`. Only ever called right after the Bridge made
+     * that runtime (createSession, a resume that created one, restartRuntime):
+     * the record is what lets later Turns skip the check, so it is never made
+     * on a guess. A daemon that does not report the lifecycle leaves the
+     * servers unasserted.
+     */
+    const rememberRuntime = Effect.fn("Session.rememberRuntime")(function* (
+      channel: ChannelClient<E>,
+      known: readonly DaemonMcpServer[]
+    ) {
+      if (known.length === 0) return
+      const lifecycle = yield* readLifecycle(channel)
+      yield* rememberAssertion(
+        known,
+        Option.isSome(lifecycle) ? Option.some(lifecycle.value.generation) : Option.none()
+      )
+    })
+
+    /**
+     * A runtime another party is still creating or releasing is polled until
+     * it settles; past the budget the last snapshot is acted on as it is.
+     */
+    const awaitSettledLifecycle = Effect.fn("Session.awaitSettledLifecycle")(function* (
+      channel: ChannelClient<E>,
+      first: LifecycleSnapshot
+    ) {
+      let current = first
+      const deadline = (yield* Clock.currentTimeMillis) + LIFECYCLE_SETTLE_BUDGET_MS
+      while (current.state === "starting" || current.state === "stopping") {
+        if ((yield* Clock.currentTimeMillis) >= deadline) break
+        yield* Effect.sleep(LIFECYCLE_SETTLE_POLL_MS)
+        const again = yield* readLifecycle(channel)
+        if (Option.isNone(again)) break
+        current = again.value
+      }
+      return current
+    })
+
+    /**
+     * Registers the conversation again after its runtime was replaced: the
+     * old subscription was registered against the old runtime and stops
+     * delivering frames.
+     */
+    const resubscribeConversation = Effect.fn("Session.resubscribeConversation")(function* (
+      channel: ChannelClient<E>,
+      session: AttachedSession
+    ): Effect.fn.Return<void, ServeError> {
       yield* Ref.set(subscribedRef, false)
       for (const disposer of listenerDisposers.splice(0)) {
         yield* disposer
       }
-      yield* tolerate(channel.call("zcode-agent", "unsubscribeConversationV4", workspace, 15_000), (cause) =>
-        log.debug(`[session] unsubscribeConversationV4 after runtime restart skipped: ${renderError(cause)}`)
+      yield* tolerate(
+        channel.call("zcode-agent", "unsubscribeConversationV4", lifecycleArgs(session), 15_000),
+        (cause) =>
+          log.debug(`[session] unsubscribeConversationV4 after the runtime was replaced skipped: ${renderError(cause)}`)
       )
-      yield* subscribeConversation(session.daemonSessionId, session.workspace, channel)
-      yield* log.debug(`[session] restarted runtime of ${session.daemonSessionId}`)
+      // A failed registration must not leave the session marked subscribed:
+      // every later attempt would return early and no frames would arrive.
+      yield* subscribeConversation(session.daemonSessionId, session.workspace, channel).pipe(
+        Effect.tapError(() => Ref.set(subscribedRef, false))
+      )
     })
+
+    /**
+     * Keeps the Client's MCP servers in the session's current runtime — the
+     * precondition of every Turn (issue #26).
+     *
+     * Invariant: a runtime holds the servers only if the Bridge created it
+     * with them. The daemon reads `mcpServers` on runtime creation only, and
+     * `session/resume` on a live runtime is a no-op (server-core.js 4.0.0;
+     * re-verified live on runtime 4.0.0, 2026-11-24). The daemon recreates
+     * runtimes on its own — daemon restart, resident-pool idle return, plugin
+     * reload — without them.
+     *
+     * Check: the lifecycle state and generation, plus the assertion recorded
+     * when the Bridge made the runtime (same daemon process, same
+     * generation). Ready and matching: nothing to do. Ready and not
+     * matching: stop the runtime, then resume with the servers — a resume
+     * alone would leave it untouched. Absent: the resume creates it.
+     *
+     * Trust: a resume made the runtime only when the generation grew across
+     * it. That is an inference, with one blind spot — a runtime another party
+     * creates in the instant before the Bridge's resume lands is taken for
+     * the Bridge's own. It needs two creations within one round-trip, and the
+     * next replacement of that runtime is caught again.
+     *
+     * Failure: never fails. Without the servers the session still answers;
+     * the failure is logged at warn and left unasserted so the next Turn
+     * tries again. A resume that fails after the runtime was stopped is
+     * followed by a bare resume, which restores the session without the
+     * servers.
+     *
+     * `reattaching`: the replay after a reconnect. On a daemon that does not
+     * report the lifecycle, this is the resume that creates a runtime the
+     * daemon lost, with the servers.
+     */
+    const ensureMcpServers = Effect.fn("Session.ensureMcpServers")(function* (
+      channel: ChannelClient<E>,
+      reattaching = false
+    ) {
+      const servers = yield* Ref.get(mcpServersRef)
+      const session = yield* Ref.get(sessionRef)
+      if (Option.isNone(servers) || servers.value.length === 0 || Option.isNone(session)) {
+        // Issue #26 asks for the empty case to be loud at re-attach: it is
+        // the one state where the Bridge cannot tell a Client that
+        // configures no servers from a record that was lost. One line per
+        // reconnect, not per Turn.
+        if (reattaching) {
+          const id = Option.isSome(session) ? session.value.daemonSessionId : "(no daemon session)"
+          yield* log.warn(
+            `[mcp] re-attached to session ${id} with no Client MCP servers recorded — if this Client configures a toolset, it is not being re-asserted`
+          )
+        }
+        return
+      }
+      const current = session.value
+      const known = servers.value
+      const id = current.daemonSessionId
+      yield* tolerate(
+        mcpPermit.withPermit(
+          Effect.gen(function* () {
+            const first = yield* readLifecycle(channel)
+            if (Option.isNone(first)) {
+              if (!reattaching) return
+              // A daemon that does not report the lifecycle gives no Turn a
+              // way to notice the loss: this refused resume is the last
+              // thing said about it, so it is not said at debug.
+              yield* tolerate(
+                channel.call("zcode-session", "resumeSession", resumeArgs(current, known), RUNTIME_TIMEOUT_MS),
+                (cause) =>
+                  log.warn(
+                    `[mcp] could not resume session ${id} with the Client's ${known.length} MCP server(s) after the reconnect — it continues without them: ${renderError(cause)}`
+                  )
+              )
+              return
+            }
+            const before = yield* awaitSettledLifecycle(channel, first.value)
+            if (before.state === "ready") {
+              const asserted = yield* Ref.get(mcpAssertedRef)
+              const connection = yield* Ref.get(connectionRef)
+              const epoch = yield* Ref.get(connectionEpoch)
+              const daemon = Option.isSome(connection)
+                ? Option.some(daemonKey(connection.value.status, epoch))
+                : Option.none<DaemonKey>()
+              if (
+                Option.isSome(asserted) &&
+                Option.isSome(daemon) &&
+                asserted.value.daemon === daemon.value &&
+                asserted.value.generation === before.generation
+              ) {
+                return
+              }
+              yield* Ref.set(mcpAssertedRef, Option.none())
+              if (Option.isSome(daemon)) {
+                yield* log.warn(replacingRuntime(id, known.length, asserted, daemon.value, before))
+              }
+              yield* channel.call("zcode-agent", "stopSessionRuntime", lifecycleArgs(current), RUNTIME_TIMEOUT_MS)
+            }
+            // A failed resume leaves the session as it is — unloaded, or
+            // live without the servers — and the Turn would then fail at
+            // dispatch. The runtime the Bridge may have just stopped is
+            // restored without the servers first; the next Turn puts them
+            // back.
+            const resumed = yield* Effect.result(
+              channel.call("zcode-session", "resumeSession", resumeArgs(current, known), RUNTIME_TIMEOUT_MS)
+            )
+            if (Result.isFailure(resumed)) {
+              yield* log.warn(
+                `[mcp] resuming session ${id} with the Client's ${known.length} MCP server(s) failed — restoring its runtime without them: ${renderError(resumed.failure)}`
+              )
+              const restored = yield* Effect.result(
+                channel.call("zcode-session", "resumeSession", lifecycleArgs(current), RUNTIME_TIMEOUT_MS)
+              )
+              if (Result.isFailure(restored)) {
+                yield* log.warn(
+                  `[mcp] could not restore the runtime of session ${id} either — this Turn fails at dispatch: ${renderError(restored.failure)}`
+                )
+                return
+              }
+              yield* resubscribeConversation(channel, current)
+              yield* Ref.set(mcpAssertedRef, Option.none())
+              return
+            }
+            const after = yield* readLifecycle(channel)
+            // Every creation mints a generation. The same one after the resume
+            // as before it means the resume did not create this runtime: it
+            // landed on one that was already there, or joined one still being
+            // made (past the settle budget) — without the servers. Nothing is
+            // recorded, so the next Turn replaces that runtime; this Turn
+            // goes out as it is, and a warning says so.
+            if (Option.isSome(after) && after.value.generation <= before.generation) {
+              yield* Ref.set(mcpAssertedRef, Option.none())
+              yield* log.warn(
+                `[mcp] resuming session ${id} did not replace the runtime another party made for it — this Turn runs without the Client's ${known.length} MCP server(s), and the next Turn replaces that runtime`
+              )
+              return
+            }
+            yield* resubscribeConversation(channel, current)
+            // Record only the generation just read — and only if the list
+            // the runtime was made with is still the Client's (the ref check
+            // inside `rememberAssertion`).
+            yield* rememberAssertion(known, Option.isSome(after) ? Option.some(after.value.generation) : Option.none())
+          })
+        ),
+        (cause) =>
+          log.warn(
+            `[mcp] could not put the Client's MCP servers into the runtime of session ${id} — it continues without them, and the next Turn tries again: ${renderError(cause)}`
+          )
+      )
+    })
+
+    const restartRuntime: ServeSession["restartRuntime"] = mcpPermit.withPermit(
+      Effect.gen(function* () {
+        const session = yield* requireDaemonSession
+        const channel = yield* getChannel
+        // The generation of the runtime being stopped: a resume that does not
+        // mint another one did not make the runtime that now exists.
+        const before = yield* readLifecycle(channel)
+        const mcpServers = yield* Ref.get(mcpServersRef)
+        const servers = Option.isSome(mcpServers) && mcpServers.value.length > 0 ? mcpServers.value : undefined
+        yield* channel.call("zcode-agent", "stopSessionRuntime", lifecycleArgs(session), RUNTIME_TIMEOUT_MS)
+        // The resume is what recreates the runtime, so it is not optional and
+        // not tolerated: without it the session would stay unloaded.
+        yield* channel.call(
+          "zcode-session",
+          "resumeSession",
+          servers === undefined ? lifecycleArgs(session) : resumeArgs(session, servers),
+          RUNTIME_TIMEOUT_MS
+        )
+        // Register the conversation again, the way a reconnect does.
+        yield* resubscribeConversation(channel, session)
+        // Record the runtime only when the resume minted it: a resume that
+        // landed on a runtime another party just made leaves it without the
+        // servers, and recording it would hide that from every later Turn.
+        const after = yield* readLifecycle(channel)
+        const minted = Option.isSome(before) && Option.isSome(after) && after.value.generation > before.value.generation
+        if (servers !== undefined && minted && Option.isSome(after)) {
+          yield* rememberAssertion(servers, Option.some(after.value.generation))
+        } else {
+          yield* Ref.set(mcpAssertedRef, Option.none())
+          if (servers !== undefined && Option.isSome(before) && Option.isSome(after)) {
+            yield* log.warn(
+              `[mcp] restarting the runtime of session ${session.daemonSessionId} did not mint a new generation — it may not hold the Client's ${servers.length} MCP server(s); the next Turn replaces it`
+            )
+          }
+        }
+        yield* log.debug(`[session] restarted runtime of ${session.daemonSessionId}`)
+      })
+    )
 
     return {
       createSession,

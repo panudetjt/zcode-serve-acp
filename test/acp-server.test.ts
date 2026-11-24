@@ -85,9 +85,10 @@ describe("AcpServer Effect handler", () => {
     expect(res.agentCapabilities.mcpCapabilities).toEqual({ http: true, sse: true })
   })
 
-  test("session/new and session/load accept mcpServers and pass them to ServeSession", async () => {
+  test("session/new and session/load accept mcpServers and pass them to ServeSession; an empty list keeps the session's", async () => {
     let capturedCreateMcpServers: unknown
     let capturedSetMcpServers: unknown
+    let setMcpServersCalls = 0
 
     const mockSessionWithMcp = {
       createSession: (_modelSel: unknown, mcpServers?: readonly McpServer[]) => {
@@ -100,6 +101,7 @@ describe("AcpServer Effect handler", () => {
         })
       },
       setMcpServers: (mcpServers: readonly McpServer[]) => {
+        setMcpServersCalls += 1
         capturedSetMcpServers = mcpServers
         return Effect.void
       },
@@ -160,7 +162,13 @@ describe("AcpServer Effect handler", () => {
     expect(loadRes.sessionId).toBe("sess-mcp-test")
     expect(capturedSetMcpServers).toEqual(updatedMcpServers)
 
-    // session/load with empty mcpServers clears mcpServers
+    // session/load with an empty list — or without one — keeps the servers
+    // the session has (issue #26): the Bridge's record is the only one there
+    // is, and the runtime the next Turn runs on is created from it. Neither
+    // call may reach setMcpServers at all, so the captured array stays the
+    // one the previous update passed.
+    const callsBefore = setMcpServersCalls
+    const capturedBefore = capturedSetMcpServers
     await Effect.runPromise(
       srv.handle("session/load", {
         cwd: "/tmp/workspace",
@@ -168,7 +176,9 @@ describe("AcpServer Effect handler", () => {
         mcpServers: []
       })
     )
-    expect(capturedSetMcpServers).toEqual([])
+    await Effect.runPromise(srv.handle("session/resume", { cwd: "/tmp/workspace", sessionId: "sess-mcp-test" }))
+    expect(setMcpServersCalls).toBe(callsBefore)
+    expect(capturedSetMcpServers).toBe(capturedBefore)
   })
 
   test("auth/authenticate returns empty result (daemon owns credentials)", async () => {

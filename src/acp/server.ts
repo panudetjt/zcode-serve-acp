@@ -52,7 +52,6 @@ interface BridgeSession {
   readonly translator: FrameTranslator
   models: AvailableModel[]
   skills: DiscoveredSkill[]
-  mcpServers?: McpServer[]
   slashCommands?: Array<{ name: string; description?: string }>
   modelSelection?: ModelSelection
   thoughtLevel?: string
@@ -820,8 +819,10 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
           const bridge = existingId !== undefined ? bridgeSessions.get(existingId) : undefined
           const mcpServers = decodeMcpServers(params.mcpServers)
           if (bridge !== undefined) {
-            if (params.mcpServers !== undefined) {
-              bridge.mcpServers = mcpServers
+            // An empty or absent list keeps the servers the session has: the
+            // Client that configures none never had any to lose, and this is
+            // the only record of them (issue #26).
+            if (mcpServers.length > 0) {
               yield* tolerate(bridge.serve.setMcpServers(mcpServers), (cause) =>
                 log.debug(`[${method}] setMcpServers failed: ${renderError(cause)}`)
               )
@@ -840,9 +841,6 @@ const makeServer = (deps: AcpServerDeps): AcpServer["Service"] => {
             }
           }
           const created = yield* createBridgeSession(cwd, existingId)
-          if (mcpServers.length > 0) {
-            created.mcpServers = mcpServers
-          }
           return yield* initializeNewSession(method, created, mcpServers)
         }
         case "session/prompt": {

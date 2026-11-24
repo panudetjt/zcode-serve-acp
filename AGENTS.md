@@ -113,6 +113,11 @@ Consequences for every session in this repo:
   spawn-time context, while the MCP servers are re-read per runtime start
   (`session/new`) — the two can diverge. Judge presence by the function
   list, not by env.
+- A toolset that is really gone is a Bridge matter, not a Client one: the
+  daemon keeps a session's MCP servers only in the runtime a Turn runs on,
+  and remakes that runtime without them, so the Bridge puts them back before
+  a Turn that would run without them (issue #26, `ensureMcpServers` in
+  `src/serve/session.ts`). Its `[mcp]` log lines say when it did.
 - Repo docs only cover sessions in THIS repo. The installer ships the same
   note machine-wide: `scripts/install.sh --global-agents` writes a managed
   block into `~/.zcode/AGENTS.md` (the daemon's global instructions file,
@@ -154,11 +159,16 @@ Bun version is pinned via `mise.toml` (1.4.4).
   not).
 - Two things the bridge does beyond driving Turns, recorded here because they
   reach past the ACP surface: it may ask the Daemon to restart **one
-  session's runtime** (`ServeSession.restartRuntime`: daemon RPC
-  `session/lifecycle/stop`, then `session/resume` carrying the Client's MCP
-  servers) to unwedge that session — never the Daemon itself — and it closes
-  open tool parts in the Daemon's conversation store (`SessionRecovery`, the
-  only writer of that store outside the Daemon).
+  session's runtime** — never the Daemon itself — either to unwedge that
+  session (`ServeSession.restartRuntime`) or, before a Turn, because the
+  runtime the session has was made without the Client's MCP servers
+  (`ensureMcpServers`, issue #26: the daemon reads them only as it creates a
+  runtime). Both resume the runtime with `session/resume` carrying the
+  Client's MCP servers; a live runtime is stopped first with
+  `session/lifecycle/stop` because a resume leaves it as it is, and
+  `ensureMcpServers` skips the stop when the runtime is already gone. And it
+  closes open tool parts in the Daemon's conversation store
+  (`SessionRecovery`, the only writer of that store outside the Daemon).
 - Protocol knowledge is reverse-engineered from `server-core.js` (runtime
   3.18.2, re-verified unchanged against 3.19.0 via the endpoint/constant diff
   and `scripts/probe-tools-load.mjs`) and recorded in provenance comments.
