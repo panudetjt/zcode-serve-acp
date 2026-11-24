@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Fiber } from "effect"
+import { Effect, Exit, Fiber } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import { AcpServer, type AcpServerDeps } from "../src/acp/server.ts"
+import { RecoveryError } from "../src/errors.ts"
 import { Log } from "../src/log.ts"
+import type { SessionRecovery } from "../src/serve/recovery.ts"
 import { ServeSessionFactory, type ServeSession } from "../src/serve/session.ts"
 
 /**
@@ -49,6 +51,9 @@ interface ServerFixture {
   setClientAnswer: (answer: unknown) => void
   /** make resolveInteraction fail on the serve session */
   failResolve: boolean
+  /** order of "restart" (runtime restarts) and "send" (prompts dispatched) */
+  events: string[]
+  restarts: number
 }
 
 interface SessionScript {
@@ -58,6 +63,13 @@ interface SessionScript {
   skills?: Array<{ name: string; description?: string; path?: string }>
   /** clientRequest behaviour, swap between calls */
   clientAnswer?: unknown
+  daemonSessionId?: string
+  /** the fake runtime restart fails instead of succeeding */
+  restartFails?: boolean
+  /** the fake restart delivers the lifecycle events a real one causes */
+  restartLifecycle?: boolean
+  /** the prompt dispatch with this 1-based call number fails instead of being sent */
+  failPromptOn?: number
 }
 
 const makeFixture = (script: SessionScript = {}, depsOverride: Partial<AcpServerDeps> = {}): ServerFixture => {
@@ -68,6 +80,8 @@ const makeFixture = (script: SessionScript = {}, depsOverride: Partial<AcpServer
   const resolveResults: Array<{ id: string; resolve: unknown }> = []
   let clientAnswerValue: unknown = script.clientAnswer
   let failResolve = false
+  const events: string[] = []
+  let restarts = 0
 
   let capturedHandlers: Record<string, (...args: never[]) => unknown> | undefined
 
@@ -80,8 +94,11 @@ const makeFixture = (script: SessionScript = {}, depsOverride: Partial<AcpServer
         raw: script.raw
       }) as never,
     sendPrompt: (text, modelSelection, attachments) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         sentPrompts.push({ text, modelSelection, attachments })
+        events.push("send")
+        if (sentPrompts.length === script.failPromptOn)
+          return yield* Effect.fail(new Error("prompt rejected by daemon"))
         return { inputId: "inp-edge" }
       }) as never,
     resolveInteraction: (id, resolve) =>
@@ -97,6 +114,18 @@ const makeFixture = (script: SessionScript = {}, depsOverride: Partial<AcpServer
     listSubagents: () => Effect.succeed({ revision: 0, running: [], ended: { total: 0, items: [] } }),
     subscribeChild: () => Effect.void,
     unsubscribeChild: () => Effect.void,
+    getDaemonSessionId: Effect.succeed(script.daemonSessionId),
+    restartRuntime: Effect.gen(function* () {
+      restarts++
+      events.push("restart")
+      if (script.restartLifecycle && capturedHandlers !== undefined) {
+        const onLifecycle = capturedHandlers.onLifecycle as (p: unknown) => Effect.Effect<void, unknown>
+        yield* onLifecycle({ sessionId: script.daemonSessionId, state: "stopping" })
+        yield* onLifecycle({ sessionId: script.daemonSessionId, state: "starting" })
+        yield* onLifecycle({ sessionId: script.daemonSessionId, state: "ready", lastError: null })
+      }
+      if (script.restartFails) return yield* Effect.fail(new Error("restart rejected"))
+    }) as never,
     dispose: Effect.void
   } as ServeSession
 
@@ -140,6 +169,12 @@ const makeFixture = (script: SessionScript = {}, depsOverride: Partial<AcpServer
     },
     set failResolve(v: boolean) {
       failResolve = v
+    },
+    get events() {
+      return events
+    },
+    get restarts() {
+      return restarts
     }
   }
 }
@@ -682,5 +717,306 @@ describe("AcpServer edge branches", () => {
     await new Promise((r) => setTimeout(r, 15))
     await settleFrame(handlers)
     expect(await joinStopReason(fiber)).toBe("end_turn")
+  })
+
+  // ---- orphan tool-part recovery (issue #22 review fixes) ----
+
+  const PART = { id: "part_1", callId: "call_1", tool: "TodoWrite" }
+
+  /** A recovery service that answers each call with the next scripted result (the last one repeats). */
+  const scriptedHeal = (...results: Array<Array<typeof PART>>) => {
+    const calls: string[] = []
+    const service: SessionRecovery["Service"] = {
+      healSession: (sessionId) =>
+        Effect.sync(() => {
+          calls.push(sessionId)
+          return { healedParts: results[Math.min(calls.length, results.length) - 1] ?? [] }
+        })
+    }
+    return { service, calls }
+  }
+
+  /** Opens the bridge session (idempotent) and starts a prompt carrying `text` on it. */
+  const promptIn = async (
+    fx: ServerFixture,
+    sessionId: string,
+    text = "hello"
+  ): Promise<Fiber.Fiber<unknown, unknown>> => {
+    await Effect.runPromise(fx.server.handle("session/new", { sessionId }))
+    return Effect.runPromise(
+      Effect.forkDetach(fx.server.handle("session/prompt", { sessionId, prompt: [{ type: "text", text }] })) as never
+    ) as never
+  }
+
+  const failTurnWith = (handlers: Record<string, (...args: never[]) => unknown>, message: string): Promise<unknown> =>
+    Effect.runPromise(
+      (handlers.onConversationFrame as (p: unknown) => Effect.Effect<void, unknown>)({
+        payload: {
+          kind: "deltas",
+          deltas: [{ op: "row.upserted", row: { rowId: 0, kind: "turnHeader", state: "failed", error: { message } } }]
+        }
+      })
+    )
+
+  const promptFailsWith = async (fiber: Fiber.Fiber<unknown, unknown>): Promise<string> => {
+    const exit = await Effect.runPromiseExit(Fiber.join(fiber) as never)
+    return Exit.isFailure(exit) ? String(exit.cause) : `unexpected success: ${JSON.stringify(exit)}`
+  }
+
+  // Each text is a way the wedge itself, or the contention that causes it, reaches the Bridge.
+  const WEDGE_FAILURES = [
+    "Model request failed.",
+    "AI_MissingToolResultsError",
+    "Tool result is missing for tool call call_1.",
+    "database is locked"
+  ]
+
+  for (const message of WEDGE_FAILURES) {
+    test(`recovery: a turn failing with "${message}" before it showed anything is healed, restarted and retried once`, async () => {
+      // Nothing at pre-flight (the crash happens in this very turn), one open part after the failure.
+      const heal = scriptedHeal([], [PART])
+      const fx = makeFixture({ daemonSessionId: "sess_wedged" }, { recovery: heal.service })
+      const fiber = await promptIn(fx, "s-retry", "ping")
+      await wait(15)
+      await failTurnWith(fx.handlers(), message)
+      await wait(15)
+
+      expect(heal.calls).toEqual(["sess_wedged", "sess_wedged"])
+      expect(fx.events).toEqual(["send", "restart", "send"])
+      expect(fx.sentPrompts.map((sent) => sent.text)).toEqual(["ping", "ping"])
+      expect(
+        fx.capture.warnCalls.some(
+          (line) => line.includes("closed 1 open tool part(s) (call_1)") && line.includes("restarted its runtime")
+        )
+      ).toBe(true)
+
+      await settleFrame(fx.handlers())
+      expect(await joinStopReason(fiber)).toBe("end_turn")
+    })
+  }
+
+  test("recovery: a failure that came after the assistant showed something is not retried", async () => {
+    const heal = scriptedHeal([], [PART])
+    const fx = makeFixture({ daemonSessionId: "sess_shown" }, { recovery: heal.service })
+    const fiber = await promptIn(fx, "s-shown", "run it")
+    await wait(15)
+    await assistantFrame(fx.handlers(), 3)
+    await failTurnWith(fx.handlers(), "Model request failed.")
+    await wait(15)
+
+    expect(await promptFailsWith(fiber)).toContain("Model request failed.")
+    expect(heal.calls).toEqual(["sess_shown"])
+    expect(fx.restarts).toBe(0)
+    expect(fx.sentPrompts).toHaveLength(1)
+  })
+
+  test("recovery: with nothing to close the failure reaches the client and nothing is restarted", async () => {
+    const heal = scriptedHeal([])
+    const fx = makeFixture({ daemonSessionId: "sess_clean" }, { recovery: heal.service })
+    const fiber = await promptIn(fx, "s-clean")
+    await wait(15)
+    await failTurnWith(fx.handlers(), "Model request failed.")
+    await wait(15)
+
+    expect(await promptFailsWith(fiber)).toContain("Model request failed.")
+    expect(fx.restarts).toBe(0)
+    expect(fx.sentPrompts).toHaveLength(1)
+  })
+
+  test("recovery: when the runtime restart fails the original failure is surfaced and logged", async () => {
+    const heal = scriptedHeal([], [PART])
+    const fx = makeFixture({ daemonSessionId: "sess_restart-fail", restartFails: true }, { recovery: heal.service })
+    const fiber = await promptIn(fx, "s-restart-fail")
+    await wait(15)
+    await failTurnWith(fx.handlers(), "database is locked")
+    await wait(15)
+
+    expect(await promptFailsWith(fiber)).toContain("database is locked")
+    expect(fx.sentPrompts).toHaveLength(1)
+    expect(
+      fx.capture.warnCalls.some((line) => line.includes("runtime restart failed") && line.includes("restart rejected"))
+    ).toBe(true)
+  })
+
+  test("recovery: the retry is single — a second failure reaches the client", async () => {
+    const heal = scriptedHeal([], [PART], [PART])
+    const fx = makeFixture({ daemonSessionId: "sess_twice" }, { recovery: heal.service })
+    const fiber = await promptIn(fx, "s-twice")
+    await wait(15)
+    await failTurnWith(fx.handlers(), "Model request failed.")
+    await wait(15)
+    await failTurnWith(fx.handlers(), "Model request failed.")
+    await wait(15)
+
+    expect(await promptFailsWith(fiber)).toContain("Model request failed.")
+    expect(fx.sentPrompts).toHaveLength(2)
+    expect(fx.restarts).toBe(1)
+    expect(heal.calls).toHaveLength(2)
+  })
+
+  test("recovery: a failure that names another problem gets no heal", async () => {
+    const heal = scriptedHeal([PART])
+    const fx = makeFixture({ daemonSessionId: "sess_other" }, { recovery: heal.service })
+    const fiber = await promptIn(fx, "s-other")
+    await wait(15)
+    await failTurnWith(fx.handlers(), "Model request auth is unavailable: account:zai-offpeak-idle-plan")
+    await wait(15)
+
+    expect(await promptFailsWith(fiber)).toContain("auth is unavailable")
+    expect(heal.calls).toEqual(["sess_other"])
+    expect(fx.sentPrompts).toHaveLength(1)
+  })
+
+  test("recovery: a heal failure at turn-fail is logged, not raised, and the failure is surfaced", async () => {
+    const fx = makeFixture(
+      { daemonSessionId: "sess_heal-fail" },
+      {
+        recovery: {
+          healSession: (sessionId) => Effect.fail(new RecoveryError({ sessionId, message: "database is locked" }))
+        }
+      }
+    )
+    const fiber = await promptIn(fx, "s-heal-fail")
+    await wait(15)
+    await failTurnWith(fx.handlers(), "Model request failed.")
+    await wait(15)
+
+    expect(await promptFailsWith(fiber)).toContain("Model request failed.")
+    expect(fx.restarts).toBe(0)
+    expect(
+      fx.capture.debugCalls.some((line) => line.includes("heal failed") && line.includes("database is locked"))
+    ).toBe(true)
+  })
+
+  test("recovery: when the prompt cannot be re-sent, that failure ends the turn", async () => {
+    const heal = scriptedHeal([], [PART])
+    const fx = makeFixture({ daemonSessionId: "sess_resend", failPromptOn: 2 }, { recovery: heal.service })
+    const fiber = await promptIn(fx, "s-resend", "ping")
+    await wait(15)
+    await failTurnWith(fx.handlers(), "Model request failed.")
+    await wait(15)
+
+    expect(await promptFailsWith(fiber)).toContain("prompt rejected by daemon")
+    expect(fx.restarts).toBe(1)
+    expect(fx.sentPrompts).toHaveLength(2)
+  })
+
+  test("recovery: a defect inside the detached recovery ends the turn instead of leaving the prompt waiting", async () => {
+    let heals = 0
+    const fx = makeFixture(
+      { daemonSessionId: "sess_defect" },
+      {
+        recovery: {
+          // Nothing at pre-flight; a failure to report once the turn has failed.
+          healSession: (sessionId) =>
+            ++heals === 1
+              ? Effect.succeed({ healedParts: [] })
+              : Effect.fail(new RecoveryError({ sessionId, message: "database is locked" }))
+        }
+      }
+    )
+    fx.capture.dieOnDebug = "heal failed"
+    const fiber = await promptIn(fx, "s-defect", "ping")
+    await wait(15)
+    await failTurnWith(fx.handlers(), "Model request failed.")
+    await wait(15)
+
+    expect(await promptFailsWith(fiber)).toContain("Session recovery failed")
+    expect(fx.capture.warnCalls.some((line) => line.includes("recovery defect"))).toBe(true)
+    expect(fx.restarts).toBe(0)
+  })
+
+  test("recovery: pre-flight closes what a crashed turn left and restarts before the prompt goes out", async () => {
+    const heal = scriptedHeal([PART], [])
+    const fx = makeFixture({ daemonSessionId: "sess_preflight" }, { recovery: heal.service })
+    const fiber = await promptIn(fx, "s-preflight", "continue")
+    await wait(15)
+
+    expect(heal.calls).toEqual(["sess_preflight"])
+    expect(fx.events).toEqual(["restart", "send"])
+    expect(
+      fx.capture.warnCalls.some((line) => line.includes("pre-flight") && line.includes("restarted its runtime"))
+    ).toBe(true)
+
+    await settleFrame(fx.handlers())
+    expect(await joinStopReason(fiber)).toBe("end_turn")
+  })
+
+  test("recovery: the lifecycle events of the restart do not end the retried turn; later ones still do", async () => {
+    const heal = scriptedHeal([], [PART])
+    const fx = makeFixture({ daemonSessionId: "sess_lifecycle", restartLifecycle: true }, { recovery: heal.service })
+    // Observe the prompt without blocking on it, so "not finished yet" is testable.
+    const outcomeOf = (fiber: Fiber.Fiber<unknown, unknown>) => {
+      const outcome: { stopReason?: string } = {}
+      Effect.runPromise(Fiber.join(fiber) as never).then(
+        (value) => {
+          outcome.stopReason = (value as { stopReason: string }).stopReason
+        },
+        () => undefined
+      )
+      return outcome
+    }
+
+    const first = await promptIn(fx, "s-lifecycle", "ping")
+    const firstOutcome = outcomeOf(first)
+    await wait(15)
+    await failTurnWith(fx.handlers(), "Model request failed.")
+    await wait(15)
+    // "stopping" arrived during the restart; the prompt is still waiting.
+    expect(fx.sentPrompts).toHaveLength(2)
+    expect(firstOutcome.stopReason).toBeUndefined()
+
+    await settleFrame(fx.handlers())
+    await wait(15)
+    expect(firstOutcome.stopReason).toBe("end_turn")
+
+    // Outside a restart the same event ends the turn, as before.
+    const second = await promptIn(fx, "s-lifecycle", "again")
+    const secondOutcome = outcomeOf(second)
+    await wait(15)
+    await Effect.runPromise(
+      (fx.handlers().onLifecycle as (p: unknown) => Effect.Effect<void, unknown>)({ state: "stopping" })
+    )
+    await wait(15)
+    expect(secondOutcome.stopReason).toBe("end_turn")
+  })
+
+  test("recovery: pre-flight waits while a turn of the session may still be running", async () => {
+    const heal = scriptedHeal([PART])
+    const fx = makeFixture({ daemonSessionId: "sess_busy" }, { recovery: heal.service })
+    await Effect.runPromise(fx.server.handle("session/new", { sessionId: "s-busy" }))
+    const turnRunning = () =>
+      Effect.runPromise(
+        (fx.handlers().onConversationFrame as (p: unknown) => Effect.Effect<void, unknown>)({
+          payload: {
+            kind: "deltas",
+            deltas: [{ op: "row.upserted", row: { rowId: 0, kind: "turnHeader", state: "running" } }]
+          }
+        })
+      )
+
+    // A turn the daemon started on its own is running: its open tool parts are not orphans.
+    await turnRunning()
+    const first = await promptFiber(fx, "s-busy", "meanwhile")
+    await wait(15)
+    expect(heal.calls).toEqual([])
+    expect(fx.restarts).toBe(0)
+
+    // A turn this Bridge started and has not finished counts the same way.
+    const second = await promptFiber(fx, "s-busy", "overlapping")
+    await wait(15)
+    expect(heal.calls).toEqual([])
+
+    // Once the session's turn is over, the next prompt recovers first.
+    await settleFrame(fx.handlers())
+    expect(await joinStopReason(second)).toBe("end_turn")
+    await Effect.runPromise(Fiber.interrupt(first as never))
+    const third = await promptFiber(fx, "s-busy", "now")
+    await wait(15)
+    expect(heal.calls).toEqual(["sess_busy"])
+    expect(fx.events.at(-2)).toBe("restart")
+
+    await settleFrame(fx.handlers())
+    expect(await joinStopReason(third)).toBe("end_turn")
   })
 })

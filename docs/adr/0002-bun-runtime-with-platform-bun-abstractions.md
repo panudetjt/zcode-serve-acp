@@ -19,6 +19,13 @@ Two deliberate deviations:
    reverse-engineered daemon internals where per-field probes are the spec
    (golden fixtures encode the outcomes). Schema covers all JSON boundaries.
 
+`@effect/platform-bun` 4.1.4 ships no SQLite service. The orphan tool-part heal
+(issue #21) has to close rows in the Daemon's own SQLite store, so the bridge
+defines that port itself — `Sqlite` in `src/serve/sqlite.ts` — and keeps the
+one `bun:sqlite` import in its Bun driver, `src/serve/sqlite-bun.ts`, provided
+by `bin.ts` next to the package layers. Same rule as above; the port is simply
+one of our own.
+
 Rejected: `effect` core only (no platform package) — cheaper compile, but
 runtime-portable abstractions were chosen instead (Q4b, 2026-11-19); and
 Node.js as primary target — single-binary Bun compile is the distribution
